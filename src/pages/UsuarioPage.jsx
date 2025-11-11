@@ -10,8 +10,13 @@ export default function UsuarioPage({ user }) {
   }, []);
 
   const cargarCursos = async () => {
+    if (!user?.campana_id) {
+      setMensaje("⚠️ No se encontró campaña asignada");
+      setCursos([]);
+      return;
+    }
+
     try {
-      // Traer cursos activados para la campaña del asesor
       const { data, error } = await supabase
         .from("cursos_activados")
         .select(`
@@ -20,9 +25,8 @@ export default function UsuarioPage({ user }) {
           fecha,
           cursos(titulo, descripcion, url_iframe)
         `)
-.eq("campana_id", user.campana_id)
-.eq("activo", true)
-
+        .eq("campana_id", user.campana_id) // Filtra por campaña asignada
+        .eq("activo", true);
 
       if (error) {
         console.error("Error cargando cursos:", error);
@@ -42,7 +46,6 @@ export default function UsuarioPage({ user }) {
   return (
     <div className="min-h-screen bg-gray-50 p-8">
       <h1 className="text-2xl font-bold mb-6">👋 Hola {user.nombre}</h1>
-      <p className="text-gray-600 mb-6">Rol: {user.rol}</p>
 
       <div className="bg-white rounded-2xl shadow p-6 max-w-xl space-y-4">
         <h2 className="font-semibold text-lg mb-4">Cursos activos de tu campaña</h2>
