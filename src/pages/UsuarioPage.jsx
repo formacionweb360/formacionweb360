@@ -17,10 +17,13 @@ export default function UsuarioPage({ user }) {
           id,
           curso_id,
           fecha,
-          cursos(titulo, descripcion, url_iframe)
+          grupo_id,
+          cursos(titulo, descripcion, url_iframe),
+          grupos(nombre)
         `)
-        .eq("campana_id", user.campana_id) // filtramos por campaña del asesor
-        .eq("activo", true);               // solo cursos activos
+        .eq("campana_id", user.campana_id)  // filtramos por campaña del asesor
+        .eq("grupo_id", user.grupo_id)      // filtramos por grupo del asesor
+        .eq("activo", true);                // solo cursos activos
 
       if (error) {
         console.error("Error cargando cursos:", error);
@@ -41,10 +44,12 @@ export default function UsuarioPage({ user }) {
       <h1 className="text-3xl font-bold text-indigo-700 mb-6">
         👋 Hola {user.nombre}
       </h1>
-      <p className="text-gray-600 mb-6">Rol: {user.rol}</p>
+      <p className="text-gray-600 mb-6">
+        Rol: {user.rol} | Grupo: {user.grupo_id || "No asignado"}
+      </p>
 
       <div className="bg-white rounded-2xl shadow p-6 max-w-xl space-y-4">
-        <h2 className="font-semibold text-lg mb-4">Cursos activos de tu campaña</h2>
+        <h2 className="font-semibold text-lg mb-4">Cursos activos de tu grupo</h2>
 
         {mensaje && <p className="text-gray-500">{mensaje}</p>}
 
@@ -53,6 +58,7 @@ export default function UsuarioPage({ user }) {
             <div>
               <span className="font-medium">{c.cursos?.titulo || "Curso"}</span>
               <p className="text-sm text-gray-500">{c.cursos?.descripcion || ""}</p>
+              <p className="text-xs text-gray-400">Grupo: {c.grupos?.nombre || "No asignado"}</p>
             </div>
             <a
               href={`/curso/${c.id}`}
