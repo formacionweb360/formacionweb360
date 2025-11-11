@@ -20,8 +20,9 @@ export default function UsuarioPage({ user }) {
           fecha,
           cursos(titulo, descripcion, url_iframe)
         `)
-        .eq("campana_id", user.campana_id)
-        .eq("activo", true);
+.eq("campana_id", user.campana_id)
+.eq("activo", true)
+
 
       if (error) {
         console.error("Error cargando cursos:", error);
