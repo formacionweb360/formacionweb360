@@ -5,22 +5,18 @@ export default function FormadorPage({ user }) {
   const [campañas, setCampañas] = useState([]);
   const [grupos, setGrupos] = useState([]);
   const [cursos, setCursos] = useState([]);
-  const [usuarios, setUsuarios] = useState([]); // asesores
   const [seleccion, setSeleccion] = useState({
     campana_id: "",
     grupo_id: "",
     curso_id: "",
-    asesores: [],
   });
   const [activos, setActivos] = useState([]);
   const [mensaje, setMensaje] = useState("");
 
   const fechaHoy = new Date().toISOString().split("T")[0];
 
-  // Cargar datos iniciales
   useEffect(() => {
     cargarCampañas();
-    cargarUsuarios();
     cargarActivos();
   }, []);
 
@@ -28,7 +24,6 @@ export default function FormadorPage({ user }) {
     const { data, error } = await supabase.from("campañas").select("*");
     if (!error) setCampañas(data || []);
     else setCampañas([]);
-    console.log("cargarCampañas ->", data, error);
   };
 
   const cargarGrupos = async (campana_id) => {
@@ -38,7 +33,6 @@ export default function FormadorPage({ user }) {
       .eq("campana_id", campana_id);
     if (!error) setGrupos(data || []);
     else setGrupos([]);
-    console.log("cargarGrupos ->", data, error);
   };
 
   const cargarCursos = async (campana_id, grupo_id) => {
@@ -50,37 +44,27 @@ export default function FormadorPage({ user }) {
       .eq("estado", "Activo");
     if (!error) setCursos(data || []);
     else setCursos([]);
-    console.log("cargarCursos ->", data, error);
-  };
-
-  const cargarUsuarios = async () => {
-    const { data, error } = await supabase
-      .from("usuarios")
-      .select("*")
-      .neq("rol", "Administrador"); // solo asesores y formadores
-    if (!error) setUsuarios(data || []);
-    else setUsuarios([]);
-    console.log("cargarUsuarios ->", data, error);
   };
 
   const cargarActivos = async () => {
     const { data, error } = await supabase
       .from("cursos_activados")
-      .select("id, curso_id, campana_id, grupo_id, fecha, activo, cursos(titulo), grupos(nombre)")
+      .select(
+        "id, curso_id, campana_id, grupo_id, fecha, activo, cursos(titulo), grupos(nombre)"
+      )
       .eq("fecha", fechaHoy)
       .eq("formador_id", user.id);
     if (!error) setActivos(data || []);
     else setActivos([]);
-    console.log("cargarActivos ->", data, error);
   };
 
   const activarCurso = async () => {
-    const { campana_id, grupo_id, curso_id, asesores } = seleccion;
+    const { campana_id, grupo_id, curso_id } = seleccion;
     if (!campana_id || !grupo_id || !curso_id)
       return setMensaje("⚠️ Selecciona campaña, grupo y curso");
 
-    // Verificar existencia
-    const { data: existe, error: errExiste } = await supabase
+    // Verificar si ya está activado
+    const { data: existe } = await supabase
       .from("cursos_activados")
       .select("*")
       .eq("fecha", fechaHoy)
@@ -89,10 +73,6 @@ export default function FormadorPage({ user }) {
       .eq("curso_id", curso_id)
       .maybeSingle();
 
-    if (errExiste) {
-      setMensaje("❌ Error comprobando existencia: " + errExiste.message);
-      return;
-    }
     if (existe) {
       setMensaje("⚠️ Este curso ya está activado hoy para esa campaña y grupo.");
       return;
@@ -115,27 +95,30 @@ export default function FormadorPage({ user }) {
       .single();
 
     if (error) {
-      console.error("Error insert:", error);
       setMensaje("❌ Error al activar");
       return;
     }
 
-    // Asignar asesores
+    // Asignar a todos los asesores activos de ese grupo
+    const { data: asesores, error: errAsesores } = await supabase
+      .from("usuarios")
+      .select("id")
+      .eq("rol", "Usuario")
+      .eq("grupo_id", grupo_id)
+      .eq("estado", "Activo");
+
+    if (errAsesores) {
+      setMensaje("❌ Error obteniendo asesores");
+      return;
+    }
+
     if (asesores.length > 0) {
-      const { error: errAsesores } = await supabase
-        .from("cursos_asesores")
-        .insert(
-          asesores.map((asesor_id) => ({
-            curso_activado_id: activacion.id,
-            asesor_id,
-          }))
-        );
-      if (errAsesores) {
-        console.error("Error asignando asesores:", errAsesores);
-        setMensaje("❌ Curso activado pero error asignando asesores");
-        cargarActivos();
-        return;
-      }
+      await supabase.from("cursos_asesores").insert(
+        asesores.map((u) => ({
+          curso_activado_id: activacion.id,
+          asesor_id: u.id,
+        }))
+      );
     }
 
     setMensaje("✅ Curso activado correctamente");
@@ -205,25 +188,6 @@ export default function FormadorPage({ user }) {
           {cursos.map((c) => (
             <option key={c.id} value={c.id}>
               {c.titulo} ({c.estado})
-            </option>
-          ))}
-        </select>
-
-        {/* Asesores */}
-        <select
-          multiple
-          className="w-full border rounded-lg p-2"
-          value={seleccion.asesores}
-          onChange={(e) =>
-            setSeleccion({
-              ...seleccion,
-              asesores: Array.from(e.target.selectedOptions, (option) => option.value),
-            })
-          }
-        >
-          {usuarios.map((u) => (
-            <option key={u.id} value={u.id}>
-              {u.nombre} ({u.rol})
             </option>
           ))}
         </select>
