@@ -2,29 +2,27 @@ import { useEffect, useState } from "react";
 import { supabase } from "../services/supabaseClient";
 
 export default function FormadorPage({ user }) {
-  const [cursos, setCursos] = useState([]);
   const [campañas, setCampañas] = useState([]);
-  const [seleccion, setSeleccion] = useState({ campana_id: "", curso_id: "" });
+  const [grupos, setGrupos] = useState([]);
+  const [cursos, setCursos] = useState([]);
+  const [usuarios, setUsuarios] = useState([]); // asesores
+  const [seleccion, setSeleccion] = useState({
+    campana_id: "",
+    grupo_id: "",
+    curso_id: "",
+    asesores: [],
+  });
   const [activos, setActivos] = useState([]);
   const [mensaje, setMensaje] = useState("");
 
-  const fechaHoy = new Date().toISOString().split("T")[0]; // YYYY-MM-DD
+  const fechaHoy = new Date().toISOString().split("T")[0];
 
+  // Cargar datos iniciales
   useEffect(() => {
-    cargarCursos();
     cargarCampañas();
+    cargarUsuarios();
     cargarActivos();
   }, []);
-
-  const cargarCursos = async () => {
-    const { data, error } = await supabase
-      .from("cursos")
-      .select("*")
-      .eq("estado", "Activo");
-    if (!error) setCursos(data || []);
-    else setCursos([]);
-    console.log("cargarCursos ->", data, error);
-  };
 
   const cargarCampañas = async () => {
     const { data, error } = await supabase.from("campañas").select("*");
@@ -33,10 +31,42 @@ export default function FormadorPage({ user }) {
     console.log("cargarCampañas ->", data, error);
   };
 
+  const cargarGrupos = async (campana_id) => {
+    const { data, error } = await supabase
+      .from("grupos")
+      .select("*")
+      .eq("campana_id", campana_id);
+    if (!error) setGrupos(data || []);
+    else setGrupos([]);
+    console.log("cargarGrupos ->", data, error);
+  };
+
+  const cargarCursos = async (campana_id, grupo_id) => {
+    const { data, error } = await supabase
+      .from("cursos")
+      .select("*")
+      .eq("campana_id", campana_id)
+      .eq("grupo_id", grupo_id)
+      .eq("estado", "Activo");
+    if (!error) setCursos(data || []);
+    else setCursos([]);
+    console.log("cargarCursos ->", data, error);
+  };
+
+  const cargarUsuarios = async () => {
+    const { data, error } = await supabase
+      .from("usuarios")
+      .select("*")
+      .neq("rol", "Administrador"); // solo asesores y formadores
+    if (!error) setUsuarios(data || []);
+    else setUsuarios([]);
+    console.log("cargarUsuarios ->", data, error);
+  };
+
   const cargarActivos = async () => {
     const { data, error } = await supabase
       .from("cursos_activados")
-      .select("id, curso_id, campana_id, fecha, activo, cursos(titulo), campañas(nombre)")
+      .select("id, curso_id, campana_id, grupo_id, fecha, activo, cursos(titulo), grupos(nombre)")
       .eq("fecha", fechaHoy)
       .eq("formador_id", user.id);
     if (!error) setActivos(data || []);
@@ -45,15 +75,17 @@ export default function FormadorPage({ user }) {
   };
 
   const activarCurso = async () => {
-    const { campana_id, curso_id } = seleccion;
-    if (!campana_id || !curso_id) return setMensaje("⚠️ Selecciona campaña y curso");
+    const { campana_id, grupo_id, curso_id, asesores } = seleccion;
+    if (!campana_id || !grupo_id || !curso_id)
+      return setMensaje("⚠️ Selecciona campaña, grupo y curso");
 
-    // Verificar si ya existe activación
+    // Verificar existencia
     const { data: existe, error: errExiste } = await supabase
       .from("cursos_activados")
       .select("*")
       .eq("fecha", fechaHoy)
       .eq("campana_id", campana_id)
+      .eq("grupo_id", grupo_id)
       .eq("curso_id", curso_id)
       .maybeSingle();
 
@@ -62,7 +94,7 @@ export default function FormadorPage({ user }) {
       return;
     }
     if (existe) {
-      setMensaje("⚠️ Este curso ya está activado hoy para esa campaña.");
+      setMensaje("⚠️ Este curso ya está activado hoy para esa campaña y grupo.");
       return;
     }
 
@@ -72,6 +104,7 @@ export default function FormadorPage({ user }) {
       .insert([
         {
           campana_id,
+          grupo_id,
           curso_id,
           fecha: fechaHoy,
           activo: true,
@@ -87,27 +120,22 @@ export default function FormadorPage({ user }) {
       return;
     }
 
-    // Obtener todos los asesores de la campaña seleccionada
-    const { data: asesores, error: errAsesores } = await supabase
-      .from("usuarios")
-      .select("id")
-      .eq("campana_id", campana_id)
-      .eq("rol", "Asesor");
-
-    if (errAsesores) {
-      console.error("Error cargando asesores:", errAsesores);
-    } else if (asesores && asesores.length > 0) {
-      // Insertar todos los asesores en cursos_asesores
-      const { error: errInsert } = await supabase
+    // Asignar asesores
+    if (asesores.length > 0) {
+      const { error: errAsesores } = await supabase
         .from("cursos_asesores")
         .insert(
-          asesores.map((a) => ({
+          asesores.map((asesor_id) => ({
             curso_activado_id: activacion.id,
-            asesor_id: a.id,
+            asesor_id,
           }))
         );
-
-      if (errInsert) console.error("Error insertando asesores:", errInsert);
+      if (errAsesores) {
+        console.error("Error asignando asesores:", errAsesores);
+        setMensaje("❌ Curso activado pero error asignando asesores");
+        cargarActivos();
+        return;
+      }
     }
 
     setMensaje("✅ Curso activado correctamente");
@@ -131,10 +159,15 @@ export default function FormadorPage({ user }) {
       <div className="bg-white rounded-2xl shadow p-6 mb-6 space-y-4 max-w-xl">
         <h2 className="font-semibold text-lg">Activar Curso</h2>
 
+        {/* Campaña */}
         <select
           className="w-full border rounded-lg p-2"
           value={seleccion.campana_id}
-          onChange={(e) => setSeleccion({ ...seleccion, campana_id: e.target.value })}
+          onChange={async (e) => {
+            const campana_id = e.target.value;
+            setSeleccion({ ...seleccion, campana_id, grupo_id: "", curso_id: "" });
+            await cargarGrupos(campana_id);
+          }}
         >
           <option value="">Selecciona una campaña</option>
           {campañas.map((c) => (
@@ -144,6 +177,25 @@ export default function FormadorPage({ user }) {
           ))}
         </select>
 
+        {/* Grupo */}
+        <select
+          className="w-full border rounded-lg p-2"
+          value={seleccion.grupo_id}
+          onChange={async (e) => {
+            const grupo_id = e.target.value;
+            setSeleccion({ ...seleccion, grupo_id, curso_id: "" });
+            await cargarCursos(seleccion.campana_id, grupo_id);
+          }}
+        >
+          <option value="">Selecciona un grupo</option>
+          {grupos.map((g) => (
+            <option key={g.id} value={g.id}>
+              {g.nombre}
+            </option>
+          ))}
+        </select>
+
+        {/* Curso */}
         <select
           className="w-full border rounded-lg p-2"
           value={seleccion.curso_id}
@@ -153,6 +205,25 @@ export default function FormadorPage({ user }) {
           {cursos.map((c) => (
             <option key={c.id} value={c.id}>
               {c.titulo} ({c.estado})
+            </option>
+          ))}
+        </select>
+
+        {/* Asesores */}
+        <select
+          multiple
+          className="w-full border rounded-lg p-2"
+          value={seleccion.asesores}
+          onChange={(e) =>
+            setSeleccion({
+              ...seleccion,
+              asesores: Array.from(e.target.selectedOptions, (option) => option.value),
+            })
+          }
+        >
+          {usuarios.map((u) => (
+            <option key={u.id} value={u.id}>
+              {u.nombre} ({u.rol})
             </option>
           ))}
         </select>
@@ -167,12 +238,15 @@ export default function FormadorPage({ user }) {
         <p className="text-sm text-gray-600">{mensaje}</p>
       </div>
 
+      {/* Cursos activos */}
       <div className="bg-white rounded-2xl shadow p-6 max-w-xl">
         <h2 className="font-semibold text-lg mb-4">Cursos activos de hoy</h2>
         {activos.length === 0 && <p className="text-gray-500">Ninguno por ahora</p>}
         {activos.map((a) => (
           <div key={a.id} className="flex justify-between items-center border-b py-2">
-            <span>{a.cursos?.titulo || "Curso"}</span>
+            <span>
+              {a.cursos?.titulo || "Curso"} — {a.grupos?.nombre || "Grupo"}
+            </span>
             <button
               onClick={() => desactivarCurso(a.id)}
               className="text-red-500 hover:text-red-700"
