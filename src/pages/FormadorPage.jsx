@@ -4,13 +4,12 @@ import { supabase } from "../services/supabaseClient";
 export default function FormadorPage({ user }) {
   const [cursos, setCursos] = useState([]);
   const [campañas, setCampañas] = useState([]);
-  const [seleccion, setSeleccion] = useState({ campaña_id: "", curso_id: "" });
+  const [seleccion, setSeleccion] = useState({ campana_id: "", curso_id: "" });
   const [activos, setActivos] = useState([]);
   const [mensaje, setMensaje] = useState("");
 
-  const fechaHoy = new Date().toISOString().split("T")[0];
+  const fechaHoy = new Date().toISOString().split("T")[0]; // YYYY-MM-DD
 
-  // Cargar datos al entrar
   useEffect(() => {
     cargarCursos();
     cargarCampañas();
@@ -18,49 +17,46 @@ export default function FormadorPage({ user }) {
   }, []);
 
   const cargarCursos = async () => {
-    // Traemos todos los cursos (o solo activos si quieres)
     const { data, error } = await supabase
       .from("cursos")
       .select("*")
-      .eq("estado", "Activo"); // quita este .eq si quieres ver todos
-    console.log("cargarCursos -> data:", data, "error:", error);
+      .eq("estado", "Activo");
     if (!error) setCursos(data || []);
     else setCursos([]);
+    console.log("cargarCursos ->", data, error);
   };
 
   const cargarCampañas = async () => {
     const { data, error } = await supabase.from("campañas").select("*");
-    console.log("cargarCampañas -> data:", data, "error:", error);
     if (!error) setCampañas(data || []);
     else setCampañas([]);
+    console.log("cargarCampañas ->", data, error);
   };
 
   const cargarActivos = async () => {
-    // Traemos las activaciones del día y además el título del curso y el nombre de campaña
     const { data, error } = await supabase
       .from("cursos_activados")
-      .select("id, curso_id, campaña_id, fecha, activo, cursos(titulo), campañas(nombre)")
+      .select("id, curso_id, campana_id, fecha, activo, cursos(titulo), campañas(nombre)")
       .eq("fecha", fechaHoy)
       .eq("formador_id", user.id);
-    console.log("cargarActivos -> data:", data, "error:", error);
     if (!error) setActivos(data || []);
     else setActivos([]);
+    console.log("cargarActivos ->", data, error);
   };
 
   const activarCurso = async () => {
-    const { campaña_id, curso_id } = seleccion;
-    if (!campaña_id || !curso_id) return setMensaje("⚠️ Selecciona campaña y curso");
+    const { campana_id, curso_id } = seleccion;
+    if (!campana_id || !curso_id) return setMensaje("⚠️ Selecciona campaña y curso");
 
     // Verificar si ya existe activación
     const { data: existe, error: errExiste } = await supabase
       .from("cursos_activados")
       .select("*")
       .eq("fecha", fechaHoy)
-      .eq("campaña_id", campaña_id)
+      .eq("campana_id", campana_id)
       .eq("curso_id", curso_id)
       .maybeSingle();
 
-    console.log("existe?", existe, "err:", errExiste);
     if (errExiste) {
       setMensaje("❌ Error comprobando existencia: " + errExiste.message);
       return;
@@ -72,7 +68,7 @@ export default function FormadorPage({ user }) {
 
     const { error } = await supabase.from("cursos_activados").insert([
       {
-        campaña_id,
+        campana_id,
         curso_id,
         fecha: fechaHoy,
         activo: true,
@@ -108,8 +104,8 @@ export default function FormadorPage({ user }) {
 
         <select
           className="w-full border rounded-lg p-2"
-          value={seleccion.campaña_id}
-          onChange={(e) => setSeleccion({ ...seleccion, campaña_id: e.target.value })}
+          value={seleccion.campana_id}
+          onChange={(e) => setSeleccion({ ...seleccion, campana_id: e.target.value })}
         >
           <option value="">Selecciona una campaña</option>
           {campañas.map((c) => (
@@ -148,7 +144,10 @@ export default function FormadorPage({ user }) {
         {activos.map((a) => (
           <div key={a.id} className="flex justify-between items-center border-b py-2">
             <span>{a.cursos?.titulo || "Curso"}</span>
-            <button onClick={() => desactivarCurso(a.id)} className="text-red-500 hover:text-red-700">
+            <button
+              onClick={() => desactivarCurso(a.id)}
+              className="text-red-500 hover:text-red-700"
+            >
               Desactivar
             </button>
           </div>
