@@ -4,8 +4,7 @@ import { supabase } from "../services/supabaseClient";
 export default function FormadorPage({ user }) {
   const [cursos, setCursos] = useState([]);
   const [campañas, setCampañas] = useState([]);
-  const [usuarios, setUsuarios] = useState([]); // <-- lista de asesores
-  const [seleccion, setSeleccion] = useState({ campana_id: "", curso_id: "", asesores: [] });
+  const [seleccion, setSeleccion] = useState({ campana_id: "", curso_id: "" });
   const [activos, setActivos] = useState([]);
   const [mensaje, setMensaje] = useState("");
 
@@ -15,7 +14,6 @@ export default function FormadorPage({ user }) {
     cargarCursos();
     cargarCampañas();
     cargarActivos();
-    cargarUsuarios();
   }, []);
 
   const cargarCursos = async () => {
@@ -35,16 +33,6 @@ export default function FormadorPage({ user }) {
     console.log("cargarCampañas ->", data, error);
   };
 
-  const cargarUsuarios = async () => {
-    const { data, error } = await supabase
-      .from("usuarios")
-      .select("*")
-      .neq("rol", "Administrador"); // Traemos asesores y formadores
-    if (!error) setUsuarios(data || []);
-    else setUsuarios([]);
-    console.log("cargarUsuarios ->", data, error);
-  };
-
   const cargarActivos = async () => {
     const { data, error } = await supabase
       .from("cursos_activados")
@@ -57,7 +45,7 @@ export default function FormadorPage({ user }) {
   };
 
   const activarCurso = async () => {
-    const { campana_id, curso_id, asesores } = seleccion;
+    const { campana_id, curso_id } = seleccion;
     if (!campana_id || !curso_id) return setMensaje("⚠️ Selecciona campaña y curso");
 
     // Verificar si ya existe activación
@@ -99,23 +87,27 @@ export default function FormadorPage({ user }) {
       return;
     }
 
-    // Insertar asesores asignados
-    if (asesores.length > 0) {
-      const { error: errAsesores } = await supabase
+    // Obtener todos los asesores de la campaña seleccionada
+    const { data: asesores, error: errAsesores } = await supabase
+      .from("usuarios")
+      .select("id")
+      .eq("campana_id", campana_id)
+      .eq("rol", "Asesor");
+
+    if (errAsesores) {
+      console.error("Error cargando asesores:", errAsesores);
+    } else if (asesores && asesores.length > 0) {
+      // Insertar todos los asesores en cursos_asesores
+      const { error: errInsert } = await supabase
         .from("cursos_asesores")
         .insert(
-          asesores.map((asesor_id) => ({
+          asesores.map((a) => ({
             curso_activado_id: activacion.id,
-            asesor_id,
+            asesor_id: a.id,
           }))
         );
 
-      if (errAsesores) {
-        console.error("Error asignando asesores:", errAsesores);
-        setMensaje("❌ Curso activado pero error asignando asesores");
-        cargarActivos();
-        return;
-      }
+      if (errInsert) console.error("Error insertando asesores:", errInsert);
     }
 
     setMensaje("✅ Curso activado correctamente");
@@ -161,25 +153,6 @@ export default function FormadorPage({ user }) {
           {cursos.map((c) => (
             <option key={c.id} value={c.id}>
               {c.titulo} ({c.estado})
-            </option>
-          ))}
-        </select>
-
-        {/* Selector múltiple de asesores */}
-        <select
-          multiple
-          className="w-full border rounded-lg p-2"
-          value={seleccion.asesores}
-          onChange={(e) =>
-            setSeleccion({
-              ...seleccion,
-              asesores: Array.from(e.target.selectedOptions, (option) => option.value),
-            })
-          }
-        >
-          {usuarios.map((u) => (
-            <option key={u.id} value={u.id}>
-              {u.nombre} ({u.rol})
             </option>
           ))}
         </select>
