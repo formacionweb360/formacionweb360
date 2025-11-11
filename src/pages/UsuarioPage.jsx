@@ -10,12 +10,6 @@ export default function UsuarioPage({ user }) {
   }, []);
 
   const cargarCursos = async () => {
-    if (!user?.campana_id) {
-      setMensaje("⚠️ No se encontró campaña asignada");
-      setCursos([]);
-      return;
-    }
-
     try {
       const { data, error } = await supabase
         .from("cursos_activados")
@@ -25,8 +19,8 @@ export default function UsuarioPage({ user }) {
           fecha,
           cursos(titulo, descripcion, url_iframe)
         `)
-        .eq("campana_id", user.campana_id) // Filtra por campaña asignada
-        .eq("activo", true);
+        .eq("campana_id", user.campana_id) // filtramos por campaña del asesor
+        .eq("activo", true);               // solo cursos activos
 
       if (error) {
         console.error("Error cargando cursos:", error);
@@ -34,8 +28,7 @@ export default function UsuarioPage({ user }) {
         setCursos([]);
       } else {
         setCursos(data || []);
-        if ((data || []).length === 0) setMensaje("No tienes cursos activos por ahora.");
-        else setMensaje("");
+        setMensaje((data || []).length === 0 ? "No tienes cursos activos por ahora." : "");
       }
     } catch (err) {
       console.error("Excepción cargando cursos:", err);
@@ -45,7 +38,10 @@ export default function UsuarioPage({ user }) {
 
   return (
     <div className="min-h-screen bg-gray-50 p-8">
-      <h1 className="text-2xl font-bold mb-6">👋 Hola {user.nombre}</h1>
+      <h1 className="text-3xl font-bold text-indigo-700 mb-6">
+        👋 Hola {user.nombre}
+      </h1>
+      <p className="text-gray-600 mb-6">Rol: {user.rol}</p>
 
       <div className="bg-white rounded-2xl shadow p-6 max-w-xl space-y-4">
         <h2 className="font-semibold text-lg mb-4">Cursos activos de tu campaña</h2>
@@ -53,14 +49,11 @@ export default function UsuarioPage({ user }) {
         {mensaje && <p className="text-gray-500">{mensaje}</p>}
 
         {cursos.map((c) => (
-          <div
-            key={c.id}
-            className="flex justify-between items-center border-b py-2"
-          >
-            <span>{c.cursos?.titulo || "Curso"}</span>
-            <span className="text-sm text-gray-400">
-              {new Date(c.fecha).toLocaleDateString()}
-            </span>
+          <div key={c.id} className="flex justify-between items-center border-b py-2">
+            <div>
+              <span className="font-medium">{c.cursos?.titulo || "Curso"}</span>
+              <p className="text-sm text-gray-500">{c.cursos?.descripcion || ""}</p>
+            </div>
             <a
               href={`/curso/${c.id}`}
               className="bg-indigo-600 text-white px-3 py-1 rounded-lg hover:bg-indigo-700"
