@@ -1,7 +1,10 @@
 import { useEffect, useState } from "react";
 import { supabase } from "../services/supabaseClient";
+import { useNavigate } from "react-router-dom";
 
 export default function FormadorPage({ user }) {
+  const navigate = useNavigate();
+
   const [campañas, setCampañas] = useState([]);
   const [grupos, setGrupos] = useState([]);
   const [cursos, setCursos] = useState([]);
@@ -15,21 +18,17 @@ export default function FormadorPage({ user }) {
 
   const fechaHoy = new Date().toISOString().split("T")[0];
 
-  // Mantener sesión conectada
+  // Cargar datos iniciales y verificar sesión
   useEffect(() => {
+    if (!user) {
+      navigate("/login"); // Si no hay sesión, ir a login
+      return;
+    }
     cargarCampañas();
     cargarActivos();
+  }, [user]);
 
-    const { data: listener } = supabase.auth.onAuthStateChange((event, session) => {
-      if (!session) {
-        // Redirige a login si se desconecta
-        window.location.href = "/login";
-      }
-    });
-
-    return () => listener?.unsubscribe();
-  }, []);
-
+  // Funciones de carga
   const cargarCampañas = async () => {
     const { data, error } = await supabase.from("campañas").select("*");
     if (!error) setCampañas(data || []);
@@ -53,13 +52,17 @@ export default function FormadorPage({ user }) {
         .eq("campana_id", campana_id)
         .eq("estado", "Activo");
 
+      // Traer cursos que pertenecen al grupo o que no tienen grupo asignado
       if (grupo_id) {
         query = query.or(`grupo_id.is.null,grupo_id.eq.${grupo_id}`);
       }
 
       const { data, error } = await query;
+
       if (!error) setCursos(data || []);
       else setCursos([]);
+
+      console.log("cargarCursos ->", data, error);
     } catch (err) {
       console.error("Error cargando cursos:", err);
       setCursos([]);
@@ -76,11 +79,15 @@ export default function FormadorPage({ user }) {
     else setActivos([]);
   };
 
+  // Activar curso
   const activarCurso = async () => {
     const { campana_id, grupo_id, curso_id } = seleccion;
-    if (!campana_id || !grupo_id || !curso_id)
-      return setMensaje("⚠️ Selecciona campaña, grupo y curso");
+    if (!campana_id || !grupo_id || !curso_id) {
+      setMensaje("⚠️ Selecciona campaña, grupo y curso");
+      return;
+    }
 
+    // Verificar si ya está activado
     const { data: existe } = await supabase
       .from("cursos_activados")
       .select("*")
@@ -95,6 +102,7 @@ export default function FormadorPage({ user }) {
       return;
     }
 
+    // Insertar curso activado
     const { data: activacion, error } = await supabase
       .from("cursos_activados")
       .insert([
@@ -115,6 +123,7 @@ export default function FormadorPage({ user }) {
       return;
     }
 
+    // Asignar a todos los asesores activos de ese grupo
     const { data: asesores, error: errAsesores } = await supabase
       .from("usuarios")
       .select("id")
@@ -122,7 +131,12 @@ export default function FormadorPage({ user }) {
       .eq("grupo_id", grupo_id)
       .eq("estado", "Activo");
 
-    if (!errAsesores && asesores.length > 0) {
+    if (errAsesores) {
+      setMensaje("❌ Error obteniendo asesores");
+      return;
+    }
+
+    if (asesores.length > 0) {
       await supabase.from("cursos_asesores").insert(
         asesores.map((u) => ({
           curso_activado_id: activacion.id,
@@ -135,6 +149,7 @@ export default function FormadorPage({ user }) {
     cargarActivos();
   };
 
+  // Desactivar curso
   const desactivarCurso = async (id) => {
     const { error } = await supabase.from("cursos_activados").delete().eq("id", id);
     if (!error) {
@@ -147,8 +162,10 @@ export default function FormadorPage({ user }) {
 
   // Cerrar sesión
   const cerrarSesion = async () => {
-    await supabase.auth.signOut();
-    window.location.href = "/login";
+    const { error } = await supabase.auth.signOut({
+      redirectTo: `${window.location.origin}/login`,
+    });
+    if (error) console.error("Error cerrando sesión:", error);
   };
 
   return (
@@ -163,11 +180,10 @@ export default function FormadorPage({ user }) {
         </button>
       </div>
 
-      {/* Activar curso */}
       <div className="bg-white rounded-2xl shadow p-6 mb-6 space-y-4 max-w-xl">
         <h2 className="font-semibold text-lg">Activar Curso</h2>
 
-        {/* Selección campaña */}
+        {/* Campaña */}
         <select
           className="w-full border rounded-lg p-2"
           value={seleccion.campana_id}
@@ -175,7 +191,6 @@ export default function FormadorPage({ user }) {
             const campana_id = e.target.value;
             setSeleccion({ ...seleccion, campana_id, grupo_id: "", curso_id: "" });
             await cargarGrupos(campana_id);
-            setCursos([]);
           }}
         >
           <option value="">Selecciona una campaña</option>
@@ -186,7 +201,7 @@ export default function FormadorPage({ user }) {
           ))}
         </select>
 
-        {/* Selección grupo */}
+        {/* Grupo */}
         <select
           className="w-full border rounded-lg p-2"
           value={seleccion.grupo_id}
@@ -204,29 +219,13 @@ export default function FormadorPage({ user }) {
           ))}
         </select>
 
-        {/* Malla de cursos tipo calendario */}
-        {cursos.length > 0 && (
-          <div className="bg-gray-100 p-3 rounded-lg mt-2 max-h-64 overflow-y-auto">
-            <h3 className="font-semibold mb-2">Malla de cursos:</h3>
-            {cursos.map((c, index) => (
-              <div
-                key={c.id}
-                className="border p-2 rounded mb-1 flex justify-between items-center bg-white"
-              >
-                <span>Día {index + 1}: {c.titulo}</span>
-                <span className="text-sm text-gray-500">{c.duracion_minutos} min</span>
-              </div>
-            ))}
-          </div>
-        )}
-
-        {/* Selección curso a activar */}
+        {/* Curso */}
         <select
-          className="w-full border rounded-lg p-2 mt-2"
+          className="w-full border rounded-lg p-2"
           value={seleccion.curso_id}
           onChange={(e) => setSeleccion({ ...seleccion, curso_id: e.target.value })}
         >
-          <option value="">Selecciona un curso a activar</option>
+          <option value="">Selecciona un curso</option>
           {cursos.map((c) => (
             <option key={c.id} value={c.id}>
               {c.titulo} ({c.estado})
