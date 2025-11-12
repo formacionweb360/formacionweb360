@@ -2,8 +2,8 @@ import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { supabase } from "../services/supabaseClient";
 
-export default function CursoViewPage({ user }) {
-  const { id } = useParams(); // curso_activado_id
+export default function CursoViewPage({ user, onLogout }) {
+  const { id } = useParams();
   const navigate = useNavigate();
   
   const [curso, setCurso] = useState(null);
@@ -14,13 +14,12 @@ export default function CursoViewPage({ user }) {
   const [tiempoVisto, setTiempoVisto] = useState(0);
   const [iniciado, setIniciado] = useState(false);
 
-  // Timer automático
   useEffect(() => {
     let interval;
     if (iniciado && progreso?.estado !== "Completado") {
       interval = setInterval(() => {
         setTiempoVisto((prev) => prev + 1);
-      }, 60000); // Incrementa cada minuto
+      }, 60000);
     }
     return () => clearInterval(interval);
   }, [iniciado, progreso]);
@@ -29,7 +28,6 @@ export default function CursoViewPage({ user }) {
     cargarDatos();
   }, [id]);
 
-  // Iniciar timer cuando se carga la página
   useEffect(() => {
     if (curso && !iniciado) {
       setIniciado(true);
@@ -44,7 +42,6 @@ export default function CursoViewPage({ user }) {
   const cargarDatos = async () => {
     setLoading(true);
     try {
-      // Cargar información del curso activado
       const { data: cursoData, error: errorCurso } = await supabase
         .from("cursos_activados")
         .select(`
@@ -68,7 +65,6 @@ export default function CursoViewPage({ user }) {
 
       setCurso(cursoData);
 
-      // Verificar si ya existe progreso para este usuario y curso
       const { data: progresoData, error: errorProgreso } = await supabase
         .from("progreso_usuarios")
         .select("*")
@@ -80,7 +76,6 @@ export default function CursoViewPage({ user }) {
         setProgreso(progresoData);
         setTiempoVisto(progresoData.progreso || 0);
       } else {
-        // Crear registro de progreso inicial
         const { data: nuevoProgreso, error: errorNuevo } = await supabase
           .from("progreso_usuarios")
           .insert([
@@ -120,7 +115,6 @@ export default function CursoViewPage({ user }) {
     }
   };
 
-  // Guardar progreso cada 2 minutos
   useEffect(() => {
     if (progreso && tiempoVisto > 0 && tiempoVisto % 2 === 0) {
       actualizarProgreso();
@@ -138,7 +132,6 @@ export default function CursoViewPage({ user }) {
 
     setGuardando(true);
     try {
-      // Actualizar progreso a completado
       const { error: errorProgreso } = await supabase
         .from("progreso_usuarios")
         .update({
@@ -155,10 +148,8 @@ export default function CursoViewPage({ user }) {
 
       mostrarMensaje("success", "🎉 ¡Curso completado exitosamente!");
       
-      // Recargar datos
       await cargarDatos();
 
-      // Redirigir después de 2 segundos
       setTimeout(() => {
         navigate("/dashboard");
       }, 2000);
@@ -235,6 +226,17 @@ export default function CursoViewPage({ user }) {
             </button>
 
             <div className="flex items-center gap-4">
+              {/* Botón de logout */}
+              <button
+                onClick={onLogout}
+                className="text-red-600 hover:text-red-700 font-medium flex items-center gap-2"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                </svg>
+                <span className="hidden sm:inline">Salir</span>
+              </button>
+
               {estaCompletado ? (
                 <span className="bg-green-100 text-green-800 px-4 py-2 rounded-full text-sm font-medium flex items-center gap-2">
                   <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
@@ -244,7 +246,7 @@ export default function CursoViewPage({ user }) {
                 </span>
               ) : (
                 <div className="flex items-center gap-3">
-                  <div className="text-right">
+                  <div className="text-right hidden sm:block">
                     <p className="text-xs text-gray-500">Tiempo visto</p>
                     <p className="text-sm font-bold text-indigo-600">
                       {formatearTiempo(tiempoVisto)}
