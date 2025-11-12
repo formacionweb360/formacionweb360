@@ -18,23 +18,24 @@ export default function FormadorPage({ user }) {
 
   const fechaHoy = new Date().toISOString().split("T")[0];
 
-  // Cargar datos iniciales y verificar sesión
+  // Verificar sesión y cargar datos
   useEffect(() => {
     if (!user) {
-      navigate("/login"); // Si no hay sesión, ir a login
+      navigate("/"); // Redirige a / si no hay usuario logueado
       return;
     }
     cargarCampañas();
     cargarActivos();
   }, [user]);
 
-  // Funciones de carga
+  // Cargar campañas
   const cargarCampañas = async () => {
     const { data, error } = await supabase.from("campañas").select("*");
     if (!error) setCampañas(data || []);
     else setCampañas([]);
   };
 
+  // Cargar grupos por campaña
   const cargarGrupos = async (campana_id) => {
     const { data, error } = await supabase
       .from("grupos")
@@ -44,6 +45,7 @@ export default function FormadorPage({ user }) {
     else setGrupos([]);
   };
 
+  // Cargar cursos por campaña y grupo
   const cargarCursos = async (campana_id, grupo_id) => {
     try {
       let query = supabase
@@ -52,7 +54,7 @@ export default function FormadorPage({ user }) {
         .eq("campana_id", campana_id)
         .eq("estado", "Activo");
 
-      // Traer cursos que pertenecen al grupo o que no tienen grupo asignado
+      // Si hay grupo seleccionado, traer cursos del grupo + los que no tienen grupo
       if (grupo_id) {
         query = query.or(`grupo_id.is.null,grupo_id.eq.${grupo_id}`);
       }
@@ -69,12 +71,16 @@ export default function FormadorPage({ user }) {
     }
   };
 
+  // Cargar cursos activos del día
   const cargarActivos = async () => {
     const { data, error } = await supabase
       .from("cursos_activados")
-      .select("id, curso_id, campana_id, grupo_id, fecha, activo, cursos(titulo), grupos(nombre)")
+      .select(
+        "id, curso_id, campana_id, grupo_id, fecha, activo, cursos(titulo), grupos(nombre)"
+      )
       .eq("fecha", fechaHoy)
       .eq("formador_id", user.id);
+
     if (!error) setActivos(data || []);
     else setActivos([]);
   };
@@ -82,10 +88,8 @@ export default function FormadorPage({ user }) {
   // Activar curso
   const activarCurso = async () => {
     const { campana_id, grupo_id, curso_id } = seleccion;
-    if (!campana_id || !grupo_id || !curso_id) {
-      setMensaje("⚠️ Selecciona campaña, grupo y curso");
-      return;
-    }
+    if (!campana_id || !grupo_id || !curso_id)
+      return setMensaje("⚠️ Selecciona campaña, grupo y curso");
 
     // Verificar si ya está activado
     const { data: existe } = await supabase
@@ -123,7 +127,7 @@ export default function FormadorPage({ user }) {
       return;
     }
 
-    // Asignar a todos los asesores activos de ese grupo
+    // Asignar a todos los asesores activos del grupo
     const { data: asesores, error: errAsesores } = await supabase
       .from("usuarios")
       .select("id")
@@ -163,7 +167,7 @@ export default function FormadorPage({ user }) {
   // Cerrar sesión
   const cerrarSesion = async () => {
     const { error } = await supabase.auth.signOut({
-      redirectTo: `${window.location.origin}/login`,
+      redirectTo: window.location.origin,
     });
     if (error) console.error("Error cerrando sesión:", error);
   };
@@ -180,6 +184,7 @@ export default function FormadorPage({ user }) {
         </button>
       </div>
 
+      {/* Activar curso */}
       <div className="bg-white rounded-2xl shadow p-6 mb-6 space-y-4 max-w-xl">
         <h2 className="font-semibold text-lg">Activar Curso</h2>
 
