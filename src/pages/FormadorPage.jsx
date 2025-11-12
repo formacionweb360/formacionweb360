@@ -1,32 +1,8 @@
 import { useEffect, useState } from "react";
+import { supabase } from "../services/supabaseClient";
 
-// Simulación de supabase client
-const supabase = {
-  from: (table) => ({
-    select: (cols) => ({
-      eq: () => ({
-        eq: () => ({ data: [], error: null }),
-        or: () => ({ data: [], error: null }),
-        maybeSingle: () => ({ data: null, error: null })
-      }),
-      or: () => ({ data: [], error: null })
-    }),
-    insert: () => ({
-      select: () => ({
-        single: () => ({ data: { id: 1 }, error: null })
-      })
-    }),
-    delete: () => ({
-      eq: () => ({ error: null })
-    })
-  })
-};
-
-export default function FormadorPage() {
-  const [campañas, setCampañas] = useState([
-    { id: 1, nombre: "Campaña Q1 2024" },
-    { id: 2, nombre: "Campaña Verano" }
-  ]);
+export default function FormadorPage({ user }) {
+  const [campañas, setCampañas] = useState([]);
   const [grupos, setGrupos] = useState([]);
   const [cursos, setCursos] = useState([]);
   const [seleccion, setSeleccion] = useState({
@@ -34,18 +10,12 @@ export default function FormadorPage() {
     grupo_id: "",
     curso_id: "",
   });
-  const [activos, setActivos] = useState([
-    {
-      id: 1,
-      cursos: { titulo: "Introducción a Ventas" },
-      grupos: { nombre: "Grupo A" },
-      campana: { nombre: "Q1 2024" }
-    }
-  ]);
+  const [activos, setActivos] = useState([]);
   const [loading, setLoading] = useState(false);
   const [mensaje, setMensaje] = useState({ tipo: "", texto: "" });
 
-  const fechaHoy = new Date().toLocaleDateString('es-PE', {
+  const fechaHoy = new Date().toISOString().split("T")[0];
+  const fechaHoyFormateada = new Date().toLocaleDateString('es-PE', {
     weekday: 'long',
     year: 'numeric',
     month: 'long',
@@ -56,6 +26,7 @@ export default function FormadorPage() {
     cargarDatos();
   }, []);
 
+  // Cargar datos iniciales
   const cargarDatos = async () => {
     setLoading(true);
     try {
@@ -65,56 +36,125 @@ export default function FormadorPage() {
     }
   };
 
-  const cargarCampañas = async () => {
-    // Simulado - reemplazar con tu lógica real
-    setCampañas([
-      { id: 1, nombre: "Campaña Q1 2024" },
-      { id: 2, nombre: "Campaña Verano" }
-    ]);
+  // Mostrar mensajes con auto-dismiss
+  const mostrarMensaje = (tipo, texto) => {
+    setMensaje({ tipo, texto });
+    setTimeout(() => setMensaje({ tipo: "", texto: "" }), 4000);
   };
 
+  // Cargar campañas
+  const cargarCampañas = async () => {
+    const { data, error } = await supabase.from("campañas").select("*");
+    if (!error) setCampañas(data || []);
+    else {
+      setCampañas([]);
+      mostrarMensaje("error", "Error al cargar campañas");
+    }
+  };
+
+  // Cargar grupos según campaña con conteo de usuarios
   const cargarGrupos = async (campana_id) => {
     if (!campana_id) return;
     setLoading(true);
     try {
-      // Simulado
-      setGrupos([
-        { id: 1, nombre: "Grupo A - Principiantes", activos: 12 },
-        { id: 2, nombre: "Grupo B - Avanzados", activos: 8 }
-      ]);
+      const { data, error } = await supabase
+        .from("grupos")
+        .select("*, usuarios!inner(id)")
+        .eq("campana_id", campana_id)
+        .eq("usuarios.estado", "Activo")
+        .eq("usuarios.rol", "Usuario");
+      
+      if (!error && data) {
+        // Agrupar y contar usuarios por grupo
+        const gruposConConteo = data.reduce((acc, curr) => {
+          const existe = acc.find(g => g.id === curr.id);
+          if (existe) {
+            existe.activos++;
+          } else {
+            acc.push({ ...curr, activos: 1 });
+          }
+          return acc;
+        }, []);
+        
+        setGrupos(gruposConConteo);
+      } else {
+        setGrupos([]);
+      }
+    } catch (err) {
+      console.error("Error cargando grupos:", err);
+      setGrupos([]);
     } finally {
       setLoading(false);
     }
   };
 
+  // Cargar cursos según campaña y grupo
   const cargarCursos = async (campana_id, grupo_id) => {
     if (!campana_id || !grupo_id) return;
     setLoading(true);
     try {
-      // Simulado
-      setCursos([
-        { id: 1, titulo: "Introducción a Ventas", duracion_minutos: 45, estado: "Activo" },
-        { id: 2, titulo: "Técnicas de Negociación", duracion_minutos: 60, estado: "Activo" },
-        { id: 3, titulo: "Cierre de Ventas", duracion_minutos: 30, estado: "Activo" }
-      ]);
+      let query = supabase
+        .from("cursos")
+        .select("*")
+        .eq("campana_id", campana_id)
+        .eq("estado", "Activo");
+
+      // Trae cursos sin grupo o del grupo seleccionado
+      if (grupo_id) {
+        query = query.or(`grupo_id.is.null,grupo_id.eq.${grupo_id}`);
+      }
+
+      const { data, error } = await query;
+      if (!error) setCursos(data || []);
+      else {
+        setCursos([]);
+        mostrarMensaje("error", "Error al cargar cursos");
+      }
+    } catch (err) {
+      console.error("Error cargando cursos:", err);
+      setCursos([]);
     } finally {
       setLoading(false);
     }
   };
 
+  // Cargar cursos activos de hoy con información completa
   const cargarActivos = async () => {
-    // Simulado
-    setActivos([
-      {
-        id: 1,
-        cursos: { titulo: "Introducción a Ventas" },
-        grupos: { nombre: "Grupo A", activos: 12 },
-        campana: { nombre: "Q1 2024" },
-        asesores_count: 12
-      }
-    ]);
+    const { data, error } = await supabase
+      .from("cursos_activados")
+      .select(`
+        id, 
+        curso_id, 
+        campana_id, 
+        grupo_id, 
+        fecha, 
+        activo,
+        cursos(titulo, duracion_minutos),
+        grupos(nombre),
+        campañas(nombre)
+      `)
+      .eq("fecha", fechaHoy)
+      .eq("formador_id", user.id);
+    
+    if (!error && data) {
+      // Obtener conteo de asesores para cada curso activado
+      const activosConConteo = await Promise.all(
+        data.map(async (activado) => {
+          const { count } = await supabase
+            .from("cursos_asesores")
+            .select("*", { count: "exact", head: true })
+            .eq("curso_activado_id", activado.id);
+          
+          return { ...activado, asesores_count: count || 0 };
+        })
+      );
+      setActivos(activosConConteo);
+    } else {
+      setActivos([]);
+    }
   };
 
+  // Activar curso
   const activarCurso = async () => {
     const { campana_id, grupo_id, curso_id } = seleccion;
     
@@ -124,42 +164,127 @@ export default function FormadorPage() {
     }
 
     setLoading(true);
+
     try {
-      // Simulación de éxito
-      mostrarMensaje("success", "✅ Curso activado y asignado a 12 asesores");
+      // Verificar si ya está activado
+      const { data: existe } = await supabase
+        .from("cursos_activados")
+        .select("*")
+        .eq("fecha", fechaHoy)
+        .eq("campana_id", campana_id)
+        .eq("grupo_id", grupo_id)
+        .eq("curso_id", curso_id)
+        .maybeSingle();
+
+      if (existe) {
+        mostrarMensaje("error", "⚠️ Este curso ya está activado hoy para esa campaña y grupo");
+        return;
+      }
+
+      // Insertar curso activado
+      const { data: activacion, error } = await supabase
+        .from("cursos_activados")
+        .insert([
+          {
+            campana_id,
+            grupo_id,
+            curso_id,
+            fecha: fechaHoy,
+            activo: true,
+            formador_id: user.id,
+          },
+        ])
+        .select()
+        .single();
+
+      if (error) {
+        mostrarMensaje("error", "❌ Error al activar el curso");
+        return;
+      }
+
+      // Asignar a todos los asesores activos de ese grupo
+      const { data: asesores, error: errAsesores } = await supabase
+        .from("usuarios")
+        .select("id")
+        .eq("rol", "Usuario")
+        .eq("grupo_id", grupo_id)
+        .eq("estado", "Activo");
+
+      if (!errAsesores && asesores.length > 0) {
+        const { error: errorInsert } = await supabase.from("cursos_asesores").insert(
+          asesores.map((u) => ({
+            curso_activado_id: activacion.id,
+            asesor_id: u.id,
+          }))
+        );
+
+        if (errorInsert) {
+          mostrarMensaje("error", "⚠️ Curso activado pero error al asignar asesores");
+        } else {
+          mostrarMensaje("success", `✅ Curso activado y asignado a ${asesores.length} asesores`);
+        }
+      } else {
+        mostrarMensaje("success", "✅ Curso activado (sin asesores en el grupo)");
+      }
+
       await cargarActivos();
       
-      // Resetear selección de curso
+      // Resetear solo el curso seleccionado
       setSeleccion({ ...seleccion, curso_id: "" });
-    } catch (error) {
-      mostrarMensaje("error", "❌ Error al activar el curso");
+      
+    } catch (err) {
+      console.error("Error al activar curso:", err);
+      mostrarMensaje("error", "❌ Error inesperado al activar");
     } finally {
       setLoading(false);
     }
   };
 
+  // Desactivar curso con confirmación
   const desactivarCurso = async (id) => {
-    if (!confirm("¿Seguro que deseas desactivar este curso? Se eliminarán todas las asignaciones.")) {
+    if (!confirm("¿Seguro que deseas desactivar este curso? Se eliminarán todas las asignaciones a asesores.")) {
       return;
     }
 
     setLoading(true);
+
     try {
-      // Simulación
+      // Eliminar las asignaciones de curso a asesores
+      const { error: errorAsesores } = await supabase
+        .from("cursos_asesores")
+        .delete()
+        .eq("curso_activado_id", id);
+
+      if (errorAsesores) {
+        console.error("Error eliminando asignaciones a asesores:", errorAsesores);
+        mostrarMensaje("error", "❌ Error al eliminar asignaciones");
+        return;
+      }
+
+      // Eliminar el curso activado
+      const { error } = await supabase
+        .from("cursos_activados")
+        .delete()
+        .eq("id", id);
+
+      if (error) {
+        console.error("Error eliminando curso activado:", error);
+        mostrarMensaje("error", "❌ Error al desactivar el curso");
+        return;
+      }
+
       mostrarMensaje("success", "🗑️ Curso desactivado correctamente");
       await cargarActivos();
-    } catch (error) {
-      mostrarMensaje("error", "❌ Error al desactivar");
+
+    } catch (err) {
+      console.error("Error inesperado al desactivar curso:", err);
+      mostrarMensaje("error", "❌ Error inesperado al desactivar");
     } finally {
       setLoading(false);
     }
   };
 
-  const mostrarMensaje = (tipo, texto) => {
-    setMensaje({ tipo, texto });
-    setTimeout(() => setMensaje({ tipo: "", texto: "" }), 4000);
-  };
-
+  // Handlers de cambio
   const handleCampanaChange = async (campana_id) => {
     setSeleccion({ campana_id, grupo_id: "", curso_id: "" });
     setGrupos([]);
@@ -183,7 +308,7 @@ export default function FormadorPage() {
         {/* Header */}
         <div className="mb-8">
           <h1 className="text-3xl font-bold text-gray-900 mb-2">Panel del Formador</h1>
-          <p className="text-gray-600">📅 {fechaHoy}</p>
+          <p className="text-gray-600">📅 {fechaHoyFormateada}</p>
         </div>
 
         {/* Mensaje de feedback */}
@@ -241,7 +366,7 @@ export default function FormadorPage() {
                 <option value="">Selecciona un grupo</option>
                 {grupos.map((g) => (
                   <option key={g.id} value={g.id}>
-                    {g.nombre} ({g.activos} asesores)
+                    {g.nombre} ({g.activos || 0} asesores activos)
                   </option>
                 ))}
               </select>
@@ -328,7 +453,7 @@ export default function FormadorPage() {
                         </h3>
                         <div className="flex flex-col gap-1 text-sm text-gray-600">
                           <span>👥 {a.grupos?.nombre || "Sin grupo"}</span>
-                          <span>📊 {a.campana?.nombre || "Sin campaña"}</span>
+                          <span>📊 {a.campañas?.nombre || "Sin campaña"}</span>
                           <span className="text-indigo-600 font-medium">
                             ✓ {a.asesores_count || 0} asesores asignados
                           </span>
