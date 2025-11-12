@@ -5,10 +5,12 @@ import AdminPage from "./pages/AdminPage";
 import FormadorPage from "./pages/FormadorPage";  
 import AsesorDashboard from "./pages/AsesorDashboard";  
 import CursoViewPage from "./pages/CursoViewPage";  
+import { useNavigate } from "react-router-dom"; // Importa useNavigate  
   
 export default function App() {  
   const [user, setUser] = useState(null);  
   const [loading, setLoading] = useState(true);  
+  const navigate = useNavigate(); // Usa useNavigate  
   
   // Cargar usuario del localStorage al iniciar  
   useEffect(() => {  
@@ -36,6 +38,7 @@ export default function App() {
   const handleLogout = () => {  
     setUser(null);  
     localStorage.removeItem("user");  
+    navigate("/"); // Redirige a la página principal al cerrar sesión  
   };  
   
   // Mostrar loading mientras se verifica la sesión  
