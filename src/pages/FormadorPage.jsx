@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { supabase } from "../services/supabaseClient";
 
-export default function FormadorPage({ user }) {
+export default function FormadorPage({ user, onLogout }) {
   const [campañas, setCampañas] = useState([]);
   const [grupos, setGrupos] = useState([]);
   const [cursos, setCursos] = useState([]);
@@ -26,7 +26,6 @@ export default function FormadorPage({ user }) {
     cargarDatos();
   }, []);
 
-  // Cargar datos iniciales
   const cargarDatos = async () => {
     setLoading(true);
     try {
@@ -36,13 +35,11 @@ export default function FormadorPage({ user }) {
     }
   };
 
-  // Mostrar mensajes con auto-dismiss
   const mostrarMensaje = (tipo, texto) => {
     setMensaje({ tipo, texto });
     setTimeout(() => setMensaje({ tipo: "", texto: "" }), 4000);
   };
 
-  // Cargar campañas
   const cargarCampañas = async () => {
     const { data, error } = await supabase.from("campañas").select("*");
     if (!error) setCampañas(data || []);
@@ -52,7 +49,6 @@ export default function FormadorPage({ user }) {
     }
   };
 
-  // Cargar grupos según campaña con conteo de usuarios
   const cargarGrupos = async (campana_id) => {
     if (!campana_id) return;
     setLoading(true);
@@ -65,7 +61,6 @@ export default function FormadorPage({ user }) {
         .eq("usuarios.rol", "Usuario");
       
       if (!error && data) {
-        // Agrupar y contar usuarios por grupo
         const gruposConConteo = data.reduce((acc, curr) => {
           const existe = acc.find(g => g.id === curr.id);
           if (existe) {
@@ -88,7 +83,6 @@ export default function FormadorPage({ user }) {
     }
   };
 
-  // Cargar cursos según campaña y grupo
   const cargarCursos = async (campana_id, grupo_id) => {
     if (!campana_id || !grupo_id) return;
     setLoading(true);
@@ -99,7 +93,6 @@ export default function FormadorPage({ user }) {
         .eq("campana_id", campana_id)
         .eq("estado", "Activo");
 
-      // Trae cursos sin grupo o del grupo seleccionado
       if (grupo_id) {
         query = query.or(`grupo_id.is.null,grupo_id.eq.${grupo_id}`);
       }
@@ -118,7 +111,6 @@ export default function FormadorPage({ user }) {
     }
   };
 
-  // Cargar cursos activos de hoy con información completa
   const cargarActivos = async () => {
     const { data, error } = await supabase
       .from("cursos_activados")
@@ -137,7 +129,6 @@ export default function FormadorPage({ user }) {
       .eq("formador_id", user.id);
     
     if (!error && data) {
-      // Obtener conteo de asesores para cada curso activado
       const activosConConteo = await Promise.all(
         data.map(async (activado) => {
           const { count } = await supabase
@@ -154,7 +145,6 @@ export default function FormadorPage({ user }) {
     }
   };
 
-  // Activar curso
   const activarCurso = async () => {
     const { campana_id, grupo_id, curso_id } = seleccion;
     
@@ -166,7 +156,6 @@ export default function FormadorPage({ user }) {
     setLoading(true);
 
     try {
-      // Verificar si ya está activado
       const { data: existe } = await supabase
         .from("cursos_activados")
         .select("*")
@@ -181,7 +170,6 @@ export default function FormadorPage({ user }) {
         return;
       }
 
-      // Insertar curso activado
       const { data: activacion, error } = await supabase
         .from("cursos_activados")
         .insert([
@@ -202,7 +190,6 @@ export default function FormadorPage({ user }) {
         return;
       }
 
-      // Asignar a todos los asesores activos de ese grupo
       const { data: asesores, error: errAsesores } = await supabase
         .from("usuarios")
         .select("id")
@@ -228,8 +215,6 @@ export default function FormadorPage({ user }) {
       }
 
       await cargarActivos();
-      
-      // Resetear solo el curso seleccionado
       setSeleccion({ ...seleccion, curso_id: "" });
       
     } catch (err) {
@@ -240,7 +225,6 @@ export default function FormadorPage({ user }) {
     }
   };
 
-  // Desactivar curso con confirmación
   const desactivarCurso = async (id) => {
     if (!confirm("¿Seguro que deseas desactivar este curso? Se eliminarán todas las asignaciones a asesores.")) {
       return;
@@ -249,7 +233,6 @@ export default function FormadorPage({ user }) {
     setLoading(true);
 
     try {
-      // Eliminar las asignaciones de curso a asesores
       const { error: errorAsesores } = await supabase
         .from("cursos_asesores")
         .delete()
@@ -261,7 +244,6 @@ export default function FormadorPage({ user }) {
         return;
       }
 
-      // Eliminar el curso activado
       const { error } = await supabase
         .from("cursos_activados")
         .delete()
@@ -284,7 +266,6 @@ export default function FormadorPage({ user }) {
     }
   };
 
-  // Handlers de cambio
   const handleCampanaChange = async (campana_id) => {
     setSeleccion({ campana_id, grupo_id: "", curso_id: "" });
     setGrupos([]);
@@ -305,10 +286,21 @@ export default function FormadorPage({ user }) {
   return (
     <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-white to-purple-50 p-4 md:p-8">
       <div className="max-w-5xl mx-auto">
-        {/* Header */}
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">Panel del Formador</h1>
-          <p className="text-gray-600">📅 {fechaHoyFormateada}</p>
+        {/* Header con botón de logout */}
+        <div className="mb-8 flex items-center justify-between">
+          <div>
+            <h1 className="text-3xl font-bold text-gray-900 mb-2">Panel del Formador</h1>
+            <p className="text-gray-600">📅 {fechaHoyFormateada}</p>
+          </div>
+          <button
+            onClick={onLogout}
+            className="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded-lg transition-colors flex items-center gap-2 shadow-md hover:shadow-lg"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+            </svg>
+            Cerrar sesión
+          </button>
         </div>
 
         {/* Mensaje de feedback */}
