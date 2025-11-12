@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router-dom";
 import LoginForm from "./components/LoginForm";
 import AdminPage from "./pages/AdminPage";
 import FormadorPage from "./pages/FormadorPage";
@@ -7,40 +8,73 @@ import CursoViewPage from "./pages/CursoViewPage";
 
 export default function App() {
   const [user, setUser] = useState(null);
-  const [vista, setVista] = useState({ tipo: "dashboard", data: null });
 
-  // Si no hay usuario, mostrar login
   if (!user) {
     return <LoginForm onLogin={setUser} />;
   }
 
-  // Función para navegar entre vistas
-  const navegarACurso = (cursoId) => {
-    setVista({ tipo: "curso", data: cursoId });
-  };
+  return (
+    <Router>
+      <Routes>
+        <Route 
+          path="/" 
+          element={
+            user.rol === "Administrador" ? (
+              <Navigate to="/admin" replace />
+            ) : user.rol === "Formador" ? (
+              <Navigate to="/formador" replace />
+            ) : (
+              <Navigate to="/dashboard" replace />
+            )
+          } 
+        />
 
-  const volverADashboard = () => {
-    setVista({ tipo: "dashboard", data: null });
-  };
+        <Route 
+          path="/admin" 
+          element={
+            user.rol === "Administrador" ? (
+              <AdminPage user={user} />
+            ) : (
+              <Navigate to="/" replace />
+            )
+          } 
+        />
 
-  // Mostrar vista de curso si está activa
-  if (vista.tipo === "curso" && vista.data && user.rol === "Usuario") {
-    return (
-      <CursoViewPage 
-        user={user} 
-        cursoId={vista.data}
-        onVolver={volverADashboard}
-      />
-    );
-  }
+        <Route 
+          path="/formador" 
+          element={
+            user.rol === "Formador" ? (
+              <FormadorPage user={user} />
+            ) : (
+              <Navigate to="/" replace />
+            )
+          } 
+        />
 
-  // Mostrar página según rol
-  switch (user.rol) {
-    case "Administrador":
-      return <AdminPage user={user} />;
-    case "Formador":
-      return <FormadorPage user={user} />;
-    default:
-      return <AsesorDashboard user={user} onVerCurso={navegarACurso} />;
-  }
+        <Route 
+          path="/dashboard" 
+          element={
+            user.rol === "Usuario" ? (
+              <AsesorDashboard user={user} />
+            ) : (
+              <Navigate to="/" replace />
+            )
+          } 
+        />
+
+        <Route 
+          path="/curso/:id" 
+          element={
+            user.rol === "Usuario" ? (
+              <CursoViewPage user={user} />
+            ) : (
+              <Navigate to="/" replace />
+            )
+          } 
+        />
+
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
+    </Router>
+  );
 }
