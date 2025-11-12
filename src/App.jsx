@@ -30,10 +30,11 @@ export default function App() {
     localStorage.setItem("user", JSON.stringify(userData));
   };
 
-  // Función para cerrar sesión
+  // ✅ Función para cerrar sesión con redirección a raíz
   const handleLogout = () => {
     setUser(null);
     localStorage.removeItem("user");
+    window.location.href = "/"; // 👈 Fuerza volver a la página principal
   };
 
   // Mostrar loading mientras se verifica la sesión
@@ -57,8 +58,8 @@ export default function App() {
     <Router>
       <Routes>
         {/* Ruta raíz - redirige según el rol */}
-        <Route 
-          path="/" 
+        <Route
+          path="/"
           element={
             user.rol === "Administrador" ? (
               <Navigate to="/admin" replace />
@@ -67,53 +68,53 @@ export default function App() {
             ) : (
               <Navigate to="/dashboard" replace />
             )
-          } 
+          }
         />
 
         {/* Rutas por rol */}
-        <Route 
-          path="/admin" 
+        <Route
+          path="/admin"
           element={
             user.rol === "Administrador" ? (
               <AdminPage user={user} onLogout={handleLogout} />
             ) : (
               <Navigate to="/" replace />
             )
-          } 
+          }
         />
 
-        <Route 
-          path="/formador" 
+        <Route
+          path="/formador"
           element={
             user.rol === "Formador" ? (
               <FormadorPage user={user} onLogout={handleLogout} />
             ) : (
               <Navigate to="/" replace />
             )
-          } 
+          }
         />
 
-        <Route 
-          path="/dashboard" 
+        <Route
+          path="/dashboard"
           element={
             user.rol === "Usuario" ? (
               <AsesorDashboard user={user} onLogout={handleLogout} />
             ) : (
               <Navigate to="/" replace />
             )
-          } 
+          }
         />
 
-        {/* Ruta del curso - accesible para usuarios */}
-        <Route 
-          path="/curso/:id" 
+        {/* Ruta del curso - accesible solo para usuarios */}
+        <Route
+          path="/curso/:id"
           element={
             user.rol === "Usuario" ? (
               <CursoViewPage user={user} onLogout={handleLogout} />
             ) : (
               <Navigate to="/" replace />
             )
-          } 
+          }
         />
 
         {/* Ruta 404 - cualquier otra ruta */}
