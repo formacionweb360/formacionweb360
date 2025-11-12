@@ -1,10 +1,7 @@
 import { useEffect, useState } from "react";
 import { supabase } from "../services/supabaseClient";
 
-export default function FormadorPage() {
-  const [user, setUser] = useState(null);
-  const [loading, setLoading] = useState(true);
-
+export default function FormadorPage({ user }) {
   const [campañas, setCampañas] = useState([]);
   const [grupos, setGrupos] = useState([]);
   const [cursos, setCursos] = useState([]);
@@ -18,37 +15,19 @@ export default function FormadorPage() {
 
   const fechaHoy = new Date().toISOString().split("T")[0];
 
-  // Manejo de sesión
   useEffect(() => {
-    const fetchSession = async () => {
-      const { data } = await supabase.auth.getSession();
-      if (data?.session?.user) setUser(data.session.user);
-      setLoading(false);
-    };
-
-    fetchSession();
-
-    const { data: listener } = supabase.auth.onAuthStateChange((event, session) => {
-      setUser(session?.user || null);
-    });
-
-    return () => listener.subscription.unsubscribe();
+    cargarCampañas();
+    cargarActivos();
   }, []);
 
-  // Carga inicial de datos
-  useEffect(() => {
-    if (user) {
-      cargarCampañas();
-      cargarActivos();
-    }
-  }, [user]);
-
+  // Cargar campañas
   const cargarCampañas = async () => {
     const { data, error } = await supabase.from("campañas").select("*");
     if (!error) setCampañas(data || []);
     else setCampañas([]);
   };
 
+  // Cargar grupos según campaña
   const cargarGrupos = async (campana_id) => {
     const { data, error } = await supabase
       .from("grupos")
@@ -58,6 +37,7 @@ export default function FormadorPage() {
     else setGrupos([]);
   };
 
+  // Cargar cursos según campaña y grupo
   const cargarCursos = async (campana_id, grupo_id) => {
     try {
       let query = supabase
@@ -66,8 +46,10 @@ export default function FormadorPage() {
         .eq("campana_id", campana_id)
         .eq("estado", "Activo");
 
-      // Traemos los cursos sin grupo o del grupo seleccionado
-      if (grupo_id) query = query.or(`grupo_id.is.null,grupo_id.eq.${grupo_id}`);
+      // Trae cursos sin grupo o del grupo seleccionado
+      if (grupo_id) {
+        query = query.or(`grupo_id.is.null,grupo_id.eq.${grupo_id}`);
+      }
 
       const { data, error } = await query;
       if (!error) setCursos(data || []);
@@ -78,24 +60,22 @@ export default function FormadorPage() {
     }
   };
 
+  // Cargar cursos activos de hoy
   const cargarActivos = async () => {
     const { data, error } = await supabase
       .from("cursos_activados")
-      .select(
-        "id, curso_id, campana_id, grupo_id, fecha, activo, cursos(titulo), grupos(nombre)"
-      )
+      .select("id, curso_id, campana_id, grupo_id, fecha, activo, cursos(titulo), grupos(nombre)")
       .eq("fecha", fechaHoy)
-      .eq("formador_id", user?.id);
+      .eq("formador_id", user.id);
     if (!error) setActivos(data || []);
     else setActivos([]);
   };
 
+  // Activar curso
   const activarCurso = async () => {
     const { campana_id, grupo_id, curso_id } = seleccion;
-    if (!campana_id || !grupo_id || !curso_id) {
-      setMensaje("⚠️ Selecciona campaña, grupo y curso");
-      return;
-    }
+    if (!campana_id || !grupo_id || !curso_id)
+      return setMensaje("⚠️ Selecciona campaña, grupo y curso");
 
     // Verificar si ya está activado
     const { data: existe } = await supabase
@@ -133,7 +113,7 @@ export default function FormadorPage() {
       return;
     }
 
-    // Asignar automáticamente a todos los asesores activos del grupo
+    // Asignar a todos los asesores activos de ese grupo
     const { data: asesores, error: errAsesores } = await supabase
       .from("usuarios")
       .select("id")
@@ -141,12 +121,7 @@ export default function FormadorPage() {
       .eq("grupo_id", grupo_id)
       .eq("estado", "Activo");
 
-    if (errAsesores) {
-      setMensaje("❌ Error obteniendo asesores");
-      return;
-    }
-
-    if (asesores.length > 0) {
+    if (!errAsesores && asesores.length > 0) {
       await supabase.from("cursos_asesores").insert(
         asesores.map((u) => ({
           curso_activado_id: activacion.id,
@@ -159,6 +134,7 @@ export default function FormadorPage() {
     cargarActivos();
   };
 
+  // Desactivar curso
   const desactivarCurso = async (id) => {
     const { error } = await supabase.from("cursos_activados").delete().eq("id", id);
     if (!error) {
@@ -169,35 +145,15 @@ export default function FormadorPage() {
     }
   };
 
-  const cerrarSesion = async () => {
-    await supabase.auth.signOut();
-    setUser(null);
-  };
-
-  if (loading) return <div>Cargando...</div>;
-  if (!user)
-    return (
-      <div className="min-h-screen flex flex-col items-center justify-center">
-        <p className="text-gray-600">No hay sesión activa</p>
-      </div>
-    );
-
   return (
     <div className="min-h-screen bg-gray-50 p-8">
-      <div className="flex justify-between items-center mb-6">
-        <h1 className="text-2xl font-bold">Panel del Formador</h1>
-        <button
-          onClick={cerrarSesion}
-          className="bg-red-500 text-white px-4 py-2 rounded hover:bg-red-600"
-        >
-          Cerrar sesión
-        </button>
-      </div>
+      <h1 className="text-2xl font-bold mb-6">Panel del Formador</h1>
 
+      {/* Activar curso */}
       <div className="bg-white rounded-2xl shadow p-6 mb-6 space-y-4 max-w-xl">
         <h2 className="font-semibold text-lg">Activar Curso</h2>
 
-        {/* Campaña */}
+        {/* Selección de campaña */}
         <select
           className="w-full border rounded-lg p-2"
           value={seleccion.campana_id}
@@ -205,6 +161,7 @@ export default function FormadorPage() {
             const campana_id = e.target.value;
             setSeleccion({ ...seleccion, campana_id, grupo_id: "", curso_id: "" });
             await cargarGrupos(campana_id);
+            setCursos([]);
           }}
         >
           <option value="">Selecciona una campaña</option>
@@ -215,7 +172,7 @@ export default function FormadorPage() {
           ))}
         </select>
 
-        {/* Grupo */}
+        {/* Selección de grupo */}
         <select
           className="w-full border rounded-lg p-2"
           value={seleccion.grupo_id}
@@ -233,13 +190,27 @@ export default function FormadorPage() {
           ))}
         </select>
 
-        {/* Curso */}
+        {/* Previsualización de malla */}
+        {cursos.length > 0 && (
+          <div className="bg-gray-100 p-3 rounded-lg mt-2 max-h-48 overflow-y-auto">
+            <h3 className="font-semibold mb-2">Malla de cursos para este grupo:</h3>
+            <ul className="list-disc pl-5 text-gray-700">
+              {cursos.map((c, index) => (
+                <li key={c.id}>
+                  {index + 1}. {c.titulo} ({c.duracion_minutos} min)
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        {/* Selección de curso a activar */}
         <select
-          className="w-full border rounded-lg p-2"
+          className="w-full border rounded-lg p-2 mt-2"
           value={seleccion.curso_id}
           onChange={(e) => setSeleccion({ ...seleccion, curso_id: e.target.value })}
         >
-          <option value="">Selecciona un curso</option>
+          <option value="">Selecciona un curso a activar</option>
           {cursos.map((c) => (
             <option key={c.id} value={c.id}>
               {c.titulo} ({c.estado})
