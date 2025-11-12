@@ -3,13 +3,28 @@ import { supabase } from "../services/supabaseClient";
 
 export default function UsuarioPage({ user }) {
   const [cursos, setCursos] = useState([]);
-  const [mensaje, setMensaje] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [mensaje, setMensaje] = useState({ tipo: "", texto: "" });
+
+  const fechaHoy = new Date().toLocaleDateString('es-PE', {
+    weekday: 'long',
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric'
+  });
 
   useEffect(() => {
     cargarCursos();
   }, []);
 
+  // Mostrar mensajes con auto-dismiss
+  const mostrarMensaje = (tipo, texto) => {
+    setMensaje({ tipo, texto });
+    setTimeout(() => setMensaje({ tipo: "", texto: "" }), 4000);
+  };
+
   const cargarCursos = async () => {
+    setLoading(true);
     try {
       const { data, error } = await supabase
         .from("cursos_activados")
@@ -18,56 +33,167 @@ export default function UsuarioPage({ user }) {
           curso_id,
           fecha,
           grupo_id,
-          cursos(titulo, descripcion, url_iframe),
-          grupos(nombre)
+          campana_id,
+          cursos(titulo, descripcion, url_iframe, duracion_minutos),
+          grupos(nombre),
+          campañas(nombre)
         `)
         .eq("campana_id", user.campana_id)  // filtramos por campaña del asesor
         .eq("grupo_id", user.grupo_id)      // filtramos por grupo del asesor
-        .eq("activo", true);                // solo cursos activos
+        .eq("activo", true)                 // solo cursos activos
+        .order('fecha', { ascending: false });
 
       if (error) {
         console.error("Error cargando cursos:", error);
-        setMensaje("❌ Error al cargar cursos");
+        mostrarMensaje("error", "❌ Error al cargar cursos");
         setCursos([]);
       } else {
-        setCursos(data || []);
-        setMensaje((data || []).length === 0 ? "No tienes cursos activos por ahora." : "");
+        const cursosData = data || [];
+        setCursos(cursosData);
+        
+        if (cursosData.length === 0) {
+          mostrarMensaje("info", "📚 No tienes cursos activos por ahora");
+        }
       }
     } catch (err) {
       console.error("Excepción cargando cursos:", err);
-      setMensaje("❌ Error al cargar cursos");
+      mostrarMensaje("error", "❌ Error al cargar cursos");
+      setCursos([]);
+    } finally {
+      setLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 p-8">
-      <h1 className="text-3xl font-bold text-indigo-700 mb-6">
-        👋 Hola {user.nombre}
-      </h1>
-      <p className="text-gray-600 mb-6">
-        Rol: {user.rol} | Grupo: {user.grupo_id || "No asignado"}
-      </p>
-
-      <div className="bg-white rounded-2xl shadow p-6 max-w-xl space-y-4">
-        <h2 className="font-semibold text-lg mb-4">Cursos activos de tu grupo</h2>
-
-        {mensaje && <p className="text-gray-500">{mensaje}</p>}
-
-        {cursos.map((c) => (
-          <div key={c.id} className="flex justify-between items-center border-b py-2">
-            <div>
-              <span className="font-medium">{c.cursos?.titulo || "Curso"}</span>
-              <p className="text-sm text-gray-500">{c.cursos?.descripcion || ""}</p>
-              <p className="text-xs text-gray-400">Grupo: {c.grupos?.nombre || "No asignado"}</p>
-            </div>
-            <a
-              href={`/curso/${c.id}`}
-              className="bg-indigo-600 text-white px-3 py-1 rounded-lg hover:bg-indigo-700"
-            >
-              Ver
-            </a>
+    <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-white to-purple-50 p-4 md:p-8">
+      <div className="max-w-4xl mx-auto">
+        {/* Header */}
+        <div className="mb-8">
+          <h1 className="text-3xl font-bold text-gray-900 mb-2">
+            👋 Hola, {user.nombre}
+          </h1>
+          <div className="flex flex-wrap gap-3 text-sm text-gray-600">
+            <span className="bg-white px-3 py-1 rounded-full shadow-sm">
+              👤 {user.rol}
+            </span>
+            <span className="bg-white px-3 py-1 rounded-full shadow-sm">
+              👥 Grupo: {user.grupo_id || "No asignado"}
+            </span>
+            <span className="bg-white px-3 py-1 rounded-full shadow-sm">
+              📅 {fechaHoy}
+            </span>
           </div>
-        ))}
+        </div>
+
+        {/* Mensaje de feedback */}
+        {mensaje.texto && (
+          <div className={`mb-6 p-4 rounded-lg shadow-sm animate-in slide-in-from-top ${
+            mensaje.tipo === "success" ? "bg-green-50 border border-green-200 text-green-800" :
+            mensaje.tipo === "error" ? "bg-red-50 border border-red-200 text-red-800" :
+            "bg-blue-50 border border-blue-200 text-blue-800"
+          }`}>
+            {mensaje.texto}
+          </div>
+        )}
+
+        {/* Panel de cursos */}
+        <div className="bg-white rounded-2xl shadow-lg p-6">
+          <div className="flex items-center justify-between mb-6">
+            <h2 className="font-semibold text-xl text-gray-900">
+              🎓 Tus cursos activos
+            </h2>
+            {loading && (
+              <div className="w-5 h-5 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin"></div>
+            )}
+          </div>
+
+          {loading && cursos.length === 0 ? (
+            <div className="text-center py-12">
+              <div className="w-12 h-12 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+              <p className="text-gray-500">Cargando cursos...</p>
+            </div>
+          ) : cursos.length === 0 ? (
+            <div className="text-center py-12">
+              <div className="text-6xl mb-4">📚</div>
+              <p className="text-gray-500 text-lg mb-2">No hay cursos activos</p>
+              <p className="text-sm text-gray-400">
+                Tu formador activará cursos pronto. ¡Mantente atento!
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {cursos.map((c) => (
+                <div
+                  key={c.id}
+                  className="border border-gray-200 rounded-lg p-5 hover:shadow-md transition-all hover:border-indigo-200"
+                >
+                  <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-4">
+                    <div className="flex-1">
+                      <h3 className="font-semibold text-lg text-gray-900 mb-2">
+                        {c.cursos?.titulo || "Curso sin título"}
+                      </h3>
+                      
+                      {c.cursos?.descripcion && (
+                        <p className="text-gray-600 mb-3 text-sm">
+                          {c.cursos.descripcion}
+                        </p>
+                      )}
+                      
+                      <div className="flex flex-wrap gap-2 text-sm">
+                        <span className="bg-indigo-50 text-indigo-700 px-3 py-1 rounded-full">
+                          ⏱️ {c.cursos?.duracion_minutos || 0} minutos
+                        </span>
+                        <span className="bg-purple-50 text-purple-700 px-3 py-1 rounded-full">
+                          👥 {c.grupos?.nombre || "Sin grupo"}
+                        </span>
+                        {c.campañas?.nombre && (
+                          <span className="bg-pink-50 text-pink-700 px-3 py-1 rounded-full">
+                            📊 {c.campañas.nombre}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    <a
+                      href={`/curso/${c.id}`}
+                      className="bg-indigo-600 text-white px-6 py-3 rounded-lg hover:bg-indigo-700 transition-colors font-medium shadow-md hover:shadow-lg flex items-center justify-center gap-2 whitespace-nowrap"
+                    >
+                      <span>Ver curso</span>
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                      </svg>
+                    </a>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Estadísticas rápidas */}
+        {cursos.length > 0 && (
+          <div className="mt-6 bg-gradient-to-r from-indigo-50 to-purple-50 rounded-2xl p-6 border border-indigo-100">
+            <h3 className="font-semibold text-gray-900 mb-4">📊 Resumen</h3>
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+              <div className="bg-white rounded-lg p-4 shadow-sm">
+                <p className="text-sm text-gray-600 mb-1">Cursos activos</p>
+                <p className="text-2xl font-bold text-indigo-600">{cursos.length}</p>
+              </div>
+              <div className="bg-white rounded-lg p-4 shadow-sm">
+                <p className="text-sm text-gray-600 mb-1">Total minutos</p>
+                <p className="text-2xl font-bold text-purple-600">
+                  {cursos.reduce((acc, c) => acc + (c.cursos?.duracion_minutos || 0), 0)}
+                </p>
+              </div>
+              <div className="bg-white rounded-lg p-4 shadow-sm col-span-2 md:col-span-1">
+                <p className="text-sm text-gray-600 mb-1">Tu grupo</p>
+                <p className="text-lg font-bold text-pink-600 truncate">
+                  {cursos[0]?.grupos?.nombre || "No asignado"}
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
