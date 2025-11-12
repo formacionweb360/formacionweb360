@@ -37,13 +37,22 @@ export default function FormadorPage({ user }) {
 
 const cargarCursos = async (campana_id, grupo_id) => {
   try {
-    let query = supabase.from("cursos").select("*").eq("campana_id", campana_id).eq("estado", "Activo");
+    let query = supabase
+      .from("cursos")
+      .select("*")
+      .eq("campana_id", campana_id)
+      .eq("estado", "Activo");
+
+    // Si hay grupo seleccionado, traemos los cursos del grupo + los que no tienen grupo
     if (grupo_id) {
-      query = query.eq("grupo_id", grupo_id);
+      query = query.or(`grupo_id.is.null,grupo_id.eq.${grupo_id}`);
     }
+
     const { data, error } = await query;
+
     if (!error) setCursos(data || []);
     else setCursos([]);
+
     console.log("cargarCursos ->", data, error);
   } catch (err) {
     console.error("Error cargando cursos:", err);
