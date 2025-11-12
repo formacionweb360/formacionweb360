@@ -20,12 +20,14 @@ export default function FormadorPage({ user }) {
     cargarActivos();
   }, []);
 
+  // Cargar campañas
   const cargarCampañas = async () => {
     const { data, error } = await supabase.from("campañas").select("*");
     if (!error) setCampañas(data || []);
     else setCampañas([]);
   };
 
+  // Cargar grupos según campaña
   const cargarGrupos = async (campana_id) => {
     const { data, error } = await supabase
       .from("grupos")
@@ -35,44 +37,41 @@ export default function FormadorPage({ user }) {
     else setGrupos([]);
   };
 
-const cargarCursos = async (campana_id, grupo_id) => {
-  try {
-    let query = supabase
-      .from("cursos")
-      .select("*")
-      .eq("campana_id", campana_id)
-      .eq("estado", "Activo");
+  // Cargar cursos según campaña y grupo
+  const cargarCursos = async (campana_id, grupo_id) => {
+    try {
+      let query = supabase
+        .from("cursos")
+        .select("*")
+        .eq("campana_id", campana_id)
+        .eq("estado", "Activo");
 
-    // Si hay grupo seleccionado, traemos los cursos del grupo + los que no tienen grupo
-    if (grupo_id) {
-      query = query.or(`grupo_id.is.null,grupo_id.eq.${grupo_id}`);
+      // Trae cursos sin grupo o del grupo seleccionado
+      if (grupo_id) {
+        query = query.or(`grupo_id.is.null,grupo_id.eq.${grupo_id}`);
+      }
+
+      const { data, error } = await query;
+      if (!error) setCursos(data || []);
+      else setCursos([]);
+    } catch (err) {
+      console.error("Error cargando cursos:", err);
+      setCursos([]);
     }
+  };
 
-    const { data, error } = await query;
-
-    if (!error) setCursos(data || []);
-    else setCursos([]);
-
-    console.log("cargarCursos ->", data, error);
-  } catch (err) {
-    console.error("Error cargando cursos:", err);
-    setCursos([]);
-  }
-};
-
-
+  // Cargar cursos activos de hoy
   const cargarActivos = async () => {
     const { data, error } = await supabase
       .from("cursos_activados")
-      .select(
-        "id, curso_id, campana_id, grupo_id, fecha, activo, cursos(titulo), grupos(nombre)"
-      )
+      .select("id, curso_id, campana_id, grupo_id, fecha, activo, cursos(titulo), grupos(nombre)")
       .eq("fecha", fechaHoy)
       .eq("formador_id", user.id);
     if (!error) setActivos(data || []);
     else setActivos([]);
   };
 
+  // Activar curso
   const activarCurso = async () => {
     const { campana_id, grupo_id, curso_id } = seleccion;
     if (!campana_id || !grupo_id || !curso_id)
@@ -122,12 +121,7 @@ const cargarCursos = async (campana_id, grupo_id) => {
       .eq("grupo_id", grupo_id)
       .eq("estado", "Activo");
 
-    if (errAsesores) {
-      setMensaje("❌ Error obteniendo asesores");
-      return;
-    }
-
-    if (asesores.length > 0) {
+    if (!errAsesores && asesores.length > 0) {
       await supabase.from("cursos_asesores").insert(
         asesores.map((u) => ({
           curso_activado_id: activacion.id,
@@ -140,6 +134,7 @@ const cargarCursos = async (campana_id, grupo_id) => {
     cargarActivos();
   };
 
+  // Desactivar curso
   const desactivarCurso = async (id) => {
     const { error } = await supabase.from("cursos_activados").delete().eq("id", id);
     if (!error) {
