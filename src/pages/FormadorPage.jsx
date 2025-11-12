@@ -135,15 +135,42 @@ export default function FormadorPage({ user }) {
   };
 
   // Desactivar curso
-  const desactivarCurso = async (id) => {
-    const { error } = await supabase.from("cursos_activados").delete().eq("id", id);
-    if (!error) {
-      setMensaje("🗑 Curso desactivado");
-      cargarActivos();
-    } else {
-      setMensaje("❌ Error al desactivar");
+// Desactivar curso
+const desactivarCurso = async (id) => {
+  try {
+    // Paso 1: Eliminar las asignaciones de curso a asesores
+    const { error: errorAsesores } = await supabase
+      .from("cursos_asesores")
+      .delete()
+      .eq("curso_activado_id", id);
+
+    if (errorAsesores) {
+      console.error("Error eliminando asignaciones a asesores:", errorAsesores);
+      setMensaje("❌ Error al desactivar (eliminando asignaciones a asesores)");
+      return;
     }
-  };
+
+    // Paso 2: Eliminar el curso activado
+    const { error } = await supabase
+      .from("cursos_activados")
+      .delete()
+      .eq("id", id);
+
+    if (error) {
+      console.error("Error eliminando curso activado:", error);
+      setMensaje("❌ Error al desactivar (eliminando curso activado)");
+      return;
+    }
+
+    // Paso 3: Éxito
+    setMensaje("🗑 Curso desactivado");
+    cargarActivos(); // Recargar la lista de cursos activos
+
+  } catch (err) {
+    console.error("Error inesperado al desactivar curso:", err);
+    setMensaje("❌ Error inesperado al desactivar");
+  }
+};
 
   return (
     <div className="min-h-screen bg-gray-50 p-8">
