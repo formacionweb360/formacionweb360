@@ -5,6 +5,7 @@ export default function AsesorDashboard({ user, onLogout }) {
   const [cursos, setCursos] = useState([]);
   const [loading, setLoading] = useState(false);
   const [mensaje, setMensaje] = useState({ tipo: "", texto: "" });
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
 
   const fechaHoy = new Date().toLocaleDateString('es-PE', {
     weekday: 'long',
@@ -68,6 +69,10 @@ export default function AsesorDashboard({ user, onLogout }) {
     }
   };
 
+  const toggleMenu = () => {
+    setIsMenuOpen(!isMenuOpen);
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-white to-purple-50">
       {/* Menú fijo superior */}
@@ -84,7 +89,20 @@ export default function AsesorDashboard({ user, onLogout }) {
               </div>
             </div>
             
-            <div className="flex items-center space-x-3">
+            {/* Botón de menú para móviles */}
+            <div className="md:hidden">
+              <button
+                onClick={toggleMenu}
+                className="text-gray-700 hover:text-indigo-600 p-2 rounded-lg hover:bg-gray-50 transition-colors"
+              >
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+                </svg>
+              </button>
+            </div>
+
+            {/* Opciones de menú para desktop */}
+            <div className="hidden md:flex items-center space-x-3">
               <button 
                 onClick={() => window.location.href = '/dashboard'}
                 className="text-gray-700 hover:text-indigo-600 px-4 py-2 rounded-lg hover:bg-gray-50 transition-colors text-sm font-medium flex items-center gap-2"
@@ -108,6 +126,44 @@ export default function AsesorDashboard({ user, onLogout }) {
               </button>
             </div>
           </div>
+
+          {/* Menú desplegable para móviles */}
+          {isMenuOpen && (
+            <div className="md:hidden border-t border-gray-200 py-4">
+              <div className="flex flex-col space-y-2">
+                <button 
+                  onClick={() => {
+                    window.location.href = '/dashboard';
+                    setIsMenuOpen(false);
+                  }}
+                  className="text-gray-700 hover:text-indigo-600 px-4 py-3 rounded-lg hover:bg-gray-50 transition-colors text-sm font-medium flex items-center gap-2 text-left"
+                >
+                  🏠 Inicio
+                </button>
+                <button 
+                  onClick={() => {
+                    window.location.href = '/perfil';
+                    setIsMenuOpen(false);
+                  }}
+                  className="text-gray-700 hover:text-indigo-600 px-4 py-3 rounded-lg hover:bg-gray-50 transition-colors text-sm font-medium flex items-center gap-2 text-left"
+                >
+                  👤 Perfil
+                </button>
+                <button
+                  onClick={() => {
+                    onLogout();
+                    setIsMenuOpen(false);
+                  }}
+                  className="text-gray-700 hover:text-red-600 px-4 py-3 rounded-lg hover:bg-gray-50 transition-colors text-sm font-medium flex items-center gap-2 text-left"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                  </svg>
+                  Cerrar sesión
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       </nav>
 
