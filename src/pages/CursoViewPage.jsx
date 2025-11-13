@@ -199,8 +199,12 @@ export default function CursoViewPage({ user, onLogout }) {
     );
   }
 
-  // ✅ Detección de Canva u orígenes restringidos
-  const esCanva = curso.cursos.url_iframe?.includes("canva.com");
+  // ✅ Detección de tipos de iframe
+  const url = curso.cursos.url_iframe || "";
+  const esCanva = url.includes("canva.com");
+  const esGoogleSlides = url.includes("docs.google.com/presentation");
+  const esYouTube = url.includes("youtube.com") || url.includes("youtu.be");
+
   const estaCompletado = progreso?.estado === "Completado";
   const porcentajeProgreso = calcularPorcentaje();
 
@@ -237,13 +241,15 @@ export default function CursoViewPage({ user, onLogout }) {
       {/* Mensaje de feedback */}
       {mensaje.texto && (
         <div className="max-w-7xl mx-auto px-4 md:px-8 pt-4">
-          <div className={`p-4 rounded-lg shadow-sm ${
-            mensaje.tipo === "success"
-              ? "bg-green-50 border border-green-200 text-green-800"
-              : mensaje.tipo === "error"
-              ? "bg-red-50 border border-red-200 text-red-800"
-              : "bg-blue-50 border border-blue-200 text-blue-800"
-          }`}>
+          <div
+            className={`p-4 rounded-lg shadow-sm ${
+              mensaje.tipo === "success"
+                ? "bg-green-50 border border-green-200 text-green-800"
+                : mensaje.tipo === "error"
+                ? "bg-red-50 border border-red-200 text-red-800"
+                : "bg-blue-50 border border-blue-200 text-blue-800"
+            }`}
+          >
             {mensaje.texto}
           </div>
         </div>
@@ -268,14 +274,18 @@ export default function CursoViewPage({ user, onLogout }) {
             </div>
           )}
 
-          <div className="bg-white rounded-2xl shadow-lg overflow-hidden relative w-full" style={{ paddingTop: "56.25%" }}>
+          {/* 🔹 Render dinámico según tipo */}
+          <div
+            className="bg-white rounded-2xl shadow-lg overflow-hidden relative w-full"
+            style={{ paddingTop: "56.25%" }}
+          >
             {esCanva ? (
               <div className="absolute inset-0 flex flex-col items-center justify-center bg-gray-50 border border-gray-200">
                 <p className="text-gray-700 mb-4 text-center px-4">
-                  Canva no permite mostrar este contenido dentro del sitio.
+                  Canva no permite mostrar el contenido incrustado directamente.
                 </p>
                 <a
-                  href={curso.cursos.url_iframe}
+                  href={url}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="bg-indigo-600 text-white px-6 py-2 rounded-lg hover:bg-indigo-700 transition-colors"
@@ -283,9 +293,27 @@ export default function CursoViewPage({ user, onLogout }) {
                   Abrir curso en Canva ↗
                 </a>
               </div>
+            ) : esGoogleSlides ? (
+              <iframe
+                src={url}
+                className="absolute top-0 left-0 w-full h-full"
+                frameBorder="0"
+                allowFullScreen
+                allow="autoplay; fullscreen"
+                title={curso.cursos.titulo}
+              />
+            ) : esYouTube ? (
+              <iframe
+                src={url.replace("watch?v=", "embed/")}
+                className="absolute top-0 left-0 w-full h-full"
+                frameBorder="0"
+                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                allowFullScreen
+                title={curso.cursos.titulo}
+              />
             ) : (
               <iframe
-                src={curso.cursos.url_iframe}
+                src={url}
                 className="absolute top-0 left-0 w-full h-full"
                 frameBorder="0"
                 allowFullScreen
