@@ -69,9 +69,47 @@ export default function AsesorDashboard({ user, onLogout }) {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-white to-purple-50 p-4 md:p-8">
-      <div className="max-w-4xl mx-auto">
-        {/* Header con botón de logout */}
+    <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-white to-purple-50">
+      {/* Menú fijo superior */}
+      <nav className="bg-white shadow-md border-b border-gray-200 sticky top-0 z-50">
+        <div className="max-w-4xl mx-auto px-4 md:px-8">
+          <div className="flex items-center justify-between h-16">
+            <div className="flex items-center space-x-2">
+              <div className="w-8 h-8 bg-gradient-to-r from-indigo-600 to-purple-600 rounded-lg flex items-center justify-center">
+                <span className="text-white font-bold text-sm">A</span>
+              </div>
+              <span className="font-semibold text-gray-900">Asesor Panel</span>
+            </div>
+            
+            <div className="flex items-center space-x-4">
+              <button 
+                onClick={() => window.location.href = '/dashboard'}
+                className="text-gray-700 hover:text-indigo-600 px-3 py-2 rounded-lg hover:bg-gray-50 transition-colors text-sm font-medium"
+              >
+                🏠 Inicio
+              </button>
+              <button 
+                onClick={() => window.location.href = '/perfil'}
+                className="text-gray-700 hover:text-indigo-600 px-3 py-2 rounded-lg hover:bg-gray-50 transition-colors text-sm font-medium"
+              >
+                👤 Perfil
+              </button>
+              <button
+                onClick={onLogout}
+                className="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded-lg transition-colors flex items-center gap-2 text-sm font-medium"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                </svg>
+                Cerrar sesión
+              </button>
+            </div>
+          </div>
+        </div>
+      </nav>
+
+      <div className="max-w-4xl mx-auto p-4 md:p-8 pt-6">
+        {/* Header con botón de logout (opcional, puedes eliminarlo si solo quieres el menú superior) */}
         <div className="mb-8 flex items-center justify-between">
           <div>
             <h1 className="text-3xl font-bold text-gray-900 mb-2">
@@ -86,20 +124,11 @@ export default function AsesorDashboard({ user, onLogout }) {
               </span>
             </div>
           </div>
-          <button
-            onClick={onLogout}
-            className="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded-lg transition-colors flex items-center gap-2 shadow-md hover:shadow-lg"
-          >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
-            </svg>
-            Cerrar sesión
-          </button>
         </div>
 
         {/* Mensaje de feedback */}
         {mensaje.texto && (
-          <div className={`mb-6 p-4 rounded-lg shadow-sm animate-in slide-in-from-top ${
+          <div className={`mb-6 p-4 rounded-lg shadow-sm ${
             mensaje.tipo === "success" ? "bg-green-50 border border-green-200 text-green-800" :
             mensaje.tipo === "error" ? "bg-red-50 border border-red-200 text-red-800" :
             "bg-blue-50 border border-blue-200 text-blue-800"
