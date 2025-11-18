@@ -9,7 +9,7 @@ export default function FormadorPage({ user, onLogout }) {
     campana_id: "",
     grupo_id: "",
     curso_id: "",
-  });
+  }); 
   const [activos, setActivos] = useState([]);
   const [loading, setLoading] = useState(false);
   const [mensaje, setMensaje] = useState({ tipo: "", texto: "" });
