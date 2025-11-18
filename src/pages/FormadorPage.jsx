@@ -266,11 +266,17 @@ const cargarGrupos = async (campana_id) => {
       .eq("id", grupo_id)
       .single();
 
-    if (errGrupo || !grupo) {
-      console.error("Error al obtener el grupo:", errGrupo);
-      mostrarMensaje("error", "❌ Error al obtener el grupo");
-      return;
-    }
+if (errGrupo) {
+  console.error("Error al obtener el grupo:", errGrupo);
+  mostrarMensaje("error", `❌ Error al obtener el grupo: ${errGrupo.message}`);
+  return;
+}
+
+if (!grupo) {
+  console.error("No se encontró el grupo con id:", grupo_id);
+  mostrarMensaje("error", "❌ No se encontró el grupo seleccionado");
+  return;
+}
 
     // Obtener asesores del grupo por nombre
     const {  asesores, error: errAsesores } = await supabase
