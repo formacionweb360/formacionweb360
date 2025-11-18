@@ -63,7 +63,7 @@ export default function FormadorPage({ user, onLogout }) {
     }
   };
 
-  const cargarGrupos = async (campana_id) => {
+const cargarGrupos = async (campana_id) => {
   if (!campana_id) {
     console.log("No se proporcionó campana_id, omitiendo carga de grupos.");
     return;
@@ -91,7 +91,7 @@ export default function FormadorPage({ user, onLogout }) {
           .from("usuarios")
           .select("*", { count: "exact", head: true })
           .eq("grupo_nombre", g.nombre) // ← Usa el nombre del grupo
-          .eq("rol", "Usuario")
+          .eq("rol", "usuario")         // ← En minúscula
           .eq("estado", "Activo");
 
         return {
@@ -112,7 +112,7 @@ export default function FormadorPage({ user, onLogout }) {
     console.log("Finalizado estado de carga de grupos (loading = false).");
   }
 };
-
+  
   const cargarCursos = async (campana_id, grupo_id) => {
     if (!campana_id || !grupo_id) {
         console.log("Falta campana_id o grupo_id, omitiendo carga de cursos."); // Log 17
