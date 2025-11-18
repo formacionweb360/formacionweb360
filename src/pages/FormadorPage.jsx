@@ -52,28 +52,35 @@ export default function FormadorPage({ user, onLogout }) {
   const cargarGrupos = async (campana_id) => {
   if (!campana_id) return;
   setLoading(true);
+
   try {
     const { data, error } = await supabase
       .from("grupos")
       .select(`
         *,
-        usuarios(id, estado, rol)
+        usuarios:usuarios_grupo_id_fkey(
+          id,
+          estado,
+          rol
+        )
       `)
       .eq("campana_id", campana_id);
 
-    if (!error && data) {
-
-      const gruposConConteo = data.map(g => ({
-        ...g,
-        activos: g.usuarios?.filter(
-          u => u.estado === "Activo" && u.rol === "Usuario"
-        ).length || 0
-      }));
-
-      setGrupos(gruposConConteo);
-    } else {
+    if (error) {
+      console.error("Error:", error);
       setGrupos([]);
+      return;
     }
+
+    const gruposConConteo = data.map(g => ({
+      ...g,
+      activos: g.usuarios?.filter(
+        u => u.estado === "Activo" && u.rol === "Usuario"
+      ).length || 0
+    }));
+
+    setGrupos(gruposConConteo);
+
   } catch (err) {
     console.error("Error cargando grupos:", err);
     setGrupos([]);
@@ -81,6 +88,7 @@ export default function FormadorPage({ user, onLogout }) {
     setLoading(false);
   }
 };
+
 
 
   const cargarCursos = async (campana_id, grupo_id) => {
