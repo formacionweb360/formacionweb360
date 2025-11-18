@@ -40,7 +40,7 @@ export default function FormadorPage({ user, onLogout }) {
       mostrarMensaje("error", "Error al cargar datos iniciales.");
     } finally {
       setLoading(false);
-      console.log("Finalizado estado de carga general (loading = false)."); // Log 6
+      console.log("Finalizado estado de carga general (loading = false)."); // Log 67
     }
   };
 
