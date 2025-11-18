@@ -262,28 +262,22 @@ const cargarGrupos = async (campana_id) => {
     // Obtener el nombre del grupo para filtrar usuarios
     const {  grupo, error: errGrupo } = await supabase
       .from("grupos")
-      .select("nombre") // Asumiendo que el campo se llama 'nombre'
+      .select("nombre")
       .eq("id", grupo_id)
       .single();
 
-if (errGrupo) {
-  console.error("Error al obtener el grupo:", errGrupo);
-  mostrarMensaje("error", `❌ Error al obtener el grupo: ${errGrupo.message}`);
-  return;
-}
-
-if (!grupo) {
-  console.error("No se encontró el grupo con id:", grupo_id);
-  mostrarMensaje("error", "❌ No se encontró el grupo seleccionado");
-  return;
-}
+    if (errGrupo || !grupo) {
+      console.error("Error al obtener el grupo:", errGrupo);
+      mostrarMensaje("error", "❌ Error al obtener el grupo");
+      return;
+    }
 
     // Obtener asesores del grupo por nombre
     const {  asesores, error: errAsesores } = await supabase
       .from("usuarios")
       .select("id")
-      .eq("rol", "usuario")
-      .eq("grupo_nombre", grupo.nombre)  // ← Ahora sí coincide
+      .eq("rol", "usuario") // ← En minúscula
+      .eq("grupo_nombre", grupo.nombre)
       .eq("estado", "Activo");
 
     if (errAsesores) {
@@ -292,29 +286,29 @@ if (!grupo) {
       return;
     }
 
-if (asesores && asesores.length > 0) {
-  console.log("Asignando curso a", asesores.length, "asesores:", asesores);
-  const { error: errorInsert } = await supabase.from("cursos_asesores").insert(
-    asesores.map((u) => ({
-      curso_activado_id: activacion.id,
-      asesor_id: u.id,
-    }))
-  );
+    if (asesores && asesores.length > 0) {
+      console.log("Asignando curso a", asesores.length, "asesores:", asesores);
+      const { error: errorInsert } = await supabase.from("cursos_asesores").insert(
+        asesores.map((u) => ({
+          curso_activado_id: activacion.id,
+          asesor_id: u.id,
+        }))
+      );
 
-  if (errorInsert) {
-    console.error("Error al asignar asesores:", errorInsert);
-    mostrarMensaje("error", "⚠️ Curso activado pero error al asignar asesores");
-  } else {
-    mostrarMensaje("success", `✅ Curso activado y asignado a ${asesores.length} asesores`);
-  }
-} else {
-  console.log("No hay asesores activos en el grupo para asignar.");
-  mostrarMensaje("success", "✅ Curso activado (sin asesores en el grupo)");
-}
+      if (errorInsert) {
+        console.error("Error al asignar asesores:", errorInsert);
+        mostrarMensaje("error", "⚠️ Curso activado pero error al asignar asesores");
+      } else {
+        mostrarMensaje("success", `✅ Curso activado y asignado a ${asesores.length} asesores`);
+      }
+    } else {
+      console.log("No hay asesores activos en el grupo para asignar.");
+      mostrarMensaje("success", "✅ Curso activado (sin asesores en el grupo)");
+    }
 
-await cargarActivos(); // Refrescar lista
-await cargarGrupos(seleccion.campana_id); // Refrescar grupos
-setSeleccion({ ...seleccion, curso_id: "" });
+    await cargarActivos(); // Refrescar lista
+    await cargarGrupos(seleccion.campana_id); // Refrescar grupos
+    setSeleccion({ ...seleccion, curso_id: "" });
 
   } catch (err) {
     console.error("Error *interno* en activarCurso:", err);
