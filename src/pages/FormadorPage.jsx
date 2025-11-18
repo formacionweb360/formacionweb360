@@ -276,7 +276,7 @@ export default function FormadorPage({ user, onLogout }) {
     const {  asesores, error: errAsesores } = await supabase
       .from("usuarios")
       .select("id")
-      .eq("rol", "Usuario")
+      .eq("rol", "usuario")
       .eq("grupo_nombre", grupo.nombre)  // ← Ahora sí coincide
       .eq("estado", "Activo");
 
