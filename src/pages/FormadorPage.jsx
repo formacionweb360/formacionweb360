@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+asesores && asesores.lengthimport { useEffect, useState } from "react";
 import { supabase } from "../services/supabaseClient";
 
 export default function FormadorPage({ user, onLogout }) {
@@ -286,28 +286,29 @@ export default function FormadorPage({ user, onLogout }) {
       return;
     }
 
-    if (asesores && asesores.length > 0) {
-      console.log("Asignando curso a", asesores.length, "asesores:", asesores);
-      const { error: errorInsert } = await supabase.from("cursos_asesores").insert(
-        asesores.map((u) => ({
-          curso_activado_id: activacion.id,
-          asesor_id: u.id,
-        }))
-      );
+if (asesores && asesores.length > 0) {
+  console.log("Asignando curso a", asesores.length, "asesores:", asesores);
+  const { error: errorInsert } = await supabase.from("cursos_asesores").insert(
+    asesores.map((u) => ({
+      curso_activado_id: activacion.id,
+      asesor_id: u.id,
+    }))
+  );
 
-      if (errorInsert) {
-        console.error("Error al asignar asesores:", errorInsert);
-        mostrarMensaje("error", "⚠️ Curso activado pero error al asignar asesores");
-      } else {
-        mostrarMensaje("success", `✅ Curso activado y asignado a ${asesores.length} asesores`);
-      }
-    } else {
-      console.log("No hay asesores activos en el grupo para asignar.");
-      mostrarMensaje("success", "✅ Curso activado (sin asesores en el grupo)");
-    }
+  if (errorInsert) {
+    console.error("Error al asignar asesores:", errorInsert);
+    mostrarMensaje("error", "⚠️ Curso activado pero error al asignar asesores");
+  } else {
+    mostrarMensaje("success", `✅ Curso activado y asignado a ${asesores.length} asesores`);
+  }
+} else {
+  console.log("No hay asesores activos en el grupo para asignar.");
+  mostrarMensaje("success", "✅ Curso activado (sin asesores en el grupo)");
+}
 
-    await cargarActivos(); // Refrescar lista
-    setSeleccion({ ...seleccion, curso_id: "" });
+await cargarActivos(); // Refrescar lista
+await cargarGrupos(seleccion.campana_id); // Refrescar grupos
+setSeleccion({ ...seleccion, curso_id: "" });
 
   } catch (err) {
     console.error("Error *interno* en activarCurso:", err);
