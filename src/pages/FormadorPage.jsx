@@ -221,7 +221,7 @@ const cargarGrupos = async (campana_id) => {
 
   try {
     // Verificar si ya está activado
-    const {  existe } = await supabase
+    const { data: existe } = await supabase  // ✅ CORREGIDO
       .from("cursos_activados")
       .select("*")
       .eq("fecha", fechaHoy)
@@ -237,7 +237,7 @@ const cargarGrupos = async (campana_id) => {
     }
 
     // Activar el curso
-    const {  activacion, error } = await supabase
+    const { data: activacion, error } = await supabase  // ✅ CORREGIDO
       .from("cursos_activados")
       .insert([
         {
@@ -260,7 +260,7 @@ const cargarGrupos = async (campana_id) => {
     console.log("Curso activado en DB:", activacion);
 
     // Obtener el nombre del grupo para filtrar usuarios
-    const {  grupo, error: errGrupo } = await supabase
+    const { data: grupo, error: errGrupo } = await supabase  // ✅ CORREGIDO
       .from("grupos")
       .select("nombre")
       .eq("id", grupo_id)
@@ -273,10 +273,10 @@ const cargarGrupos = async (campana_id) => {
     }
 
     // Obtener asesores del grupo por nombre
-    const {  asesores, error: errAsesores } = await supabase
+    const { data: asesores, error: errAsesores } = await supabase  // ✅ CORREGIDO
       .from("usuarios")
       .select("id")
-      .eq("rol", "usuario") // ← En minúscula
+      .eq("rol", "usuario")
       .eq("grupo_nombre", grupo.nombre)
       .eq("estado", "Activo");
 
