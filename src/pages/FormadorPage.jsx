@@ -50,47 +50,44 @@ export default function FormadorPage({ user, onLogout }) {
   };
 
   const cargarGrupos = async (campana_id) => {
-  if (!campana_id) return;
-  setLoading(true);
+    if (!campana_id) return;
+    setLoading(true);
 
-  try {
-    const { data, error } = await supabase
-      .from("grupos")
-      .select(`
-        *,
-        usuarios (
-          id,
-          estado,
-          rol
-        )
-      `)
-      .eq("campana_id", campana_id);
+    try {
+      const { data, error } = await supabase
+        .from("grupos")
+        .select(`
+          *,
+          usuarios:usuarios_grupo_id_fkey(
+            id,
+            estado,
+            rol
+          )
+        `)
+        .eq("campana_id", campana_id);
 
-    if (error) {
-      console.error("Error:", error);
+      if (error) {
+        console.error("Error:", error);
+        setGrupos([]);
+        return;
+      }
+
+      const gruposConConteo = data.map(g => ({
+        ...g,
+        activos: g.usuarios?.filter(
+          u => u.estado === "Activo" && u.rol === "Usuario"
+        ).length || 0
+      }));
+
+      setGrupos(gruposConConteo);
+
+    } catch (err) {
+      console.error("Error cargando grupos:", err);
       setGrupos([]);
-      return;
+    } finally {
+      setLoading(false);
     }
-
-    const gruposConConteo = data.map(g => ({
-      ...g,
-      activos: g.usuarios?.filter(
-        u => u.estado === "Activo" && u.rol === "Usuario"
-      ).length || 0
-    }));
-
-    setGrupos(gruposConConteo);
-
-  } catch (err) {
-    console.error("Error cargando grupos:", err);
-    setGrupos([]);
-  } finally {
-    setLoading(false);
-  }
-};
-
-
-
+  };
 
   const cargarCursos = async (campana_id, grupo_id) => {
     if (!campana_id || !grupo_id) return;
@@ -136,7 +133,7 @@ export default function FormadorPage({ user, onLogout }) {
       `)
       .eq("fecha", fechaHoy)
       .eq("formador_id", user.id);
-    
+
     if (!error && data) {
       const activosConConteo = await Promise.all(
         data.map(async (activado) => {
@@ -144,7 +141,7 @@ export default function FormadorPage({ user, onLogout }) {
             .from("cursos_asesores")
             .select("*", { count: "exact", head: true })
             .eq("curso_activado_id", activado.id);
-          
+
           return { ...activado, asesores_count: count || 0 };
         })
       );
@@ -156,7 +153,7 @@ export default function FormadorPage({ user, onLogout }) {
 
   const activarCurso = async () => {
     const { campana_id, grupo_id, curso_id } = seleccion;
-    
+
     if (!campana_id || !grupo_id || !curso_id) {
       mostrarMensaje("error", "⚠️ Debes seleccionar campaña, grupo y curso");
       return;
@@ -225,7 +222,7 @@ export default function FormadorPage({ user, onLogout }) {
 
       await cargarActivos();
       setSeleccion({ ...seleccion, curso_id: "" });
-      
+
     } catch (err) {
       console.error("Error al activar curso:", err);
       mostrarMensaje("error", "❌ Error inesperado al activar");
@@ -292,6 +289,7 @@ export default function FormadorPage({ user, onLogout }) {
     }
   };
 
+  // --- CORRECCIÓN AQUÍ: Verificación de objetos antes de acceder a propiedades ---
   return (
     <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-white to-purple-50 p-4 md:p-8">
       <div className="max-w-5xl mx-auto">
@@ -433,7 +431,7 @@ export default function FormadorPage({ user, onLogout }) {
             <h2 className="font-semibold text-xl text-gray-900 mb-4">
               🎓 Cursos activos hoy
             </h2>
-            
+
             {activos.length === 0 ? (
               <div className="text-center py-12">
                 <div className="text-6xl mb-4">📭</div>
@@ -449,11 +447,14 @@ export default function FormadorPage({ user, onLogout }) {
                   >
                     <div className="flex justify-between items-start mb-2">
                       <div className="flex-1">
+                        {/* CORRECCIÓN: Verificación antes de acceder a propiedades anidadas */}
                         <h3 className="font-semibold text-gray-900 mb-1">
                           {a.cursos?.titulo || "Curso sin título"}
                         </h3>
                         <div className="flex flex-col gap-1 text-sm text-gray-600">
+                          {/* CORRECCIÓN: Verificación antes de acceder a propiedades anidadas */}
                           <span>👥 {a.grupos?.nombre || "Sin grupo"}</span>
+                          {/* CORRECCIÓN: Verificación antes de acceder a propiedades anidadas */}
                           <span>📊 {a.campañas?.nombre || "Sin campaña"}</span>
                           <span className="text-indigo-600 font-medium">
                             ✓ {a.asesores_count || 0} asesores asignados
