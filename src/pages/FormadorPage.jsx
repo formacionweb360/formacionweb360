@@ -22,35 +22,53 @@ export default function FormadorPage({ user, onLogout }) {
     day: 'numeric'
   });
 
+  console.log("Componente FormadorPage renderizado. User:", user); // Log 1
+
   useEffect(() => {
+    console.log("useEffect inicial ejecutado"); // Log 2
     cargarDatos();
-  }, []);
+  }, []); // Se ejecuta una vez al montar
 
   const cargarDatos = async () => {
+    console.log("Iniciando carga de datos general..."); // Log 3
     setLoading(true);
     try {
       await Promise.all([cargarCampañas(), cargarActivos()]);
+      console.log("Carga de datos general completada."); // Log 4
+    } catch (err) {
+      console.error("Error en la carga general de datos:", err); // Log 5
+      mostrarMensaje("error", "Error al cargar datos iniciales.");
     } finally {
       setLoading(false);
+      console.log("Finalizado estado de carga general (loading = false)."); // Log 6
     }
   };
 
   const mostrarMensaje = (tipo, texto) => {
+    console.log("Mostrando mensaje:", tipo, texto); // Log 7
     setMensaje({ tipo, texto });
     setTimeout(() => setMensaje({ tipo: "", texto: "" }), 4000);
   };
 
   const cargarCampañas = async () => {
+    console.log("Iniciando carga de campañas..."); // Log 8
     const { data, error } = await supabase.from("campañas").select("*");
-    if (!error) setCampañas(data || []);
-    else {
+    if (!error) {
+      setCampañas(data || []);
+      console.log("Campañas cargadas:", data); // Log 9
+    } else {
+      console.error("Error al cargar campañas:", error); // Log 10
       setCampañas([]);
       mostrarMensaje("error", "Error al cargar campañas");
     }
   };
 
   const cargarGrupos = async (campana_id) => {
-    if (!campana_id) return;
+    if (!campana_id) {
+        console.log("No se proporcionó campana_id, omitiendo carga de grupos."); // Log 11
+        return;
+    }
+    console.log("Iniciando carga de grupos para campana_id:", campana_id); // Log 12
     setLoading(true);
 
     try {
@@ -67,7 +85,7 @@ export default function FormadorPage({ user, onLogout }) {
         .eq("campana_id", campana_id);
 
       if (error) {
-        console.error("Error:", error);
+        console.error("Error cargando grupos:", error); // Log 13
         setGrupos([]);
         return;
       }
@@ -80,17 +98,23 @@ export default function FormadorPage({ user, onLogout }) {
       }));
 
       setGrupos(gruposConConteo);
+      console.log("Grupos cargados y procesados:", gruposConConteo); // Log 14
 
     } catch (err) {
-      console.error("Error cargando grupos:", err);
+      console.error("Error *interno* en cargarGrupos:", err); // Log 15
       setGrupos([]);
     } finally {
       setLoading(false);
+      console.log("Finalizado estado de carga de grupos (loading = false)."); // Log 16
     }
   };
 
   const cargarCursos = async (campana_id, grupo_id) => {
-    if (!campana_id || !grupo_id) return;
+    if (!campana_id || !grupo_id) {
+        console.log("Falta campana_id o grupo_id, omitiendo carga de cursos."); // Log 17
+        return;
+    }
+    console.log("Iniciando carga de cursos para campana_id:", campana_id, "grupo_id:", grupo_id); // Log 18
     setLoading(true);
     try {
       let query = supabase
@@ -104,20 +128,30 @@ export default function FormadorPage({ user, onLogout }) {
       }
 
       const { data, error } = await query;
-      if (!error) setCursos(data || []);
-      else {
+      if (!error) {
+        setCursos(data || []);
+        console.log("Cursos cargados:", data); // Log 19
+      } else {
+        console.error("Error al cargar cursos:", error); // Log 20
         setCursos([]);
         mostrarMensaje("error", "Error al cargar cursos");
       }
     } catch (err) {
-      console.error("Error cargando cursos:", err);
+      console.error("Error *interno* en cargarCursos:", err); // Log 21
       setCursos([]);
     } finally {
       setLoading(false);
+      console.log("Finalizado estado de carga de cursos (loading = false)."); // Log 22
     }
   };
 
   const cargarActivos = async () => {
+    console.log("Iniciando carga de cursos activos para user.id:", user?.id); // Log 23
+    if (!user?.id) {
+        console.error("User no está definido o no tiene ID. No se pueden cargar activos."); // Log 24
+        setActivos([]);
+        return;
+    }
     const { data, error } = await supabase
       .from("cursos_activados")
       .select(`
@@ -134,25 +168,44 @@ export default function FormadorPage({ user, onLogout }) {
       .eq("fecha", fechaHoy)
       .eq("formador_id", user.id);
 
-    if (!error && data) {
+    if (error) {
+        console.error("Error al cargar cursos activos:", error); // Log 25
+        setActivos([]);
+        return;
+    }
+
+    if (!data) {
+        console.warn("No se encontraron datos de cursos activos para hoy."); // Log 26
+        setActivos([]);
+        return;
+    }
+
+    console.log("Cursos activos raw:", data); // Log 27
+
+    try {
       const activosConConteo = await Promise.all(
         data.map(async (activado) => {
+          console.log("Contando asesores para curso_activado_id:", activado.id); // Log 28
           const { count } = await supabase
             .from("cursos_asesores")
             .select("*", { count: "exact", head: true })
             .eq("curso_activado_id", activado.id);
 
+          console.log("Conteo para id", activado.id, ":", count); // Log 29
           return { ...activado, asesores_count: count || 0 };
         })
       );
       setActivos(activosConConteo);
-    } else {
-      setActivos([]);
+      console.log("Cursos activos con conteo:", activosConConteo); // Log 30
+    } catch (err) {
+        console.error("Error contando asesores:", err); // Log 31
+        setActivos(data.map(a => ({...a, asesores_count: 0}))); // Fallback
     }
   };
 
   const activarCurso = async () => {
     const { campana_id, grupo_id, curso_id } = seleccion;
+    console.log("Intentando activar curso con selección:", seleccion); // Log 32
 
     if (!campana_id || !grupo_id || !curso_id) {
       mostrarMensaje("error", "⚠️ Debes seleccionar campaña, grupo y curso");
@@ -160,9 +213,10 @@ export default function FormadorPage({ user, onLogout }) {
     }
 
     setLoading(true);
+    console.log("Iniciando proceso de activación..."); // Log 33
 
     try {
-      const { data: existe } = await supabase
+      const {  existe } = await supabase
         .from("cursos_activados")
         .select("*")
         .eq("fecha", fechaHoy)
@@ -172,11 +226,12 @@ export default function FormadorPage({ user, onLogout }) {
         .maybeSingle();
 
       if (existe) {
+        console.log("Curso ya activado hoy para esta combinación."); // Log 34
         mostrarMensaje("error", "⚠️ Este curso ya está activado hoy para esa campaña y grupo");
         return;
       }
 
-      const { data: activacion, error } = await supabase
+      const {  activacion, error } = await supabase
         .from("cursos_activados")
         .insert([
           {
@@ -192,18 +247,27 @@ export default function FormadorPage({ user, onLogout }) {
         .single();
 
       if (error) {
+        console.error("Error al insertar curso activado:", error); // Log 35
         mostrarMensaje("error", "❌ Error al activar el curso");
         return;
       }
+      console.log("Curso activado en DB:", activacion); // Log 36
 
-      const { data: asesores, error: errAsesores } = await supabase
+      const {  asesores, error: errAsesores } = await supabase
         .from("usuarios")
         .select("id")
         .eq("rol", "Usuario")
         .eq("grupo_id", grupo_id)
         .eq("estado", "Activo");
 
-      if (!errAsesores && asesores.length > 0) {
+      if (errAsesores) {
+          console.error("Error al obtener asesores:", errAsesores); // Log 37
+          mostrarMensaje("error", "❌ Error al obtener asesores del grupo");
+          return;
+      }
+
+      if (asesores && asesores.length > 0) {
+        console.log("Asignando curso a", asesores.length, "asesores:", asesores); // Log 38
         const { error: errorInsert } = await supabase.from("cursos_asesores").insert(
           asesores.map((u) => ({
             curso_activado_id: activacion.id,
@@ -212,26 +276,30 @@ export default function FormadorPage({ user, onLogout }) {
         );
 
         if (errorInsert) {
+          console.error("Error al asignar asesores:", errorInsert); // Log 39
           mostrarMensaje("error", "⚠️ Curso activado pero error al asignar asesores");
         } else {
           mostrarMensaje("success", `✅ Curso activado y asignado a ${asesores.length} asesores`);
         }
       } else {
+        console.log("No hay asesores activos en el grupo para asignar."); // Log 40
         mostrarMensaje("success", "✅ Curso activado (sin asesores en el grupo)");
       }
 
-      await cargarActivos();
+      await cargarActivos(); // Refrescar lista
       setSeleccion({ ...seleccion, curso_id: "" });
 
     } catch (err) {
-      console.error("Error al activar curso:", err);
+      console.error("Error *interno* en activarCurso:", err); // Log 41
       mostrarMensaje("error", "❌ Error inesperado al activar");
     } finally {
       setLoading(false);
+      console.log("Finalizado proceso de activación (loading = false)."); // Log 42
     }
   };
 
   const desactivarCurso = async (id) => {
+    console.log("Intentando desactivar curso con id:", id); // Log 43
     if (!confirm("¿Seguro que deseas desactivar este curso? Se eliminarán todas las asignaciones a asesores.")) {
       return;
     }
@@ -245,7 +313,7 @@ export default function FormadorPage({ user, onLogout }) {
         .eq("curso_activado_id", id);
 
       if (errorAsesores) {
-        console.error("Error eliminando asignaciones a asesores:", errorAsesores);
+        console.error("Error eliminando asignaciones a asesores:", errorAsesores); // Log 44
         mostrarMensaje("error", "❌ Error al eliminar asignaciones");
         return;
       }
@@ -256,23 +324,25 @@ export default function FormadorPage({ user, onLogout }) {
         .eq("id", id);
 
       if (error) {
-        console.error("Error eliminando curso activado:", error);
+        console.error("Error eliminando curso activado:", error); // Log 45
         mostrarMensaje("error", "❌ Error al desactivar el curso");
         return;
       }
 
       mostrarMensaje("success", "🗑️ Curso desactivado correctamente");
-      await cargarActivos();
+      await cargarActivos(); // Refrescar lista
 
     } catch (err) {
-      console.error("Error inesperado al desactivar curso:", err);
+      console.error("Error *interno* en desactivarCurso:", err); // Log 46
       mostrarMensaje("error", "❌ Error inesperado al desactivar");
     } finally {
       setLoading(false);
+      console.log("Finalizado proceso de desactivación (loading = false)."); // Log 47
     }
   };
 
   const handleCampanaChange = async (campana_id) => {
+    console.log("Cambiando campaña a:", campana_id); // Log 48
     setSeleccion({ campana_id, grupo_id: "", curso_id: "" });
     setGrupos([]);
     setCursos([]);
@@ -282,6 +352,7 @@ export default function FormadorPage({ user, onLogout }) {
   };
 
   const handleGrupoChange = async (grupo_id) => {
+    console.log("Cambiando grupo a:", grupo_id); // Log 49
     setSeleccion({ ...seleccion, grupo_id, curso_id: "" });
     setCursos([]);
     if (grupo_id) {
@@ -289,7 +360,9 @@ export default function FormadorPage({ user, onLogout }) {
     }
   };
 
-  // --- CORRECCIÓN AQUÍ: Verificación de objetos antes de acceder a propiedades ---
+  // --- CORRECCIONES DE RENDERIZADO APLICADAS ---
+  console.log("Estado actual - Campañas:", campañas.length, "Grupos:", grupos.length, "Cursos:", cursos.length, "Activos:", activos.length); // Log Final UI
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-white to-purple-50 p-4 md:p-8">
       <div className="max-w-5xl mx-auto">
@@ -447,14 +520,12 @@ export default function FormadorPage({ user, onLogout }) {
                   >
                     <div className="flex justify-between items-start mb-2">
                       <div className="flex-1">
-                        {/* CORRECCIÓN: Verificación antes de acceder a propiedades anidadas */}
+                        {/* CORRECCIÓN: Uso de encadenamiento opcional y valores por defecto */}
                         <h3 className="font-semibold text-gray-900 mb-1">
                           {a.cursos?.titulo || "Curso sin título"}
                         </h3>
                         <div className="flex flex-col gap-1 text-sm text-gray-600">
-                          {/* CORRECCIÓN: Verificación antes de acceder a propiedades anidadas */}
                           <span>👥 {a.grupos?.nombre || "Sin grupo"}</span>
-                          {/* CORRECCIÓN: Verificación antes de acceder a propiedades anidadas */}
                           <span>📊 {a.campañas?.nombre || "Sin campaña"}</span>
                           <span className="text-indigo-600 font-medium">
                             ✓ {a.asesores_count || 0} asesores asignados
