@@ -50,38 +50,38 @@ export default function FormadorPage({ user, onLogout }) {
   };
 
   const cargarGrupos = async (campana_id) => {
-    if (!campana_id) return;
-    setLoading(true);
-    try {
-      const { data, error } = await supabase
-        .from("grupos")
-        .select("*, usuarios!inner(id)")
-        .eq("campana_id", campana_id)
-        .eq("usuarios.estado", "Activo")
-        .eq("usuarios.rol", "Usuario");
-      
-      if (!error && data) {
-        const gruposConConteo = data.reduce((acc, curr) => {
-          const existe = acc.find(g => g.id === curr.id);
-          if (existe) {
-            existe.activos++;
-          } else {
-            acc.push({ ...curr, activos: 1 });
-          }
-          return acc;
-        }, []);
-        
-        setGrupos(gruposConConteo);
-      } else {
-        setGrupos([]);
-      }
-    } catch (err) {
-      console.error("Error cargando grupos:", err);
+  if (!campana_id) return;
+  setLoading(true);
+  try {
+    const { data, error } = await supabase
+      .from("grupos")
+      .select(`
+        *,
+        usuarios(id, estado, rol)
+      `)
+      .eq("campana_id", campana_id);
+
+    if (!error && data) {
+
+      const gruposConConteo = data.map(g => ({
+        ...g,
+        activos: g.usuarios?.filter(
+          u => u.estado === "Activo" && u.rol === "Usuario"
+        ).length || 0
+      }));
+
+      setGrupos(gruposConConteo);
+    } else {
       setGrupos([]);
-    } finally {
-      setLoading(false);
     }
-  };
+  } catch (err) {
+    console.error("Error cargando grupos:", err);
+    setGrupos([]);
+  } finally {
+    setLoading(false);
+  }
+};
+
 
   const cargarCursos = async (campana_id, grupo_id) => {
     if (!campana_id || !grupo_id) return;
