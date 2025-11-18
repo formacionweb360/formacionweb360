@@ -58,7 +58,7 @@ export default function FormadorPage({ user, onLogout }) {
       .from("grupos")
       .select(`
         *,
-        usuarios:usuarios_grupo_id_fkey(
+        usuarios (
           id,
           estado,
           rol
@@ -88,6 +88,7 @@ export default function FormadorPage({ user, onLogout }) {
     setLoading(false);
   }
 };
+
 
 
 
