@@ -64,50 +64,54 @@ export default function FormadorPage({ user, onLogout }) {
   };
 
   const cargarGrupos = async (campana_id) => {
-    if (!campana_id) {
-        console.log("No se proporcionó campana_id, omitiendo carga de grupos."); // Log 11
-        return;
-    }
-    console.log("Iniciando carga de grupos para campana_id:", campana_id); // Log 12
-    setLoading(true);
+  if (!campana_id) {
+    console.log("No se proporcionó campana_id, omitiendo carga de grupos.");
+    return;
+  }
+  console.log("Iniciando carga de grupos para campana_id:", campana_id);
+  setLoading(true);
 
-    try {
-      const { data, error } = await supabase
-        .from("grupos")
-        .select(`
-          *,
-          usuarios:usuarios_grupo_id_fkey(
-            id,
-            estado,
-            rol
-          )
-        `)
-        .eq("campana_id", campana_id);
+  try {
+    // Cargar grupos sin relación
+    const { data: gruposData, error: gruposError } = await supabase
+      .from("grupos")
+      .select("*")
+      .eq("campana_id", campana_id);
 
-      if (error) {
-        console.error("Error cargando grupos:", error); // Log 13
-        setGrupos([]);
-        return;
-      }
-
-      const gruposConConteo = data.map(g => ({
-        ...g,
-        activos: g.usuarios?.filter(
-          u => u.estado === "Activo" && u.rol === "Usuario"
-        ).length || 0
-      }));
-
-      setGrupos(gruposConConteo);
-      console.log("Grupos cargados y procesados:", gruposConConteo); // Log 14
-
-    } catch (err) {
-      console.error("Error *interno* en cargarGrupos:", err); // Log 15
+    if (gruposError) {
+      console.error("Error cargando grupos:", gruposError);
       setGrupos([]);
-    } finally {
-      setLoading(false);
-      console.log("Finalizado estado de carga de grupos (loading = false)."); // Log 16
+      return;
     }
-  };
+
+    // Para cada grupo, contar usuarios por grupo_nombre
+    const gruposConConteo = await Promise.all(
+      gruposData.map(async (g) => {
+        const { count } = await supabase
+          .from("usuarios")
+          .select("*", { count: "exact", head: true })
+          .eq("grupo_nombre", g.nombre) // ← Usa el nombre del grupo
+          .eq("rol", "Usuario")
+          .eq("estado", "Activo");
+
+        return {
+          ...g,
+          activos: count || 0
+        };
+      })
+    );
+
+    setGrupos(gruposConConteo);
+    console.log("Grupos cargados y procesados:", gruposConConteo);
+
+  } catch (err) {
+    console.error("Error *interno* en cargarGrupos:", err);
+    setGrupos([]);
+  } finally {
+    setLoading(false);
+    console.log("Finalizado estado de carga de grupos (loading = false).");
+  }
+};
 
   const cargarCursos = async (campana_id, grupo_id) => {
     if (!campana_id || !grupo_id) {
