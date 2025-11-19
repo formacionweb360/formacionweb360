@@ -70,14 +70,16 @@ export default function AsesorDashboard({ user, onLogout }) {
               return { ...c, completado: false };
             }
 
+            // ✅ Cambiamos .single() por .maybeSingle()
             const {  progresoData, error: errorProgreso } = await supabase
               .from("progreso_usuarios")
               .select("estado")
               .eq("usuario", user.usuario)
-              .eq("curso_id", cursoIdNum) // ✅ Ahora como número
-              .single();
+              .eq("curso_id", cursoIdNum)
+              .maybeSingle(); // 👈 CORREGIDO
 
             if (errorProgreso) {
+              // Este error no es crítico si es porque no hay registros
               console.error("❌ Error al cargar progreso:", errorProgreso);
             }
 
