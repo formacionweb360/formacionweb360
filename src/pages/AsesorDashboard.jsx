@@ -61,7 +61,7 @@ export default function AsesorDashboard({ user, onLogout }) {
             const {  progresoData, error: errorProgreso } = await supabase
               .from("progreso_usuarios")
               .select("estado")
-              .eq("usuario", user.usuario) // Asumiendo que user.usuario es el nombre de usuario
+              .eq("usuario", user.usuario)
               .eq("curso_id", c.cursos_activados.curso_id)
               .single();
 
@@ -297,9 +297,16 @@ export default function AsesorDashboard({ user, onLogout }) {
                     <div className="p-4">
                       <div className="flex items-start justify-between">
                         <div className="flex-1 min-w-0">
-                          <h3 className="font-semibold text-sm text-white mb-1 truncate">
-                            {curso.cursos?.titulo || "Curso sin título"}
-                          </h3>
+                          <div className="flex items-center gap-2 mb-1">
+                            <h3 className="font-semibold text-sm text-white truncate">
+                              {curso.cursos?.titulo || "Curso sin título"}
+                            </h3>
+                            {c.completado && (
+                              <span className="bg-green-500/20 text-green-300 text-xs font-medium px-2 py-0.5 rounded-full border border-green-500/30">
+                                ✅ Completado
+                              </span>
+                            )}
+                          </div>
                           <p className="text-xs text-gray-400 mb-2">
                             Activado el {fechaCurso}
                           </p>
@@ -321,15 +328,9 @@ export default function AsesorDashboard({ user, onLogout }) {
                           </div>
                         </div>
                         <div className="flex items-center justify-center w-8 h-8 bg-gradient-to-r from-purple-500 to-pink-500 text-white rounded-full ml-3 shrink-0 group">
-                          {c.completado ? (
-                            <svg className="w-4 h-4 text-white" fill="currentColor" viewBox="0 0 20 20">
-                              <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                            </svg>
-                          ) : (
-                            <svg className="w-4 h-4 group-hover:scale-110 transition-transform duration-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                            </svg>
-                          )}
+                          <svg className="w-4 h-4 group-hover:scale-110 transition-transform duration-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                          </svg>
                         </div>
                       </div>
                     </div>
