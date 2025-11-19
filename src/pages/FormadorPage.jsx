@@ -365,6 +365,9 @@ export default function FormadorPage({ user, onLogout }) {
     setExpandedGroups(newExpanded);
   };
 
+  // Determinar si el botón de activar debe estar habilitado
+  const isActivarEnabled = !!seleccion.campana_id && !!seleccion.grupo_id && !!seleccion.curso_id;
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-white to-purple-50 p-3 md:p-4">
       {/* Contenedor principal */}
@@ -505,12 +508,29 @@ export default function FormadorPage({ user, onLogout }) {
               </select>
             </div>
 
+            {/* Botón Activar - CORREGIDO Y ESTILIZADO */}
             <button
               onClick={activarCurso}
-              disabled={!seleccion.curso_id || loading}
-              className="w-full bg-indigo-600 text-white py-1.5 px-3 rounded-md hover:bg-indigo-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors font-medium shadow-sm hover:shadow-md text-xs"
+              disabled={!isActivarEnabled || loading}
+              className={`w-full py-1.5 px-3 rounded-md font-medium shadow-sm transition-colors text-xs flex items-center justify-center gap-1.5 ${
+                !isActivarEnabled || loading
+                  ? 'bg-gray-200 text-gray-500 cursor-not-allowed'
+                  : 'bg-indigo-600 text-white hover:bg-indigo-700'
+              }`}
             >
-              {loading ? "Activando..." : "✨ Activar"}
+              {loading ? (
+                <>
+                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                  Activando...
+                </>
+              ) : (
+                <>
+                  <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                  </svg>
+                  Activar
+                </>
+              )}
             </button>
           </div>
 
