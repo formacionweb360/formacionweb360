@@ -97,7 +97,7 @@ export default function App() {
         <Route
           path="/dashboard"
           element={
-            user.rol === "Usuario" ? (
+            user.rol === "usuario" ? (
               <AsesorDashboard user={user} onLogout={handleLogout} />
             ) : (
               <Navigate to="/" replace />
