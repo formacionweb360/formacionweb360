@@ -31,7 +31,6 @@ export default function FormadorPage({ user, onLogout }) {
     try {
       await Promise.all([cargarCampañas(), cargarActivos()]);
     } catch (err) {
-      console.error("Error en la carga general de datos:", err);
       mostrarMensaje("error", "Error al cargar datos iniciales.");
     } finally {
       setLoading(false);
@@ -48,7 +47,6 @@ export default function FormadorPage({ user, onLogout }) {
     if (!error) {
       setCampañas(data || []);
     } else {
-      console.error("Error al cargar campañas:", error);
       setCampañas([]);
       mostrarMensaje("error", "Error al cargar campañas");
     }
@@ -57,6 +55,7 @@ export default function FormadorPage({ user, onLogout }) {
   const cargarGrupos = async (campana_id) => {
     if (!campana_id) return;
     setLoading(true);
+
     try {
       const { data: gruposData, error: gruposError } = await supabase
         .from("grupos")
@@ -64,7 +63,6 @@ export default function FormadorPage({ user, onLogout }) {
         .eq("campana_id", campana_id);
 
       if (gruposError) {
-        console.error("Error cargando grupos:", gruposError);
         setGrupos([]);
         return;
       }
@@ -77,23 +75,19 @@ export default function FormadorPage({ user, onLogout }) {
             .eq("grupo_nombre", g.nombre)
             .eq("rol", "usuario")
             .eq("estado", "Activo");
-
-          return {
-            ...g,
-            activos: count || 0
-          };
+          return { ...g, activos: count || 0 };
         })
       );
 
       setGrupos(gruposConConteo);
-    } catch (err) {
-      console.error("Error *interno* en cargarGrupos:", err);
+
+    } catch {
       setGrupos([]);
     } finally {
       setLoading(false);
     }
   };
-  
+
   const cargarCursos = async (campana_id, grupo_id) => {
     if (!campana_id || !grupo_id) return;
     setLoading(true);
@@ -104,20 +98,15 @@ export default function FormadorPage({ user, onLogout }) {
         .eq("campana_id", campana_id)
         .eq("estado", "Activo");
 
-      if (grupo_id) {
-        query = query.or(`grupo_id.is.null,grupo_id.eq.${grupo_id}`);
-      }
+      if (grupo_id) query = query.or(`grupo_id.is.null,grupo_id.eq.${grupo_id}`);
 
       const { data, error } = await query;
-      if (!error) {
-        setCursos(data || []);
-      } else {
-        console.error("Error al cargar cursos:", error);
+      if (!error) setCursos(data || []);
+      else {
         setCursos([]);
         mostrarMensaje("error", "Error al cargar cursos");
       }
-    } catch (err) {
-      console.error("Error *interno* en cargarCursos:", err);
+    } catch {
       setCursos([]);
     } finally {
       setLoading(false);
@@ -126,9 +115,8 @@ export default function FormadorPage({ user, onLogout }) {
 
   const cargarActivos = async () => {
     if (!user?.id) {
-        console.error("User no está definido o no tiene ID. No se pueden cargar activos.");
-        setActivos([]);
-        return;
+      setActivos([]);
+      return;
     }
     const { data, error } = await supabase
       .from("cursos_activados")
@@ -146,15 +134,9 @@ export default function FormadorPage({ user, onLogout }) {
       .eq("fecha", fechaHoy)
       .eq("formador_id", user.id);
 
-    if (error) {
-        console.error("Error al cargar cursos activos:", error);
-        setActivos([]);
-        return;
-    }
-
-    if (!data) {
-        setActivos([]);
-        return;
+    if (error || !data) {
+      setActivos([]);
+      return;
     }
 
     try {
@@ -164,147 +146,92 @@ export default function FormadorPage({ user, onLogout }) {
             .from("cursos_asesores")
             .select("*", { count: "exact", head: true })
             .eq("curso_activado_id", activado.id);
-
           return { ...activado, asesores_count: count || 0 };
         })
       );
       setActivos(activosConConteo);
-    } catch (err) {
-        console.error("Error contando asesores:", err);
-        setActivos(data.map(a => ({...a, asesores_count: 0})));
+    } catch {
+      setActivos(data.map(a => ({...a, asesores_count: 0})));
     }
   };
 
- const activarCurso = async () => {
-  const { campana_id, grupo_id, curso_id } = seleccion;
-  if (!campana_id || !grupo_id || !curso_id) {
-    mostrarMensaje("error", "⚠️ Debes seleccionar campaña, grupo y curso");
-    return;
-  }
-
-  setLoading(true);
-  try {
-    const { data: existe } = await supabase
-      .from("cursos_activados")
-      .select("*")
-      .eq("fecha", fechaHoy)
-      .eq("campana_id", campana_id)
-      .eq("grupo_id", grupo_id)
-      .eq("curso_id", curso_id)
-      .maybeSingle();
-
-    if (existe) {
-      mostrarMensaje("error", "⚠️ Este curso ya está activado hoy para esa campaña y grupo");
+  const activarCurso = async () => {
+    const { campana_id, grupo_id, curso_id } = seleccion;
+    if (!campana_id || !grupo_id || !curso_id) {
+      mostrarMensaje("error", "⚠️ Debes seleccionar campaña, grupo y curso");
       return;
     }
-
-    const { data: activacion, error } = await supabase
-      .from("cursos_activados")
-      .insert([
-        {
-          campana_id,
-          grupo_id,
-          curso_id,
-          fecha: fechaHoy,
-          activo: true,
-          formador_id: user.id,
-        },
-      ])
-      .select()
-      .single();
-
-    if (error) {
-      console.error("Error al insertar curso activado:", error);
-      mostrarMensaje("error", "❌ Error al activar el curso");
-      return;
-    }
-
-    const { data: grupo, error: errGrupo } = await supabase
-      .from("grupos")
-      .select("nombre")
-      .eq("id", grupo_id)
-      .single();
-
-    if (errGrupo || !grupo) {
-      console.error("Error al obtener el grupo:", errGrupo);
-      mostrarMensaje("error", "❌ Error al obtener el grupo");
-      return;
-    }
-
-    const { data: asesores, error: errAsesores } = await supabase
-      .from("usuarios")
-      .select("id")
-      .eq("rol", "usuario")
-      .eq("grupo_nombre", grupo.nombre)
-      .eq("estado", "Activo");
-
-    if (errAsesores) {
-      console.error("Error al obtener asesores:", errAsesores);
-      mostrarMensaje("error", "❌ Error al obtener asesores del grupo");
-      return;
-    }
-
-    if (asesores && asesores.length > 0) {
-      const { error: errorInsert } = await supabase.from("cursos_asesores").insert(
-        asesores.map((u) => ({
-          curso_activado_id: activacion.id,
-          asesor_id: u.id,
-        }))
-      );
-
-      if (errorInsert) {
-        mostrarMensaje("error", "⚠️ Curso activado pero error al asignar asesores");
-      } else {
-        mostrarMensaje("success", `✅ Curso activado y asignado a ${asesores.length} asesores`);
-      }
-    } else {
-      mostrarMensaje("success", "✅ Curso activado (sin asesores en el grupo)");
-    }
-
-    await cargarActivos();
-    await cargarGrupos(seleccion.campana_id);
-    setSeleccion({ ...seleccion, curso_id: "" });
-
-  } catch (err) {
-    console.error("Error *interno* en activarCurso:", err);
-    mostrarMensaje("error", "❌ Error inesperado al activar");
-  } finally {
-    setLoading(false);
-  }
-};
-
-  const desactivarCurso = async (id) => {
-    if (!confirm("¿Seguro que deseas desactivar este curso? Se eliminarán todas las asignaciones a asesores.")) {
-      return;
-    }
-
     setLoading(true);
 
     try {
-      const { error: errorAsesores } = await supabase
-        .from("cursos_asesores")
-        .delete()
-        .eq("curso_activado_id", id);
+      const { data: existe } = await supabase
+        .from("cursos_activados")
+        .select("*")
+        .eq("fecha", fechaHoy)
+        .eq("campana_id", campana_id)
+        .eq("grupo_id", grupo_id)
+        .eq("curso_id", curso_id)
+        .maybeSingle();
 
-      if (errorAsesores) {
-        mostrarMensaje("error", "❌ Error al eliminar asignaciones");
+      if (existe) {
+        mostrarMensaje("error", "⚠️ Este curso ya está activado hoy");
         return;
       }
 
-      const { error } = await supabase
+      const { data: activacion, error } = await supabase
         .from("cursos_activados")
-        .delete()
-        .eq("id", id);
+        .insert([{ campana_id, grupo_id, curso_id, fecha: fechaHoy, activo: true, formador_id: user.id }])
+        .select()
+        .single();
 
       if (error) {
-        mostrarMensaje("error", "❌ Error al desactivar el curso");
+        mostrarMensaje("error", "❌ Error al activar el curso");
         return;
       }
 
+      const { data: grupo } = await supabase
+        .from("grupos")
+        .select("nombre")
+        .eq("id", grupo_id)
+        .single();
+
+      const { data: asesores } = await supabase
+        .from("usuarios")
+        .select("id")
+        .eq("rol", "usuario")
+        .eq("grupo_nombre", grupo.nombre)
+        .eq("estado", "Activo");
+
+      if (asesores && asesores.length > 0) {
+        await supabase.from("cursos_asesores").insert(
+          asesores.map((u) => ({ curso_activado_id: activacion.id, asesor_id: u.id }))
+        );
+        mostrarMensaje("success", `✅ Curso activado y asignado a ${asesores.length} asesores`);
+      } else {
+        mostrarMensaje("success", "✅ Curso activado (sin asesores en el grupo)");
+      }
+
+      await cargarActivos();
+      await cargarGrupos(seleccion.campana_id);
+      setSeleccion({ ...seleccion, curso_id: "" });
+
+    } catch {
+      mostrarMensaje("error", "❌ Error inesperado al activar");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const desactivarCurso = async (id) => {
+    if (!confirm("¿Seguro que deseas desactivar este curso?")) return;
+    setLoading(true);
+
+    try {
+      await supabase.from("cursos_asesores").delete().eq("curso_activado_id", id);
+      await supabase.from("cursos_activados").delete().eq("id", id);
       mostrarMensaje("success", "🗑️ Curso desactivado correctamente");
       await cargarActivos();
-
-    } catch (err) {
+    } catch {
       mostrarMensaje("error", "❌ Error inesperado al desactivar");
     } finally {
       setLoading(false);
@@ -315,43 +242,35 @@ export default function FormadorPage({ user, onLogout }) {
     setSeleccion({ campana_id, grupo_id: "", curso_id: "" });
     setGrupos([]);
     setCursos([]);
-    if (campana_id) {
-      await cargarGrupos(campana_id);
-    }
+    if (campana_id) await cargarGrupos(campana_id);
   };
 
   const handleGrupoChange = async (grupo_id) => {
     setSeleccion({ ...seleccion, grupo_id, curso_id: "" });
     setCursos([]);
-    if (grupo_id) {
-      await cargarCursos(seleccion.campana_id, grupo_id);
-    }
+    if (grupo_id) await cargarCursos(seleccion.campana_id, grupo_id);
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-white to-purple-50 p-4 md:p-6">
+    <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-white to-purple-50 p-4 md:p-8">
       <div className="max-w-6xl mx-auto">
         {/* Header */}
-        <div className="mb-6 flex items-center justify-between">
+        <div className="mb-8 flex items-center justify-between">
           <div>
-            <h1 className="text-2xl md:text-3xl font-bold text-gray-900 mb-1">Panel del Formador</h1>
-            <p className="text-gray-600 text-sm md:text-base">📅 {fechaHoyFormateada}</p>
+            <h1 className="text-3xl font-bold text-gray-900 mb-2">Panel del Formador</h1>
+            <p className="text-gray-600">📅 {fechaHoyFormateada}</p>
           </div>
           <button
             onClick={onLogout}
-            className="bg-red-500 hover:bg-red-600 text-white px-3 py-1.5 md:px-4 md:py-2 rounded-lg transition-colors flex items-center gap-1.5 md:gap-2 text-sm md:text-base shadow-md hover:shadow-lg"
+            className="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded-lg flex items-center gap-2 shadow-md"
           >
-            <svg className="w-4 h-4 md:w-5 md:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
-            </svg>
-            <span className="hidden sm:inline">Cerrar sesión</span>
-            <span className="sm:hidden">Salir</span>
+            Cerrar sesión
           </button>
         </div>
 
-        {/* Mensaje de feedback */}
+        {/* Mensaje */}
         {mensaje.texto && (
-          <div className={`mb-4 p-3 rounded-lg shadow-sm ${
+          <div className={`mb-6 p-4 rounded-lg shadow-sm ${
             mensaje.tipo === "success" ? "bg-green-50 border border-green-200 text-green-800" :
             mensaje.tipo === "error" ? "bg-red-50 border border-red-200 text-red-800" :
             "bg-blue-50 border border-blue-200 text-blue-800"
@@ -360,188 +279,110 @@ export default function FormadorPage({ user, onLogout }) {
           </div>
         )}
 
-        <div className="grid md:grid-cols-2 gap-4 md:gap-6">
-          {/* Panel de activación */}
-          <div className="bg-white rounded-xl shadow-md p-4 md:p-6 space-y-3 md:space-y-4">
-            <div className="flex items-center justify-between mb-3">
-              <h2 className="font-semibold text-lg md:text-xl text-gray-900 flex items-center gap-2">
-                <span className="bg-indigo-100 text-indigo-700 p-1.5 rounded-lg">
-                  <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
-                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clipRule="evenodd" />
-                  </svg>
-                </span>
-                Activar Curso
-              </h2>
-              {loading && (
-                <div className="w-5 h-5 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin"></div>
-              )}
+        <div className="grid md:grid-cols-2 gap-6">
+          {/* Activación */}
+          <div className="bg-white rounded-2xl shadow-lg p-6 space-y-4">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="font-semibold text-xl text-gray-900">🎯 Activar Curso</h2>
+              {loading && <div className="w-5 h-5 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin"></div>}
             </div>
 
-            {/* Selección de campaña */}
+            {/* Selección campaña */}
             <div>
-              <label className="block text-xs md:text-sm font-medium text-gray-700 mb-1">
-                Campaña
-              </label>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Campaña</label>
               <select
-                className="w-full border border-gray-300 rounded-lg p-2.5 md:p-3 focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition text-sm"
+                className="w-full border border-gray-300 rounded-lg p-3 focus:ring-2 focus:ring-indigo-500 transition"
                 value={seleccion.campana_id}
                 onChange={(e) => handleCampanaChange(e.target.value)}
                 disabled={loading}
               >
                 <option value="">Selecciona una campaña</option>
-                {campañas.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.nombre}
-                  </option>
-                ))}
+                {campañas.map(c => <option key={c.id} value={c.id}>{c.nombre}</option>)}
               </select>
             </div>
 
-            {/* Selección de grupo */}
+            {/* Selección grupo */}
             <div>
-              <label className="block text-xs md:text-sm font-medium text-gray-700 mb-1">
-                Grupo
-              </label>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Grupo</label>
               <select
-                className="w-full border border-gray-300 rounded-lg p-2.5 md:p-3 focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition text-sm disabled:bg-gray-100"
+                className="w-full border border-gray-300 rounded-lg p-3 focus:ring-2 focus:ring-indigo-500 transition disabled:bg-gray-100"
                 value={seleccion.grupo_id}
                 onChange={(e) => handleGrupoChange(e.target.value)}
                 disabled={!seleccion.campana_id || loading}
               >
                 <option value="">Selecciona un grupo</option>
-                {grupos.map((g) => (
-                  <option key={g.id} value={g.id}>
-                    {g.nombre} ({g.activos || 0} asesores)
-                  </option>
-                ))}
+                {grupos.map(g => <option key={g.id} value={g.id}>{g.nombre} ({g.activos || 0} asesores)</option>)}
               </select>
             </div>
 
-            {/* Vista previa de malla */}
+            {/* Cursos disponibles */}
             {cursos.length > 0 && (
-              <div className="bg-gradient-to-r from-indigo-50 to-purple-50 p-3 md:p-4 rounded-lg border border-indigo-100">
-                <h3 className="font-semibold text-sm md:text-base text-gray-900 mb-2 flex items-center gap-2">
-                  <span className="bg-indigo-100 text-indigo-700 p-1 rounded">
-                    <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-                      <path d="M9 4.804A7.968 7.968 0 005.5 4c-1.255 0-2.443.29-3.5.804v10A7.969 7.969 0 015.5 14c1.669 0 3.218.51 4.5 1.385A7.962 7.962 0 0114.5 14c1.255 0 2.443.29 3.5.804v-10A7.968 7.968 0 0014.5 4c-1.255 0-2.443.29-3.5.804V12a1 1 0 11-2 0V4.804z" />
-                    </svg>
-                  </span>
-                  Malla de cursos
-                  <span className="text-xs font-normal text-gray-600">({cursos.length})</span>
-                </h3>
-                <div className="space-y-1.5 max-h-32 md:max-h-40 overflow-y-auto">
+              <div className="bg-gradient-to-r from-indigo-50 to-purple-50 p-3 rounded-lg border border-indigo-100">
+                <h3 className="font-semibold text-gray-900 mb-2 flex items-center gap-2">📚 Malla de cursos ({cursos.length})</h3>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-48 overflow-y-auto">
                   {cursos.map((c, index) => (
-                    <div
-                      key={c.id}
-                      className="flex items-center justify-between bg-white p-2 rounded-md shadow-sm text-xs md:text-sm"
-                    >
-                      <div className="flex items-center gap-2">
-                        <span className="flex items-center justify-center w-5 h-5 bg-indigo-100 text-indigo-700 rounded-full text-[0.6rem] font-bold">
-                          {index + 1}
-                        </span>
-                        <span className="font-medium text-gray-800 truncate max-w-[120px] md:max-w-[180px]">{c.titulo}</span>
-                      </div>
-                      <span className="text-xs text-gray-500">{c.duracion_minutos}m</span>
+                    <div key={c.id} className="flex items-center justify-between bg-white p-2 rounded-lg shadow-sm hover:shadow-md transition">
+                      <span className="font-medium text-gray-800">{c.titulo}</span>
+                      <span className="text-xs text-gray-500">{c.duracion_minutos} min</span>
                     </div>
                   ))}
                 </div>
               </div>
             )}
 
-            {/* Selección de curso */}
+            {/* Selección curso */}
             <div>
-              <label className="block text-xs md:text-sm font-medium text-gray-700 mb-1">
-                Curso a activar
-              </label>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Curso a activar hoy</label>
               <select
-                className="w-full border border-gray-300 rounded-lg p-2.5 md:p-3 focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition text-sm disabled:bg-gray-100"
+                className="w-full border border-gray-300 rounded-lg p-3 focus:ring-2 focus:ring-indigo-500 transition disabled:bg-gray-100"
                 value={seleccion.curso_id}
                 onChange={(e) => setSeleccion({ ...seleccion, curso_id: e.target.value })}
                 disabled={!cursos.length || loading}
               >
                 <option value="">Selecciona el curso</option>
-                {cursos.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.titulo} - {c.duracion_minutos}m
-                  </option>
-                ))}
+                {cursos.map(c => <option key={c.id} value={c.id}>{c.titulo} - {c.duracion_minutos} min</option>)}
               </select>
             </div>
 
             <button
               onClick={activarCurso}
               disabled={!seleccion.curso_id || loading}
-              className="w-full bg-indigo-600 text-white py-2.5 px-4 rounded-lg hover:bg-indigo-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors font-medium shadow-md hover:shadow-lg text-sm"
+              className="w-full bg-indigo-600 text-white py-3 px-4 rounded-lg hover:bg-indigo-700 disabled:bg-gray-300 transition font-medium shadow-md"
             >
               {loading ? "Activando..." : "✨ Activar curso de hoy"}
             </button>
           </div>
 
-          {/* Panel de cursos activos - DISEÑO MEJORADO */}
-          <div className="bg-white rounded-xl shadow-md p-4 md:p-6">
-            <h2 className="font-semibold text-lg md:text-xl text-gray-900 mb-4 flex items-center gap-2">
-              <span className="bg-green-100 text-green-700 p-1.5 rounded-lg">
-                <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
-                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                </svg>
-              </span>
-              Cursos activos hoy
-            </h2>
-
+          {/* Cursos activos */}
+          <div className="bg-white rounded-2xl shadow-lg p-6">
+            <h2 className="font-semibold text-xl text-gray-900 mb-4">🎓 Cursos activos hoy</h2>
             {activos.length === 0 ? (
-              <div className="text-center py-8">
-                <div className="text-4xl mb-3">📭</div>
-                <p className="text-gray-500 text-sm">No hay cursos activados</p>
-                <p className="text-xs text-gray-400 mt-1">Activa un curso para comenzar</p>
+              <div className="text-center py-12">
+                <div className="text-6xl mb-4">📭</div>
+                <p className="text-gray-500">No hay cursos activados todavía</p>
+                <p className="text-sm text-gray-400 mt-2">Activa un curso para comenzar</p>
               </div>
             ) : (
-              <div className="space-y-3">
-                {activos.map((a, index) => (
-                  <div
-                    key={a.id}
-                    className={`border rounded-lg p-3.5 hover:shadow-md transition-shadow ${
-                      index % 2 === 0 ? 'bg-white border-gray-200' : 'bg-gray-50 border-gray-200'
-                    }`}
-                  >
-                    <div className="flex justify-between items-start mb-2">
-                      <div className="flex-1 min-w-0">
-                        <h3 className="font-semibold text-gray-900 text-sm md:text-base truncate">
-                          {a.cursos?.titulo || "Curso sin título"}
-                        </h3>
-                        <div className="flex flex-col gap-0.5 mt-1 text-xs text-gray-600">
-                          <div className="flex items-center gap-1.5">
-                            <svg className="w-3.5 h-3.5 text-indigo-500 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
-                              <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-6-3a2 2 0 11-4 0 2 2 0 014 0zm-2 4a5 5 0 00-4.546 2.916A5.986 5.986 0 005 10a6 6 0 0012 0c0-.35-.036-.687-.101-1.016A5 5 0 0010 11z" clipRule="evenodd" />
-                            </svg>
-                            <span className="truncate">{a.grupos?.nombre || "Sin grupo"}</span>
-                          </div>
-                          <div className="flex items-center gap-1.5">
-                            <svg className="w-3.5 h-3.5 text-purple-500 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
-                              <path d="M5.5 16a3.5 3.5 0 01-.369-6.98 4 4 0 117.753-1.977A4.5 4.5 0 1113.5 16h-8z" />
-                            </svg>
-                            <span className="truncate">{a.campañas?.nombre || "Sin campaña"}</span>
-                          </div>
-                          <div className="flex items-center gap-1.5">
-                            <svg className="w-3.5 h-3.5 text-green-500 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
-                              <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                            </svg>
-                            <span className="font-medium text-green-600">
-                              {a.asesores_count || 0} asesores asignados
-                            </span>
-                          </div>
-                        </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {activos.map(a => (
+                  <div key={a.id} className="bg-white rounded-2xl shadow-md p-4 hover:shadow-lg flex flex-col justify-between">
+                    <div className="mb-3">
+                      <h3 className="font-semibold text-gray-900 mb-1">{a.cursos?.titulo || "Curso sin título"}</h3>
+                      <div className="flex flex-wrap gap-2 text-sm text-gray-600">
+                        <span className="bg-indigo-100 text-indigo-700 px-2 py-1 rounded-full">Grupo: {a.grupos?.nombre || "Sin grupo"}</span>
+                        <span className="bg-purple-100 text-purple-700 px-2 py-1 rounded-full">Campaña: {a.campañas?.nombre || "Sin campaña"}</span>
+                        <span className="bg-green-100 text-green-700 px-2 py-1 rounded-full">Asesores: {a.asesores_count || 0}</span>
                       </div>
-                      <button
-                        onClick={() => desactivarCurso(a.id)}
-                        disabled={loading}
-                        className="text-red-500 hover:text-red-700 hover:bg-red-50 p-1.5 rounded-lg transition-colors disabled:opacity-50 flex-shrink-0"
-                        title="Desactivar curso"
-                      >
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                        </svg>
-                      </button>
                     </div>
+                    <button
+                      onClick={() => desactivarCurso(a.id)}
+                      disabled={loading}
+                      className="self-end text-red-500 hover:text-red-700 hover:bg-red-50 p-2 rounded-lg transition-colors disabled:opacity-50"
+                    >
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                      </svg>
+                    </button>
                   </div>
                 ))}
               </div>
