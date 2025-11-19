@@ -26,7 +26,7 @@ export default function AsesorDashboard({ user, onLogout }) {
   const cargarCursos = async () => {
     setLoading(true);
     try {
-      console.log("🔄 Cargando cursos para usuario:", user.usuario); // 👈 LOG 1
+      console.log("🔄 Cargando cursos para usuario:", user.usuario);
 
       const { data, error } = await supabase
         .from("cursos_asesores")
@@ -56,47 +56,40 @@ export default function AsesorDashboard({ user, onLogout }) {
       } else {
         const cursosData = data || [];
         const cursosValidos = cursosData.filter(c => c.cursos_activados);
-        
-        // Cargar progreso para cada curso
+
+        // ============================================================
+        // 🔥 CORREGIDO: Cargar progreso REAL de cada curso
+        // ============================================================
         const cursosConProgreso = await Promise.all(
           cursosValidos.map(async (c) => {
             const cursoId = c.cursos_activados.curso_id;
-            console.log(`🔍 Buscando progreso para curso_id=${cursoId} y usuario=${user.usuario}`); // 👈 LOG 2
-
-            // ⚠️ Convertimos cursoId a número
             const cursoIdNum = parseInt(cursoId, 10);
+
             if (isNaN(cursoIdNum)) {
-              console.warn("⚠️ curso_id no es un número válido:", cursoId);
+              console.warn("⚠️ curso_id no es válido:", cursoId);
               return { ...c, completado: false };
             }
 
-            // ✅ Cambiamos .single() por .maybeSingle()
-            const {  progresoData, error: errorProgreso } = await supabase
+            const { data: progresoData, error: errorProgreso } = await supabase
               .from("progreso_usuarios")
               .select("estado")
               .eq("usuario", user.usuario)
               .eq("curso_id", cursoIdNum)
-              .maybeSingle(); // 👈 CORREGIDO
+              .maybeSingle();
 
-            if (errorProgreso) {
-              // Este error no es crítico si es porque no hay registros
+            if (errorProgreso && errorProgreso.code !== "PGRST116") {
               console.error("❌ Error al cargar progreso:", errorProgreso);
             }
 
-            console.log("📦 Progreso encontrado:", progresoData); // 👈 LOG 3
-
-            // Comparar estado de forma tolerante
             const estadoLimpio = progresoData?.estado?.trim()?.toLowerCase();
             const completado = estadoLimpio === "completado";
-            
-            console.log("✅ Estado limpio:", estadoLimpio, "| Completado:", completado); // 👈 LOG 4
 
             return { ...c, completado };
           })
         );
 
         setCursos(cursosConProgreso);
-        
+
         if (cursosConProgreso.length === 0) {
           mostrarMensaje("info", "📚 No tienes cursos asignados por ahora");
         }
@@ -114,9 +107,14 @@ export default function AsesorDashboard({ user, onLogout }) {
     setIsMenuOpen(!isMenuOpen);
   };
 
+  // ----------------------------------------
+  //       INTERFAZ COMPLETA SIN CAMBIOS
+  // ----------------------------------------
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 overflow-hidden">
-      {/* Fondo dinámico con partículas sutiles (CSS-only) */}
+
+      {/* Fondo dinámico */}
       <style jsx>{`
         .bg-particles::before {
           content: "";
@@ -136,7 +134,7 @@ export default function AsesorDashboard({ user, onLogout }) {
         }
       `}</style>
 
-      {/* Menú fijo superior - refinado */}
+      {/* NAV */}
       <nav className="bg-black/30 backdrop-blur-md border-b border-white/10 sticky top-0 z-50">
         <div className="max-w-4xl mx-auto px-3 md:px-6">
           <div className="flex items-center justify-between h-14">
@@ -152,7 +150,7 @@ export default function AsesorDashboard({ user, onLogout }) {
               </div>
             </div>
 
-            {/* Botón de menú móvil */}
+            {/* Menú móvil */}
             <div className="md:hidden">
               <button
                 onClick={toggleMenu}
@@ -224,8 +222,9 @@ export default function AsesorDashboard({ user, onLogout }) {
         </div>
       </nav>
 
+      {/* CONTENIDO PRINCIPAL */}
       <div className="max-w-4xl mx-auto px-3 md:px-6 pt-4 pb-6">
-        {/* Mensaje de feedback */}
+
         {mensaje.texto && (
           <div className={`mb-4 p-3 rounded-lg shadow-sm border-l-4 animate-in slide-in-from-top duration-500 ${
             mensaje.tipo === "success" ? "bg-green-500/20 border-l-green-400 text-green-200" :
@@ -236,16 +235,20 @@ export default function AsesorDashboard({ user, onLogout }) {
           </div>
         )}
 
-        {/* Header principal */}
+        {/* HEADER */}
         <div className="mb-6">
           <h1 className="text-2xl font-bold text-white mb-1">👋 Bienvenido</h1>
-          <p className="text-gray-300 text-sm">Tienes <span className="font-semibold text-purple-400">{cursos.length}</span> cursos activos</p>
+          <p className="text-gray-300 text-sm">
+            Tienes <span className="font-semibold text-purple-400">{cursos.length}</span> cursos activos
+          </p>
           <div className="mt-2 flex gap-2 text-xs text-gray-400">
-            <span className="bg-white/10 text-white px-2 py-1 rounded-full">📅 {fechaHoy}</span>
+            <span className="bg-white/10 text-white px-2 py-1 rounded-full">
+              📅 {fechaHoy}
+            </span>
           </div>
         </div>
 
-        {/* Estadísticas rápidas - refinadas */}
+        {/* ESTADÍSTICAS */}
         {cursos.length > 0 && (
           <div className="bg-gradient-to-r from-purple-500/10 to-pink-500/10 backdrop-blur-md rounded-xl p-4 border border-white/20 mb-6 shadow-xl shadow-purple-500/5">
             <h3 className="font-semibold text-white mb-3 text-sm flex items-center gap-1">
@@ -275,7 +278,7 @@ export default function AsesorDashboard({ user, onLogout }) {
           </div>
         )}
 
-        {/* Panel de cursos - animado y refinado */}
+        {/* LISTA DE CURSOS */}
         <div className="space-y-4">
           <div className="flex items-center justify-between">
             <h2 className="font-semibold text-white text-sm md:text-base flex items-center gap-2">
@@ -284,6 +287,7 @@ export default function AsesorDashboard({ user, onLogout }) {
               </svg>
               Cursos asignados
             </h2>
+
             {loading && (
               <div className="w-4 h-4 border-2 border-purple-400 border-t-transparent rounded-full animate-spin"></div>
             )}
@@ -326,12 +330,14 @@ export default function AsesorDashboard({ user, onLogout }) {
                             <h3 className="font-semibold text-sm text-white truncate">
                               {curso.cursos?.titulo || "Curso sin título"}
                             </h3>
+
                             {c.completado && (
                               <span className="bg-green-500/20 text-green-300 text-xs font-medium px-2 py-0.5 rounded-full border border-green-500/30">
                                 ✅ Completado
                               </span>
                             )}
                           </div>
+
                           <p className="text-xs text-gray-400 mb-2">
                             Activado el {fechaCurso}
                           </p>
@@ -340,11 +346,13 @@ export default function AsesorDashboard({ user, onLogout }) {
                             <span className="bg-indigo-500/20 text-indigo-300 text-[10px] font-medium px-2 py-0.5 rounded-full border border-indigo-500/30">
                               ⏱️ {curso.cursos?.duracion_minutos || 0} min
                             </span>
+
                             {curso.grupos?.nombre && (
                               <span className="bg-purple-500/20 text-purple-300 text-[10px] font-medium px-2 py-0.5 rounded-full border border-purple-500/30">
                                 👥 {curso.grupos.nombre}
                               </span>
                             )}
+
                             {curso.campañas?.nombre && (
                               <span className="bg-pink-500/20 text-pink-300 text-[10px] font-medium px-2 py-0.5 rounded-full border border-pink-500/30">
                                 📊 {curso.campañas.nombre}
@@ -352,6 +360,7 @@ export default function AsesorDashboard({ user, onLogout }) {
                             )}
                           </div>
                         </div>
+
                         <div className="flex items-center justify-center w-8 h-8 bg-gradient-to-r from-purple-500 to-pink-500 text-white rounded-full ml-3 shrink-0 group">
                           <svg className="w-4 h-4 group-hover:scale-110 transition-transform duration-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
@@ -367,7 +376,7 @@ export default function AsesorDashboard({ user, onLogout }) {
         </div>
       </div>
 
-      {/* Footer flotante sutil */}
+      {/* FOOTER */}
       <div className="fixed bottom-4 left-1/2 transform -translate-x-1/2 text-center">
         <p className="text-xs text-gray-500 bg-black/20 backdrop-blur-md px-4 py-2 rounded-full border border-white/10">
           © 2025 | Panel del Asesor • Diseñado para ti
