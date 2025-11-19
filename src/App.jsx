@@ -109,7 +109,7 @@ export default function App() {
         <Route
           path="/curso/:id"
           element={
-            user.rol === "Usuario" ? (
+            user.rol === "usuario" ? (
               <CursoViewPage user={user} onLogout={handleLogout} />
             ) : (
               <Navigate to="/" replace />
