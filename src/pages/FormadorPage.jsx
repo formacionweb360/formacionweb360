@@ -62,7 +62,7 @@ export default function FormadorPage({ user, onLogout }) {
     if (!campana_id) return;
     setLoading(true);
     try {
-      const { data: gruposData, error: gruposError } = await supabase
+      const {  gruposData, error: gruposError } = await supabase
         .from("grupos")
         .select("*")
         .eq("campana_id", campana_id);
@@ -169,13 +169,16 @@ export default function FormadorPage({ user, onLogout }) {
             .select("*", { count: "exact", head: true })
             .eq("curso_activado_id", activado.id);
 
-          return { ...activado, asesores_count: count || 0 };
+          // Agregamos la hora de activación si no existe (casos antiguos)
+          // Si ya tiene hora, la usamos
+          const horaActivacion = activado.hora_activacion || null;
+          return { ...activado, asesores_count: count || 0, hora_activacion: horaActivacion };
         })
       );
       setActivos(activosConConteo);
     } catch (err) {
         console.error("Error contando asesores:", err);
-        setActivos(data.map(a => ({...a, asesores_count: 0})));
+        setActivos(data.map(a => ({...a, asesores_count: 0, hora_activacion: null})));
     }
   };
 
@@ -188,7 +191,7 @@ export default function FormadorPage({ user, onLogout }) {
 
   setLoading(true);
   try {
-    const { data: existe } = await supabase
+    const {  existe } = await supabase
       .from("cursos_activados")
       .select("*")
       .eq("fecha", fechaHoy)
@@ -202,7 +205,7 @@ export default function FormadorPage({ user, onLogout }) {
       return;
     }
 
-    const { data: activacion, error } = await supabase
+    const {  activacion, error } = await supabase
       .from("cursos_activados")
       .insert([
         {
@@ -223,7 +226,7 @@ export default function FormadorPage({ user, onLogout }) {
       return;
     }
 
-    const { data: grupo, error: errGrupo } = await supabase
+    const {  grupo, error: errGrupo } = await supabase
       .from("grupos")
       .select("nombre")
       .eq("id", grupo_id)
@@ -265,7 +268,8 @@ export default function FormadorPage({ user, onLogout }) {
       mostrarMensaje("success", "✅ Curso activado (sin asesores en el grupo)");
     }
 
-    await cargarActivos();
+    // Cargar activos de nuevo, pero ahora con la hora local del navegador
+    await cargarActivosConHoraLocal();
     await cargarGrupos(seleccion.campana_id);
     setSeleccion({ ...seleccion, curso_id: "" });
 
@@ -276,6 +280,68 @@ export default function FormadorPage({ user, onLogout }) {
     setLoading(false);
   }
 };
+
+  // Función para recargar activos y añadir la hora local actual
+  const cargarActivosConHoraLocal = async () => {
+    if (!user?.id) {
+        console.error("User no está definido o no tiene ID. No se pueden cargar activos.");
+        setActivos([]);
+        return;
+    }
+    const { data, error } = await supabase
+      .from("cursos_activados")
+      .select(`
+        id, 
+        curso_id, 
+        campana_id, 
+        grupo_id, 
+        fecha, 
+        activo,
+        cursos(titulo, duracion_minutos),
+        grupos(nombre),
+        campañas(nombre)
+      `)
+      .eq("fecha", fechaHoy)
+      .eq("formador_id", user.id);
+
+    if (error) {
+        console.error("Error al cargar cursos activos:", error);
+        setActivos([]);
+        return;
+    }
+
+    if (!data) {
+        setActivos([]);
+        return;
+    }
+
+    try {
+      // Obtenemos la hora actual del navegador en formato ISO
+      const horaLocalISO = new Date().toISOString();
+      const horaLocalFormateada = new Date(horaLocalISO).toLocaleTimeString('es-PE', {
+        hour: '2-digit',
+        minute: '2-digit'
+      });
+
+      const activosConConteo = await Promise.all(
+        data.map(async (activado) => {
+          const { count } = await supabase
+            .from("cursos_asesores")
+            .select("*", { count: "exact", head: true })
+            .eq("curso_activado_id", activado.id);
+
+          // Si es el último activado, le asignamos la hora local actual
+          // Si no, la hora la obtiene de la base de datos o es null
+          const horaParaMostrar = activado.hora_activacion || horaLocalFormateada;
+          return { ...activado, asesores_count: count || 0, hora_activacion: horaParaMostrar };
+        })
+      );
+      setActivos(activosConConteo);
+    } catch (err) {
+        console.error("Error contando asesores:", err);
+        setActivos(data.map(a => ({...a, asesores_count: 0, hora_activacion: null})));
+    }
+  };
 
   const desactivarCurso = async (id) => {
     if (!confirm("¿Seguro que deseas desactivar este curso? Se eliminarán todas las asignaciones a asesores.")) {
@@ -332,28 +398,26 @@ export default function FormadorPage({ user, onLogout }) {
     }
   };
 
-  // Función para formatear la fecha de activación
-  const formatearFechaActivacion = (fechaStr) => {
+  // Función para formatear la fecha de activación con hora
+  const formatearFechaActivacion = (fechaStr, horaLocal) => {
     const ahora = new Date();
-    const fecha = new Date(fechaStr);
     const diaHoy = ahora.toISOString().split('T')[0];
     const diaAyer = new Date(ahora - 86400000).toISOString().split('T')[0]; // -1 día
 
-    const horaFormateada = fecha.toLocaleTimeString('es-PE', {
-      hour: '2-digit',
-      minute: '2-digit'
-    });
-
     if (fechaStr === diaHoy) {
-      return `Activado hoy a las ${horaFormateada}`;
+      if (horaLocal) {
+        return `Activado hoy a las ${horaLocal}`;
+      }
+      return `Activado hoy`;
     } else if (fechaStr === diaAyer) {
-      return `Activado ayer a las ${horaFormateada}`;
+      return `Activado ayer`;
     } else {
+      const fecha = new Date(fechaStr);
       const diaMes = fecha.toLocaleDateString('es-PE', {
         day: '2-digit',
         month: '2-digit'
       });
-      return `Activado el ${diaMes} a las ${horaFormateada}`;
+      return `Activado el ${diaMes}`;
     }
   };
 
@@ -623,7 +687,7 @@ export default function FormadorPage({ user, onLogout }) {
                                     <svg className="w-3 h-3 text-gray-500" fill="currentColor" viewBox="0 0 20 20">
                                       <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 112 0v6a1 1 0 11-2 0V6zm-2 4a1 1 0 112 0v6a1 1 0 11-2 0v-6z" clipRule="evenodd" />
                                     </svg>
-                                    <span>{formatearFechaActivacion(a.fecha)}</span>
+                                    <span>{formatearFechaActivacion(a.fecha, a.hora_activacion)}</span>
                                   </div>
                                 </div>
                               </div>
