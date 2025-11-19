@@ -332,6 +332,31 @@ export default function FormadorPage({ user, onLogout }) {
     }
   };
 
+  // Función para formatear la fecha de activación
+  const formatearFechaActivacion = (fechaStr) => {
+    const ahora = new Date();
+    const fecha = new Date(fechaStr);
+    const diaHoy = ahora.toISOString().split('T')[0];
+    const diaAyer = new Date(ahora - 86400000).toISOString().split('T')[0]; // -1 día
+
+    const horaFormateada = fecha.toLocaleTimeString('es-PE', {
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+
+    if (fechaStr === diaHoy) {
+      return `Activado hoy a las ${horaFormateada}`;
+    } else if (fechaStr === diaAyer) {
+      return `Activado ayer a las ${horaFormateada}`;
+    } else {
+      const diaMes = fecha.toLocaleDateString('es-PE', {
+        day: '2-digit',
+        month: '2-digit'
+      });
+      return `Activado el ${diaMes} a las ${horaFormateada}`;
+    }
+  };
+
   // Agrupar activos por grupo
   const activosAgrupados = {};
   activos.forEach(item => {
@@ -571,44 +596,53 @@ export default function FormadorPage({ user, onLogout }) {
                     {/* Contenido del acordeón */}
                     {expandedGroups[grupoNombre] && (
                       <div className="divide-y divide-gray-200">
-                        {grupoData.cursos.map((a) => (
-                          <div key={a.id} className="p-3.5 flex justify-between items-start">
-                            <div className="flex-1 min-w-0">
-                              <h4 className="font-medium text-gray-900 text-sm truncate">
-                                {a.cursos?.titulo || "Curso sin título"}
-                              </h4>
-                              <div className="flex flex-col gap-0.5 mt-1 text-xs text-gray-600">
-                                <div className="flex items-center gap-1.5">
-                                  <svg className="w-3.5 h-3.5 text-purple-500 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
-                                    <path d="M5.5 16a3.5 3.5 0 01-.369-6.98 4 4 0 117.753-1.977A4.5 4.5 0 1113.5 16h-8z" />
-                                  </svg>
-                                  <span className="truncate">{a.campañas?.nombre || "Sin campaña"}</span>
-                                </div>
-                                <div className="flex items-center gap-1.5">
-                                  <svg className="w-3.5 h-3.5 text-green-500 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
-                                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                                  </svg>
-                                  <span className="font-medium text-green-600">
-                                    {a.asesores_count || 0} asesores asignados
-                                  </span>
+                        {grupoData.cursos.map((a) => {
+                          return (
+                            <div key={a.id} className="p-3.5 flex justify-between items-start">
+                              <div className="flex-1 min-w-0">
+                                <h4 className="font-medium text-gray-900 text-sm truncate">
+                                  {a.cursos?.titulo || "Curso sin título"}
+                                </h4>
+                                <div className="flex flex-col gap-0.5 mt-1 text-xs text-gray-600">
+                                  <div className="flex items-center gap-1.5">
+                                    <svg className="w-3.5 h-3.5 text-purple-500 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                                      <path d="M5.5 16a3.5 3.5 0 01-.369-6.98 4 4 0 117.753-1.977A4.5 4.5 0 1113.5 16h-8z" />
+                                    </svg>
+                                    <span className="truncate">{a.campañas?.nombre || "Sin campaña"}</span>
+                                  </div>
+                                  <div className="flex items-center gap-1.5">
+                                    <svg className="w-3.5 h-3.5 text-green-500 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                                      <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                                    </svg>
+                                    <span className="font-medium text-green-600">
+                                      {a.asesores_count || 0} asesores asignados
+                                    </span>
+                                  </div>
+                                  {/* NUEVO: Fecha y hora de activación */}
+                                  <div className="flex items-center gap-1.5 text-[10px] text-gray-500">
+                                    <svg className="w-3 h-3 text-gray-500" fill="currentColor" viewBox="0 0 20 20">
+                                      <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 112 0v6a1 1 0 11-2 0V6zm-2 4a1 1 0 112 0v6a1 1 0 11-2 0v-6z" clipRule="evenodd" />
+                                    </svg>
+                                    <span>{formatearFechaActivacion(a.fecha)}</span>
+                                  </div>
                                 </div>
                               </div>
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation(); // Evita que se cierre el acordeón al hacer clic en el botón
+                                  desactivarCurso(a.id);
+                                }}
+                                disabled={loading}
+                                className="text-red-500 hover:text-red-700 hover:bg-red-50 p-1.5 rounded-lg transition-colors disabled:opacity-50 flex-shrink-0 ml-2"
+                                title="Desactivar curso"
+                              >
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                </svg>
+                              </button>
                             </div>
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation(); // Evita que se cierre el acordeón al hacer clic en el botón
-                                desactivarCurso(a.id);
-                              }}
-                              disabled={loading}
-                              className="text-red-500 hover:text-red-700 hover:bg-red-50 p-1.5 rounded-lg transition-colors disabled:opacity-50 flex-shrink-0 ml-2"
-                              title="Desactivar curso"
-                            >
-                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                              </svg>
-                            </button>
-                          </div>
-                        ))}
+                          );
+                        })}
                       </div>
                     )}
                   </div>
