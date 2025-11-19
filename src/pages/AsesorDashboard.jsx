@@ -54,9 +54,25 @@ export default function AsesorDashboard({ user, onLogout }) {
       } else {
         const cursosData = data || [];
         const cursosValidos = cursosData.filter(c => c.cursos_activados);
-        setCursos(cursosValidos);
         
-        if (cursosValidos.length === 0) {
+        // Cargar progreso para cada curso
+        const cursosConProgreso = await Promise.all(
+          cursosValidos.map(async (c) => {
+            const {  progresoData, error: errorProgreso } = await supabase
+              .from("progreso_usuarios")
+              .select("estado")
+              .eq("usuario", user.usuario) // Asumiendo que user.usuario es el nombre de usuario
+              .eq("curso_id", c.cursos_activados.curso_id)
+              .single();
+
+            const completado = progresoData?.estado === "Completado";
+            return { ...c, completado };
+          })
+        );
+
+        setCursos(cursosConProgreso);
+        
+        if (cursosConProgreso.length === 0) {
           mostrarMensaje("info", "📚 No tienes cursos asignados por ahora");
         }
       }
@@ -200,7 +216,7 @@ export default function AsesorDashboard({ user, onLogout }) {
           <h1 className="text-2xl font-bold text-white mb-1">👋 Bienvenido</h1>
           <p className="text-gray-300 text-sm">Tienes <span className="font-semibold text-purple-400">{cursos.length}</span> cursos activos</p>
           <div className="mt-2 flex gap-2 text-xs text-gray-400">
-            <span className="bg-white/10 text-white px-2 py-1 rounded-full border border-white/20">📅 {fechaHoy}</span>
+            <span className="bg-white/10 text-white px-2 py-1 rounded-full">📅 {fechaHoy}</span>
           </div>
         </div>
 
@@ -225,12 +241,9 @@ export default function AsesorDashboard({ user, onLogout }) {
                 </p>
               </div>
               <div className="bg-white/10 rounded-lg p-3 shadow-sm border border-white/20 backdrop-blur-sm">
-                <p className="text-xs text-gray-400 mb-1">Último</p>
-                <p className="text-base font-bold text-cyan-400">
-                  {new Date(cursos[0]?.cursos_activados?.fecha).toLocaleDateString('es-PE', {
-                    day: '2-digit',
-                    month: 'short'
-                  })}
+                <p className="text-xs text-gray-400 mb-1">Completados</p>
+                <p className="text-lg font-bold text-cyan-400">
+                  {cursos.filter(c => c.completado).length}
                 </p>
               </div>
             </div>
@@ -276,7 +289,9 @@ export default function AsesorDashboard({ user, onLogout }) {
                   <a
                     key={c.id}
                     href={`/curso/${curso.id}`}
-                    className="block bg-white/10 backdrop-blur-md rounded-xl border border-white/20 shadow-xl shadow-purple-500/5 hover:shadow-2xl hover:border-purple-400/50 transition-all duration-500 ease-out hover:scale-[1.01] animate-in slide-in-from-bottom-20 duration-700 delay-[100ms]"
+                    className={`block bg-white/10 backdrop-blur-md rounded-xl border border-white/20 shadow-xl shadow-purple-500/5 hover:shadow-2xl hover:border-purple-400/50 transition-all duration-500 ease-out hover:scale-[1.01] animate-in slide-in-from-bottom-20 duration-700 delay-[100ms] ${
+                      c.completado ? 'border-green-500/50' : ''
+                    }`}
                     style={{ animationDelay: `${index * 50}ms` }}
                   >
                     <div className="p-4">
@@ -306,9 +321,15 @@ export default function AsesorDashboard({ user, onLogout }) {
                           </div>
                         </div>
                         <div className="flex items-center justify-center w-8 h-8 bg-gradient-to-r from-purple-500 to-pink-500 text-white rounded-full ml-3 shrink-0 group">
-                          <svg className="w-4 h-4 group-hover:scale-110 transition-transform duration-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                          </svg>
+                          {c.completado ? (
+                            <svg className="w-4 h-4 text-white" fill="currentColor" viewBox="0 0 20 20">
+                              <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                            </svg>
+                          ) : (
+                            <svg className="w-4 h-4 group-hover:scale-110 transition-transform duration-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                            </svg>
+                          )}
                         </div>
                       </div>
                     </div>
