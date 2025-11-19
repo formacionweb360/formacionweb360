@@ -10,7 +10,7 @@ export default function FormadorPage({ user, onLogout }) {
     grupo_id: "",
     curso_id: "",
   });  
-  const [activos, setActivos] = useState([]); // Todos los cursos activados (sin agrupar)
+  const [activos, setActivos] = useState([]); // Todos los cursos activados
   const [gruposConCursos, setGruposConCursos] = useState([]); // Grupos + sus cursos
   const [loading, setLoading] = useState(false);
   const [mensaje, setMensaje] = useState({ tipo: "", texto: "" });
@@ -365,6 +365,11 @@ export default function FormadorPage({ user, onLogout }) {
     setExpandedGroups(newExpanded);
   };
 
+  // 🔍 NUEVO: Filtrar grupos en el panel derecho si se selecciona un grupo en el panel izquierdo
+  const gruposMostrados = seleccion.grupo_id
+    ? gruposConCursos.filter(g => g.grupo.id === seleccion.grupo_id)
+    : gruposConCursos;
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 overflow-x-hidden">
       {/* Fondo dinámico con partículas sutiles (CSS-only) */}
@@ -424,7 +429,7 @@ export default function FormadorPage({ user, onLogout }) {
 
       <div className="max-w-7xl mx-auto px-4 md:px-8 py-6">
         <div className="grid md:grid-cols-2 gap-6">
-          {/* Panel de activación */}
+          {/* Panel de activación (izquierda) */}
           <div className="bg-white/10 backdrop-blur-md rounded-2xl border border-white/20 shadow-xl shadow-purple-500/5 p-6 space-y-4">
             <div className="flex items-center justify-between mb-4">
               <h2 className="font-semibold text-xl text-white flex items-center gap-2">
@@ -540,7 +545,7 @@ export default function FormadorPage({ user, onLogout }) {
             </button>
           </div>
 
-          {/* Panel de grupos asignados (nuevo acordeón) */}
+          {/* Panel de grupos asignados (derecha) */}
           <div className="bg-white/10 backdrop-blur-md rounded-2xl border border-white/20 shadow-xl shadow-purple-500/5 p-6">
             <h2 className="font-semibold text-xl text-white mb-4 flex items-center gap-2">
               <span className="bg-green-500/20 text-green-300 p-2 rounded-lg border border-green-500/30">
@@ -551,7 +556,7 @@ export default function FormadorPage({ user, onLogout }) {
               Grupos asignados
             </h2>
 
-            {gruposConCursos.length === 0 ? (
+            {gruposMostrados.length === 0 ? (
               <div className="text-center py-12">
                 <div className="text-6xl mb-4 text-gray-500">📂</div>
                 <p className="text-gray-400 text-sm">No hay grupos con cursos asignados</p>
@@ -559,7 +564,7 @@ export default function FormadorPage({ user, onLogout }) {
               </div>
             ) : (
               <div className="space-y-3">
-                {gruposConCursos.map((grupoData) => {
+                {gruposMostrados.map((grupoData) => {
                   const grupo = grupoData.grupo;
                   const cursosDelGrupo = grupoData.cursos;
                   const groupId = grupo.id;
