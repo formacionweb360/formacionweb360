@@ -63,11 +63,18 @@ export default function AsesorDashboard({ user, onLogout }) {
             const cursoId = c.cursos_activados.curso_id;
             console.log(`🔍 Buscando progreso para curso_id=${cursoId} y usuario=${user.usuario}`); // 👈 LOG 2
 
+            // ⚠️ Convertimos cursoId a número
+            const cursoIdNum = parseInt(cursoId, 10);
+            if (isNaN(cursoIdNum)) {
+              console.warn("⚠️ curso_id no es un número válido:", cursoId);
+              return { ...c, completado: false };
+            }
+
             const {  progresoData, error: errorProgreso } = await supabase
               .from("progreso_usuarios")
               .select("estado")
               .eq("usuario", user.usuario)
-              .eq("curso_id", cursoId)
+              .eq("curso_id", cursoIdNum) // ✅ Ahora como número
               .single();
 
             if (errorProgreso) {
