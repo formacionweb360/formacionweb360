@@ -6,6 +6,7 @@ export default function AsesorDashboard({ user, onLogout }) {
   const [loading, setLoading] = useState(false);
   const [mensaje, setMensaje] = useState({ tipo: "", texto: "" });
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [progreso, setProgreso] = useState({}); // Estado local: { cursoActivadoId: true/false }
 
   const fechaHoy = new Date().toLocaleDateString('es-PE', {
     weekday: 'long',
@@ -16,6 +17,7 @@ export default function AsesorDashboard({ user, onLogout }) {
 
   useEffect(() => {
     cargarCursos();
+    cargarProgreso();
   }, []);
 
   const mostrarMensaje = (tipo, texto) => {
@@ -64,6 +66,54 @@ export default function AsesorDashboard({ user, onLogout }) {
       console.error("Excepción cargando cursos:", err);
       mostrarMensaje("error", "❌ Error al cargar cursos");
       setCursos([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const cargarProgreso = async () => {
+    const { data, error } = await supabase
+      .from("progreso_usuarios")
+      .select("curso_activado_id, completado")
+      .eq("usuario_id", user.id);
+
+    if (!error && data) {
+      const nuevoProgreso = {};
+      data.forEach(p => {
+        // Si `completado` es true, lo registramos
+        if (p.completado) {
+          nuevoProgreso[p.curso_activado_id] = true;
+        }
+      });
+      setProgreso(nuevoProgreso);
+    }
+  };
+
+  const marcarComoCompletado = async (cursoActivadoId) => {
+    if (progreso[cursoActivadoId]) return; // Ya completado
+
+    setLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from("progreso_usuarios")
+        .upsert({
+          usuario_id: user.id,
+          curso_activado_id: cursoActivadoId,
+          completado: true,
+          fecha_completado: new Date().toISOString()
+        }, {
+          onConflict: 'usuario_id,curso_activado_id'
+        })
+        .select();
+
+      if (error) throw error;
+
+      // Actualizar estado local
+      setProgreso(prev => ({ ...prev, [cursoActivadoId]: true }));
+      mostrarMensaje("success", "✅ ¡Felicidades! Curso marcado como completado");
+    } catch (err) {
+      console.error("Error al marcar como completado:", err);
+      mostrarMensaje("error", "❌ No se pudo marcar como completado");
     } finally {
       setLoading(false);
     }
@@ -229,6 +279,7 @@ export default function AsesorDashboard({ user, onLogout }) {
                     month: 'short',
                     year: 'numeric'
                   });
+                  const completado = progreso[curso.id] || false;
 
                   return (
                     <div
@@ -267,15 +318,45 @@ export default function AsesorDashboard({ user, onLogout }) {
                           </div>
                         </div>
 
-                        <a
-                          href={`/curso/${curso.id}`}
-                          className="bg-gradient-to-r from-indigo-600 to-indigo-700 text-white px-3 py-1.5 rounded-lg hover:from-indigo-700 hover:to-indigo-800 transition-all font-medium shadow-sm hover:shadow text-xs flex items-center gap-1 whitespace-nowrap"
-                        >
-                          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                          </svg>
-                          Ver curso
-                        </a>
+                        <div className="flex items-center gap-2">
+                          <a
+                            href={`/curso/${curso.id}`}
+                            className="bg-gradient-to-r from-indigo-600 to-indigo-700 text-white px-3 py-1.5 rounded-lg hover:from-indigo-700 hover:to-indigo-800 transition-all font-medium shadow-sm hover:shadow text-xs flex items-center gap-1 whitespace-nowrap"
+                          >
+                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                            </svg>
+                            Ver curso
+                          </a>
+
+                          {/* Botón de completado */}
+                          <button
+                            onClick={() => marcarComoCompletado(curso.id)}
+                            disabled={completado}
+                            className={`flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium transition-colors ${
+                              completado
+                                ? 'bg-green-100 text-green-700 cursor-not-allowed'
+                                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                            }`}
+                            title={completado ? "Ya completado" : "Marcar como completado"}
+                          >
+                            {completado ? (
+                              <>
+                                <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                                  <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                                </svg>
+                                Completado
+                              </>
+                            ) : (
+                              <>
+                                <svg className="w-3 h-3 opacity-60" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                </svg>
+                                Completar
+                              </>
+                            )}
+                          </button>
+                        </div>
                       </div>
                     </div>
                   );
@@ -306,12 +387,9 @@ export default function AsesorDashboard({ user, onLogout }) {
                 </p>
               </div>
               <div className="bg-white rounded-lg p-3 shadow-sm border border-gray-100 text-center">
-                <p className="text-xs text-gray-500 mb-1">Último curso</p>
-                <p className="text-sm font-medium text-pink-600">
-                  {new Date(cursos[0]?.cursos_activados?.fecha).toLocaleDateString('es-PE', {
-                    day: 'numeric',
-                    month: 'short'
-                  })}
+                <p className="text-xs text-gray-500 mb-1">Completados</p>
+                <p className="text-lg font-bold text-green-600">
+                  {Object.values(progreso).filter(v => v).length}
                 </p>
               </div>
             </div>
