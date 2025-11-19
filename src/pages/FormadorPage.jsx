@@ -10,8 +10,8 @@ export default function FormadorPage({ user, onLogout }) {
     grupo_id: "",
     curso_id: "",
   });  
-  const [activos, setActivos] = useState([]); // Todos los cursos activados
-  const [gruposConCursos, setGruposConCursos] = useState([]); // Grupos + sus cursos
+  const [activos, setActivos] = useState([]);
+  const [gruposConCursos, setGruposConCursos] = useState([]);
   const [loading, setLoading] = useState(false);
   const [mensaje, setMensaje] = useState({ tipo: "", texto: "" });
   const [expandedGroups, setExpandedGroups] = useState(new Set());
@@ -58,12 +58,16 @@ export default function FormadorPage({ user, onLogout }) {
 
   const cargarGrupos = async (campana_id) => {
     if (!campana_id) {
+      console.log("No se proporcionó campana_id, omitiendo carga de grupos.");
+      setGrupos([]);
       return;
     }
+    console.log("Iniciando carga de grupos para campana_id:", campana_id);
     setLoading(true);
 
     try {
-      const {  gruposData, error: gruposError } = await supabase
+      // ✅ CORREGIDO: Usar 'data' en lugar de 'gruposData'
+      const {  data, error: gruposError } = await supabase
         .from("grupos")
         .select("*")
         .eq("campana_id", campana_id);
@@ -71,11 +75,13 @@ export default function FormadorPage({ user, onLogout }) {
       if (gruposError) {
         console.error("Error cargando grupos:", gruposError);
         setGrupos([]);
+        mostrarMensaje("error", "Error al cargar grupos");
         return;
       }
 
+      // ✅ CORREGIDO: Usar (data || []) para evitar error si data es undefined
       const gruposConConteo = await Promise.all(
-        gruposData.map(async (g) => {
+        (data || []).map(async (g) => {
           const { count } = await supabase
             .from("usuarios")
             .select("*", { count: "exact", head: true })
@@ -91,9 +97,12 @@ export default function FormadorPage({ user, onLogout }) {
       );
 
       setGrupos(gruposConConteo);
+      console.log("Grupos cargados y procesados:", gruposConConteo);
+
     } catch (err) {
       console.error("Error *interno* en cargarGrupos:", err);
       setGrupos([]);
+      mostrarMensaje("error", "Error inesperado al cargar grupos");
     } finally {
       setLoading(false);
     }
@@ -101,8 +110,10 @@ export default function FormadorPage({ user, onLogout }) {
   
   const cargarCursos = async (campana_id, grupo_id) => {
     if (!campana_id || !grupo_id) {
+        console.log("Falta campana_id o grupo_id, omitiendo carga de cursos.");
         return;
     }
+    console.log("Iniciando carga de cursos para campana_id:", campana_id, "grupo_id:", grupo_id);
     setLoading(true);
     try {
       let query = supabase
@@ -118,6 +129,7 @@ export default function FormadorPage({ user, onLogout }) {
       const { data, error } = await query;
       if (!error) {
         setCursos(data || []);
+        console.log("Cursos cargados:", data);
       } else {
         console.error("Error al cargar cursos:", error);
         setCursos([]);
@@ -135,6 +147,7 @@ export default function FormadorPage({ user, onLogout }) {
     if (!user?.id) {
         console.error("User no está definido o no tiene ID. No se pueden cargar activos.");
         setActivos([]);
+        setGruposConCursos([]);
         return;
     }
     const { data, error } = await supabase
@@ -156,11 +169,13 @@ export default function FormadorPage({ user, onLogout }) {
     if (error) {
         console.error("Error al cargar cursos activos:", error);
         setActivos([]);
+        setGruposConCursos([]);
         return;
     }
 
     if (!data) {
         setActivos([]);
+        setGruposConCursos([]);
         return;
     }
 
@@ -194,6 +209,7 @@ export default function FormadorPage({ user, onLogout }) {
     } catch (err) {
         console.error("Error contando asesores:", err);
         setActivos(data.map(a => ({...a, asesores_count: 0})));
+        // No actualizamos gruposConCursos si falla el conteo
     }
   };
 
@@ -311,7 +327,6 @@ export default function FormadorPage({ user, onLogout }) {
         .eq("curso_activado_id", id);
 
       if (errorAsesores) {
-        console.error("Error eliminando asignaciones a asesores:", errorAsesores);
         mostrarMensaje("error", "❌ Error al eliminar asignaciones");
         return;
       }
@@ -322,16 +337,14 @@ export default function FormadorPage({ user, onLogout }) {
         .eq("id", id);
 
       if (error) {
-        console.error("Error eliminando curso activado:", error);
         mostrarMensaje("error", "❌ Error al desactivar el curso");
         return;
       }
 
       mostrarMensaje("success", "🗑️ Curso desactivado correctamente");
-      await cargarActivos(); // Refrescar lista
+      await cargarActivos();
 
     } catch (err) {
-      console.error("Error *interno* en desactivarCurso:", err);
       mostrarMensaje("error", "❌ Error inesperado al desactivar");
     } finally {
       setLoading(false);
@@ -356,16 +369,18 @@ export default function FormadorPage({ user, onLogout }) {
   };
 
   const toggleGroup = (groupId) => {
-    const newExpanded = new Set(expandedGroups);
-    if (newExpanded.has(groupId)) {
-      newExpanded.delete(groupId);
-    } else {
-      newExpanded.add(groupId);
-    }
-    setExpandedGroups(newExpanded);
+    setExpandedGroups(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(groupId)) {
+        newSet.delete(groupId);
+      } else {
+        newSet.add(groupId);
+      }
+      return newSet;
+    });
   };
 
-  // 🔍 NUEVO: Filtrar grupos en el panel derecho si se selecciona un grupo en el panel izquierdo
+  // Filtrar grupos mostrados si hay una selección
   const gruposMostrados = seleccion.grupo_id
     ? gruposConCursos.filter(g => g.grupo.id === seleccion.grupo_id)
     : gruposConCursos;
@@ -491,11 +506,11 @@ export default function FormadorPage({ user, onLogout }) {
                 <h3 className="font-semibold text-white mb-3 flex items-center gap-2">
                   <span className="bg-indigo-500/20 text-indigo-300 p-1 rounded border border-indigo-500/30">
                     <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-                      <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-6-3a2 2 0 11-4 0 2 2 0 014 0zm-2 4a5 5 0 00-4.546 2.916A5.986 5.986 0 005 10a6 6 0 0012 0c0-.35-.036-.687-.101-1.016A5 5 0 0010 11z" clipRule="evenodd" />
+                      <path fillRule="evenodd" d="M18 10a8 8 0 100-16 8 8 0 000 16zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3.25a1 1 0 102 0V11a1 1 0 100-2V9z" clipRule="evenodd" />
                     </svg>
                   </span>
                   Malla de cursos
-                  <span className="text-sm font-normal text-gray-400">({cursos.length} cursos)</span>
+                  <span className="text-sm font-normal text-gray-400">({cursos.length})</span>
                 </h3>
                 <div className="space-y-2 max-h-40 overflow-y-auto">
                   {cursos.map((c, index) => (
@@ -539,7 +554,7 @@ export default function FormadorPage({ user, onLogout }) {
             <button
               onClick={activarCurso}
               disabled={!seleccion.curso_id || loading}
-              className="w-full bg-gradient-to-r from-indigo-500 to-purple-600 text-white py-3 px-4 rounded-lg hover:shadow-lg hover:shadow-indigo-500/20 transition-all font-medium shadow-md disabled:opacity-50 disabled:cursor-not-allowed text-sm"
+              className="w-full bg-gradient-to-r from-indigo-500 to-purple-600 text-white py-3 px-4 rounded-lg hover:shadow-lg hover:shadow-indigo-500/20 transition-all font-medium shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {loading ? "Activando..." : "✨ Activar curso de hoy"}
             </button>
@@ -559,8 +574,8 @@ export default function FormadorPage({ user, onLogout }) {
             {gruposMostrados.length === 0 ? (
               <div className="text-center py-12">
                 <div className="text-6xl mb-4 text-gray-500">📂</div>
-                <p className="text-gray-400 text-sm">No hay grupos con cursos asignados</p>
-                <p className="text-xs text-gray-500 mt-1">Activa un curso para comenzar</p>
+                <p className="text-gray-400 text-sm mb-1">No hay grupos con cursos asignados</p>
+                <p className="text-xs text-gray-500">Activa un curso para comenzar</p>
               </div>
             ) : (
               <div className="space-y-3">
@@ -609,9 +624,9 @@ export default function FormadorPage({ user, onLogout }) {
                           {cursosDelGrupo.map((a) => (
                             <div
                               key={a.id}
-                              className="border border-white/20 rounded-lg p-3 hover:shadow-md transition-shadow bg-white/10"
+                              className="border border-white/20 rounded-lg p-3 hover:shadow-md transition-all bg-white/10"
                             >
-                              <div className="flex justify-between items-start mb-2">
+                              <div className="flex justify-between items-start">
                                 <div className="flex-1 min-w-0">
                                   <h3 className="font-semibold text-gray-100 mb-1">
                                     {a.cursos?.titulo || "Curso sin título"}
@@ -619,7 +634,13 @@ export default function FormadorPage({ user, onLogout }) {
                                   <div className="flex flex-col gap-0.5 text-xs text-gray-400">
                                     <div className="flex items-center gap-1.5">
                                       <svg className="w-3.5 h-3.5 text-indigo-400 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
-                                        <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-6-3a2 2 0 11-4 0 2 2 0 014 0zm-2 4a5 5 0 00-4.546 2.916A5.986 5.986 0 005 10a6 6 0 0012 0c0-.35-.036-.687-.101-1.016A5 5 0 0010 11z" clipRule="evenodd" />
+                                        <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-8.707l-3-3a1 1 0 00-1.414 0l-3 3a1 1 0 001.414 1.414L9 9.414V13a1 1 0 102 0V9.414l1.293 1.293a1 1 0 001.414-1.414z" clipRule="evenodd" />
+                                      </svg>
+                                      <span className="truncate">{a.cursos?.duracion_minutos || 0} min</span>
+                                    </div>
+                                    <div className="flex items-center gap-1.5">
+                                      <svg className="w-3.5 h-3.5 text-purple-400 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                                        <path d="M5.5 16a3.5 3.5 0 01-.369-6.98 4 4 0 117.753-1.977A4.5 4.5 0 1113.5 16h-8z" />
                                       </svg>
                                       <span className="truncate">{a.campañas?.nombre || "Sin campaña"}</span>
                                     </div>
@@ -639,7 +660,7 @@ export default function FormadorPage({ user, onLogout }) {
                                   className="text-red-400 hover:text-red-300 hover:bg-red-500/10 p-1.5 rounded-lg transition-colors disabled:opacity-50 flex-shrink-0 ml-2"
                                   title="Desactivar curso"
                                 >
-                                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                                   </svg>
                                 </button>
