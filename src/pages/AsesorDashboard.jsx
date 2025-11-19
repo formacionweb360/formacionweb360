@@ -6,7 +6,8 @@ export default function AsesorDashboard({ user, onLogout }) {
   const [loading, setLoading] = useState(false);
   const [mensaje, setMensaje] = useState({ tipo: "", texto: "" });
   const [isMenuOpen, setIsMenuOpen] = useState(false);
-  const [progreso, setProgreso] = useState({}); // Estado local: { cursoActivadoId: true/false }
+  // Cambiamos la estructura de progreso para usar cursoId en lugar de cursoActivadoId
+  const [progreso, setProgreso] = useState({}); // { cursoId: true/false }
 
   const fechaHoy = new Date().toLocaleDateString('es-PE', {
     weekday: 'long',
@@ -40,7 +41,7 @@ export default function AsesorDashboard({ user, onLogout }) {
             activo,
             grupo_id,
             campana_id,
-            cursos(titulo, descripcion, duracion_minutos, url_iframe),
+            cursos(id, titulo, descripcion, duracion_minutos, url_iframe),
             grupos(nombre),
             campañas(nombre)
           )
@@ -74,15 +75,15 @@ export default function AsesorDashboard({ user, onLogout }) {
   const cargarProgreso = async () => {
     const { data, error } = await supabase
       .from("progreso_usuarios")
-      .select("curso_activado_id, completado")
-      .eq("usuario_id", user.id);
+      .select("curso_id, estado")
+      .eq("usuario", user.usuario); // Usamos nombre de usuario
 
     if (!error && data) {
       const nuevoProgreso = {};
       data.forEach(p => {
-        // Si `completado` es true, lo registramos
-        if (p.completado) {
-          nuevoProgreso[p.curso_activado_id] = true;
+        // Si estado es "Completado", lo registramos
+        if (p.estado === "Completado") {
+          nuevoProgreso[p.curso_id] = true;
         }
       });
       setProgreso(nuevoProgreso);
@@ -90,29 +91,42 @@ export default function AsesorDashboard({ user, onLogout }) {
   };
 
   const marcarComoCompletado = async (cursoActivadoId) => {
-    if (progreso[cursoActivadoId]) return; // Ya completado
+    // Buscar el curso original en la lista de cursos cargados
+    const curso = cursos.find(c => c.cursos_activados.id === cursoActivadoId);
+    if (!curso) {
+      mostrarMensaje("error", "❌ Curso no encontrado");
+      return;
+    }
+
+    const cursoId = curso.cursos_activados.cursos.id;
+    if (progreso[cursoId]) return; // Ya completado
 
     setLoading(true);
     try {
-      const { data, error } = await supabase
+      const { error } = await supabase
         .from("progreso_usuarios")
         .upsert({
-          usuario_id: user.id,
-          curso_activado_id: cursoActivadoId,
-          completado: true,
-          fecha_completado: new Date().toISOString()
+          usuario: user.usuario, // Nombre de usuario
+          curso_id: cursoId,     // ID del curso original
+          fecha_inicio: new Date().toISOString(),
+          progreso: 0, // o el tiempo que hayas visto
+          estado: "Completado",
+          fecha_fin: new Date().toISOString()
         }, {
-          onConflict: 'usuario_id,curso_activado_id'
-        })
-        .select();
+          onConflict: 'usuario,curso_id' // Clave única en texto
+        });
 
-      if (error) throw error;
+      if (error) {
+        console.error("Error upsert progreso:", error);
+        mostrarMensaje("error", "❌ No se pudo marcar como completado");
+        return;
+      }
 
       // Actualizar estado local
-      setProgreso(prev => ({ ...prev, [cursoActivadoId]: true }));
+      setProgreso(prev => ({ ...prev, [cursoId]: true }));
       mostrarMensaje("success", "✅ ¡Felicidades! Curso marcado como completado");
     } catch (err) {
-      console.error("Error al marcar como completado:", err);
+      console.error("Error general al marcar como completado:", err);
       mostrarMensaje("error", "❌ No se pudo marcar como completado");
     } finally {
       setLoading(false);
@@ -279,7 +293,8 @@ export default function AsesorDashboard({ user, onLogout }) {
                     month: 'short',
                     year: 'numeric'
                   });
-                  const completado = progreso[curso.id] || false;
+                  // Usamos el ID del curso original para verificar progreso
+                  const completado = progreso[curso.cursos.id] || false;
 
                   return (
                     <div
