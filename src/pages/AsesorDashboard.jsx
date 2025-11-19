@@ -75,68 +75,68 @@ export default function AsesorDashboard({ user, onLogout }) {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-white to-purple-50">
-      {/* Menú fijo superior */}
-      <nav className="bg-white shadow-md border-b border-gray-200 sticky top-0 z-50">
-        <div className="max-w-4xl mx-auto px-4 md:px-8">
-          <div className="flex items-center justify-between h-16">
+      {/* Menú fijo superior - COMPACTO Y MODERNO */}
+      <nav className="bg-white shadow-sm border-b border-gray-100 sticky top-0 z-50">
+        <div className="max-w-4xl mx-auto px-3 md:px-6">
+          <div className="flex items-center justify-between h-14">
             <div className="flex items-center space-x-3">
-              <div className="w-10 h-10 bg-gradient-to-r from-indigo-600 to-purple-600 rounded-lg flex items-center justify-center shadow-md">
-                <span className="text-white font-bold text-sm">A</span>
+              <div className="w-8 h-8 bg-gradient-to-r from-indigo-600 to-purple-600 rounded-lg flex items-center justify-center shadow-sm">
+                <span className="text-white font-bold text-xs">A</span>
               </div>
               <div>
-                <h1 className="font-semibold text-gray-900 text-lg">Panel del Asesor</h1>
+                <h1 className="font-semibold text-gray-900 text-sm md:text-base">Panel del Asesor</h1>
                 <p className="text-xs text-gray-500">Hola, {user.nombre}</p>
               </div>
             </div>
-            
-            {/* Botón de menú para móviles */}
+
+            {/* Botón de menú móvil */}
             <div className="md:hidden">
               <button
                 onClick={toggleMenu}
-                className="text-gray-700 hover:text-indigo-600 p-2 rounded-lg hover:bg-gray-50 transition-colors"
+                className="text-gray-700 hover:text-indigo-600 p-1.5 rounded-lg hover:bg-gray-50 transition-colors"
               >
-                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
                 </svg>
               </button>
             </div>
 
-            {/* Opciones de menú para desktop */}
-            <div className="hidden md:flex items-center space-x-3">
+            {/* Menú desktop */}
+            <div className="hidden md:flex items-center space-x-2">
               <button 
                 onClick={() => window.location.href = '/dashboard'}
-                className="text-gray-700 hover:text-indigo-600 px-4 py-2 rounded-lg hover:bg-gray-50 transition-colors text-sm font-medium flex items-center gap-2"
+                className="text-gray-700 hover:text-indigo-600 px-2.5 py-1.5 rounded-md hover:bg-gray-50 transition-colors text-xs font-medium flex items-center gap-1"
               >
                 🏠 Inicio
               </button>
               <button 
                 onClick={() => window.location.href = '/perfil'}
-                className="text-gray-700 hover:text-indigo-600 px-4 py-2 rounded-lg hover:bg-gray-50 transition-colors text-sm font-medium flex items-center gap-2"
+                className="text-gray-700 hover:text-indigo-600 px-2.5 py-1.5 rounded-md hover:bg-gray-50 transition-colors text-xs font-medium flex items-center gap-1"
               >
                 👤 Perfil
               </button>
               <button
                 onClick={onLogout}
-                className="bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white px-4 py-2 rounded-lg transition-all flex items-center gap-2 text-sm font-medium shadow-md hover:shadow-lg"
+                className="bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white px-3 py-1.5 rounded-md transition-all flex items-center gap-1 text-xs font-medium shadow-sm hover:shadow"
               >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
                 </svg>
-                Cerrar sesión
+                Salir
               </button>
             </div>
           </div>
 
-          {/* Menú desplegable para móviles */}
+          {/* Menú móvil desplegable */}
           {isMenuOpen && (
-            <div className="md:hidden border-t border-gray-200 py-4">
-              <div className="flex flex-col space-y-2">
+            <div className="md:hidden border-t border-gray-100 py-3 mt-2">
+              <div className="flex flex-col space-y-1">
                 <button 
                   onClick={() => {
                     window.location.href = '/dashboard';
                     setIsMenuOpen(false);
                   }}
-                  className="text-gray-700 hover:text-indigo-600 px-4 py-3 rounded-lg hover:bg-gray-50 transition-colors text-sm font-medium flex items-center gap-2 text-left"
+                  className="text-gray-700 hover:text-indigo-600 px-3 py-2 rounded-md hover:bg-gray-50 text-xs font-medium flex items-center gap-2"
                 >
                   🏠 Inicio
                 </button>
@@ -145,7 +145,7 @@ export default function AsesorDashboard({ user, onLogout }) {
                     window.location.href = '/perfil';
                     setIsMenuOpen(false);
                   }}
-                  className="text-gray-700 hover:text-indigo-600 px-4 py-3 rounded-lg hover:bg-gray-50 transition-colors text-sm font-medium flex items-center gap-2 text-left"
+                  className="text-gray-700 hover:text-indigo-600 px-3 py-2 rounded-md hover:bg-gray-50 text-xs font-medium flex items-center gap-2"
                 >
                   👤 Perfil
                 </button>
@@ -154,12 +154,12 @@ export default function AsesorDashboard({ user, onLogout }) {
                     onLogout();
                     setIsMenuOpen(false);
                   }}
-                  className="text-gray-700 hover:text-red-600 px-4 py-3 rounded-lg hover:bg-gray-50 transition-colors text-sm font-medium flex items-center gap-2 text-left"
+                  className="text-gray-700 hover:text-red-600 px-3 py-2 rounded-md hover:bg-gray-50 text-xs font-medium flex items-center gap-2"
                 >
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
                   </svg>
-                  Cerrar sesión
+                  Salir
                 </button>
               </div>
             </div>
@@ -167,64 +167,61 @@ export default function AsesorDashboard({ user, onLogout }) {
         </div>
       </nav>
 
-      <div className="max-w-4xl mx-auto p-4 md:p-6 pt-6">
+      <div className="max-w-4xl mx-auto p-3 md:p-5 pt-4">
         {/* Mensaje de feedback */}
         {mensaje.texto && (
-          <div className={`mb-6 p-4 rounded-xl shadow-sm border-l-4 ${
+          <div className={`mb-4 p-2.5 rounded-lg shadow-sm border-l-2 ${
             mensaje.tipo === "success" ? "bg-green-50 border-l-green-500 text-green-800" :
             mensaje.tipo === "error" ? "bg-red-50 border-l-red-500 text-red-800" :
             "bg-blue-50 border-l-blue-500 text-blue-800"
           }`}>
-            <div className="flex items-center">
-              <span className="font-medium">{mensaje.texto}</span>
-            </div>
+            <span className="text-sm font-medium">{mensaje.texto}</span>
           </div>
         )}
 
-        {/* Header principal */}
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">
-            👋 Bienvenido, {user.nombre}
-          </h1>
-          <div className="flex flex-wrap gap-4 text-sm text-gray-600">
-            <span className="bg-white px-4 py-2 rounded-xl shadow-sm border border-gray-100">
+        {/* Header principal - más compacto */}
+        <div className="mb-6">
+          <h1 className="text-2xl font-bold text-gray-900 mb-1">👋 Bienvenido, {user.nombre}</h1>
+          <div className="flex flex-wrap gap-2 text-xs text-gray-600">
+            <span className="bg-white px-2.5 py-1 rounded-lg shadow-sm border border-gray-100">
               👤 Asesor
             </span>
-            <span className="bg-white px-4 py-2 rounded-xl shadow-sm border border-gray-100">
+            <span className="bg-white px-2.5 py-1 rounded-lg shadow-sm border border-gray-100">
               📅 {fechaHoy}
             </span>
           </div>
         </div>
 
-        {/* Panel de cursos */}
-        <div className="bg-white rounded-2xl shadow-lg border border-gray-100 overflow-hidden mb-6">
-          <div className="px-6 py-4 bg-gradient-to-r from-indigo-50 to-purple-50 border-b border-gray-200">
+        {/* Panel de cursos - diseño moderno, compacto */}
+        <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden mb-6">
+          <div className="px-4 py-3 bg-gradient-to-r from-indigo-50 to-purple-50 border-b border-gray-100">
             <div className="flex items-center justify-between">
-              <h2 className="font-semibold text-xl text-gray-900 flex items-center gap-2">
-                🎓 Cursos asignados
+              <h2 className="font-semibold text-base text-gray-900 flex items-center gap-2">
+                <svg className="w-4 h-4 text-indigo-600" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-8.707l-3-3a1 1 0 00-1.414 0l-3 3a1 1 0 001.414 1.414L9 9.414V13a1 1 0 102 0V9.414l1.293 1.293a1 1 0 101.414-1.414z" clipRule="evenodd" />
+                </svg>
+                Cursos asignados
               </h2>
               {loading && (
-                <div className="w-5 h-5 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin"></div>
+                <div className="w-4 h-4 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin"></div>
               )}
             </div>
           </div>
 
-          <div className="p-6">
+          <div className="p-4">
             {loading && cursos.length === 0 ? (
-              <div className="text-center py-16">
-                <div className="w-12 h-12 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-                <p className="text-gray-500">Cargando cursos...</p>
+              <div className="text-center py-12">
+                <div className="w-10 h-10 border-3 border-indigo-600 border-t-transparent rounded-full animate-spin mx-auto mb-3"></div>
+                <p className="text-gray-500 text-sm">Cargando tus cursos...</p>
               </div>
             ) : cursos.length === 0 ? (
-              <div className="text-center py-16">
-                <div className="text-6xl mb-4">📚</div>
-                <p className="text-gray-500 text-lg mb-2">No tienes cursos asignados</p>
-                <p className="text-sm text-gray-400">
-                  Tu formador te asignará cursos pronto. ¡Mantente atento!
-                </p>
+              <div className="text-center py-12">
+                <div className="text-4xl mb-3">📚</div>
+                <p className="text-gray-500 text-sm mb-1">No tienes cursos asignados</p>
+                <p className="text-xs text-gray-400">Tu formador te asignará cursos pronto. ¡Mantente atento!</p>
               </div>
             ) : (
-              <div className="space-y-5">
+              <div className="space-y-3">
                 {cursos.map((c) => {
                   const curso = c.cursos_activados;
                   const fechaCurso = new Date(curso.fecha).toLocaleDateString('es-PE', {
@@ -236,38 +233,34 @@ export default function AsesorDashboard({ user, onLogout }) {
                   return (
                     <div
                       key={c.id}
-                      className="border border-gray-200 rounded-xl p-6 hover:shadow-lg transition-all hover:border-indigo-300 bg-gradient-to-r from-white to-gray-50"
+                      className="border border-gray-100 rounded-xl p-4 hover:shadow-md transition-all hover:border-indigo-200 bg-white"
                     >
-                      <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-5">
-                        <div className="flex-1">
-                          <div className="flex items-start gap-4 mb-3">
-                            <div className="flex-1">
-                              <h3 className="font-semibold text-lg text-gray-900 mb-2">
-                                {curso.cursos?.titulo || "Curso sin título"}
-                              </h3>
-                              <p className="text-xs text-gray-500 mb-3">
-                                Activado el {fechaCurso}
-                              </p>
-                            </div>
-                          </div>
-                          
+                      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
+                        <div className="flex-1 min-w-0">
+                          <h3 className="font-semibold text-sm md:text-base text-gray-900 mb-1 truncate">
+                            {curso.cursos?.titulo || "Curso sin título"}
+                          </h3>
+                          <p className="text-xs text-gray-500 mb-2">
+                            Activado el {fechaCurso}
+                          </p>
+
                           {curso.cursos?.descripcion && (
-                            <p className="text-gray-600 mb-4 text-sm leading-relaxed">
+                            <p className="text-xs text-gray-600 mb-3 leading-relaxed">
                               {curso.cursos.descripcion}
                             </p>
                           )}
-                          
-                          <div className="flex flex-wrap gap-2">
-                            <span className="bg-indigo-100 text-indigo-700 px-3 py-1 rounded-full text-xs font-medium">
+
+                          <div className="flex flex-wrap gap-1.5">
+                            <span className="bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded-full text-[10px] font-medium">
                               ⏱️ {curso.cursos?.duracion_minutos || 0} min
                             </span>
                             {curso.grupos?.nombre && (
-                              <span className="bg-purple-100 text-purple-700 px-3 py-1 rounded-full text-xs font-medium">
+                              <span className="bg-purple-100 text-purple-700 px-2 py-0.5 rounded-full text-[10px] font-medium">
                                 👥 {curso.grupos.nombre}
                               </span>
                             )}
                             {curso.campañas?.nombre && (
-                              <span className="bg-pink-100 text-pink-700 px-3 py-1 rounded-full text-xs font-medium">
+                              <span className="bg-pink-100 text-pink-700 px-2 py-0.5 rounded-full text-[10px] font-medium">
                                 📊 {curso.campañas.nombre}
                               </span>
                             )}
@@ -276,12 +269,12 @@ export default function AsesorDashboard({ user, onLogout }) {
 
                         <a
                           href={`/curso/${curso.id}`}
-                          className="bg-gradient-to-r from-indigo-600 to-indigo-700 text-white px-6 py-3 rounded-xl hover:from-indigo-700 hover:to-indigo-800 transition-all font-medium shadow-md hover:shadow-xl flex items-center justify-center gap-2 whitespace-nowrap"
+                          className="bg-gradient-to-r from-indigo-600 to-indigo-700 text-white px-3 py-1.5 rounded-lg hover:from-indigo-700 hover:to-indigo-800 transition-all font-medium shadow-sm hover:shadow text-xs flex items-center gap-1 whitespace-nowrap"
                         >
-                          <span>Ver curso</span>
-                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                           </svg>
+                          Ver curso
                         </a>
                       </div>
                     </div>
@@ -292,24 +285,29 @@ export default function AsesorDashboard({ user, onLogout }) {
           </div>
         </div>
 
-        {/* Estadísticas rápidas */}
+        {/* Estadísticas rápidas - más limpias y con mejor UX */}
         {cursos.length > 0 && (
-          <div className="bg-gradient-to-r from-indigo-50 to-purple-50 rounded-2xl p-6 border border-indigo-100">
-            <h3 className="font-semibold text-gray-900 mb-4 text-lg">📊 Tu progreso</h3>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div className="bg-white rounded-xl p-5 shadow-sm border border-gray-100">
-                <p className="text-sm text-gray-600 mb-2">Cursos asignados</p>
-                <p className="text-3xl font-bold text-indigo-600">{cursos.length}</p>
+          <div className="bg-gradient-to-r from-indigo-50 to-purple-50 rounded-xl p-4 border border-indigo-100">
+            <h3 className="font-semibold text-sm text-gray-900 mb-3 flex items-center gap-1">
+              <svg className="w-4 h-4 text-indigo-600" fill="currentColor" viewBox="0 0 20 20">
+                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-8.707l-3-3a1 1 0 00-1.414 0l-3 3a1 1 0 001.414 1.414L9 9.414V13a1 1 0 102 0V9.414l1.293 1.293a1 1 0 101.414-1.414z" clipRule="evenodd" />
+              </svg>
+              Tu progreso
+            </h3>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              <div className="bg-white rounded-lg p-3 shadow-sm border border-gray-100 text-center">
+                <p className="text-xs text-gray-500 mb-1">Cursos</p>
+                <p className="text-lg font-bold text-indigo-600">{cursos.length}</p>
               </div>
-              <div className="bg-white rounded-xl p-5 shadow-sm border border-gray-100">
-                <p className="text-sm text-gray-600 mb-2">Total minutos</p>
-                <p className="text-3xl font-bold text-purple-600">
+              <div className="bg-white rounded-lg p-3 shadow-sm border border-gray-100 text-center">
+                <p className="text-xs text-gray-500 mb-1">Minutos totales</p>
+                <p className="text-lg font-bold text-purple-600">
                   {cursos.reduce((acc, c) => acc + (c.cursos_activados?.cursos?.duracion_minutos || 0), 0)}
                 </p>
               </div>
-              <div className="bg-white rounded-xl p-5 shadow-sm border border-gray-100">
-                <p className="text-sm text-gray-600 mb-2">Último curso</p>
-                <p className="text-xl font-bold text-pink-600">
+              <div className="bg-white rounded-lg p-3 shadow-sm border border-gray-100 text-center">
+                <p className="text-xs text-gray-500 mb-1">Último curso</p>
+                <p className="text-sm font-medium text-pink-600">
                   {new Date(cursos[0]?.cursos_activados?.fecha).toLocaleDateString('es-PE', {
                     day: 'numeric',
                     month: 'short'
