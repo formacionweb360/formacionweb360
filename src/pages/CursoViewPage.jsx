@@ -123,62 +123,64 @@ export default function CursoViewPage({ user, onLogout }) {
     }
   }, [tiempoVisto]);
 
-  const marcarCompletado = async () => {
-    if (!progreso || !curso) return;
+const marcarCompletado = async () => {
+  if (!progreso || !curso) return;
 
-    const confirmar = window.confirm(
-      "¿Estás seguro de marcar este curso como completado?"
-    );
+  const confirmar = window.confirm(
+    "¿Estás seguro de marcar este curso como completado?"
+  );
 
-    if (!confirmar) return;
+  if (!confirmar) return;
 
-    setGuardando(true);
-    try {
-      const { error: errorProgreso } = await supabase
-        .from("progreso_usuarios")
-        .update({
-          estado: "Completado",
-          fecha_fin: new Date().toISOString(),
-          progreso: Math.max(tiempoVisto, curso.cursos.duracion_minutos),
-        })
-        .eq("id", progreso.id);
+  setGuardando(true);
+  try {
+    // Permitir completar incluso si tiempoVisto es 0
+    const { error: errorProgreso } = await supabase
+      .from("progreso_usuarios")
+      .update({
+        estado: "Completado",
+        fecha_fin: new Date().toISOString(),
+        progreso: curso.cursos.duracion_minutos || 0, // O simplemente 0
+      })
+      .eq("id", progreso.id);
 
-      if (errorProgreso) {
-        mostrarMensaje("error", "❌ Error al completar el curso");
-        return;
-      }
-
-      // Actualizar también el campo de completado general
-      const { error: errorProgresoActivado } = await supabase
-        .from("progreso_usuarios")
-        .upsert({
-          usuario_id: user.id,
-          curso_activado_id: curso.id,
-          completado: true,
-          fecha_completado: new Date().toISOString()
-        }, {
-          onConflict: 'usuario_id,curso_activado_id'
-        });
-
-      if (errorProgresoActivado) {
-        console.error("Error actualizando progreso general:", errorProgresoActivado);
-        // No es fatal, solo un respaldo
-      }
-
-      mostrarMensaje("success", "🎉 ¡Curso completado exitosamente!");
-      
-      await cargarDatos();
-
-      setTimeout(() => {
-        navigate("/dashboard");
-      }, 2000);
-    } catch (err) {
-      console.error("Error marcando completado:", err);
-      mostrarMensaje("error", "❌ Error inesperado");
-    } finally {
-      setGuardando(false);
+    if (errorProgreso) {
+      mostrarMensaje("error", "❌ Error al completar el curso");
+      return;
     }
-  };
+
+    // Actualizar también el campo general de completado
+    const { error: errorProgresoActivado } = await supabase
+      .from("progreso_usuarios")
+      .upsert({
+        usuario_id: user.id,
+        curso_activado_id: curso.id,
+        completado: true,
+        fecha_completado: new Date().toISOString()
+      }, {
+        onConflict: 'usuario_id,curso_activado_id'
+      });
+
+    if (errorProgresoActivado) {
+      console.error("Error actualizando progreso general:", errorProgresoActivado);
+      // No es fatal
+    }
+
+    mostrarMensaje("success", "🎉 ¡Curso completado exitosamente!");
+    
+    await cargarDatos();
+
+    setTimeout(() => {
+      navigate("/dashboard");
+    }, 2000);
+  } catch (err) {
+    console.error("Error marcando completado:", err);
+    mostrarMensaje("error", "❌ Error inesperado");
+  } finally {
+    setGuardando(false);
+  }
+};
+
 
   const formatearTiempo = (minutos) => {
     const horas = Math.floor(minutos / 60);
