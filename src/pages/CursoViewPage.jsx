@@ -3,7 +3,7 @@ import { useParams, useNavigate } from "react-router-dom";
 import { supabase } from "../services/supabaseClient";
 
 export default function CursoViewPage({ user, onLogout }) {
-  const { id } = useParams();
+  const { id } = useParams(); // id es el curso_activado_id
   const navigate = useNavigate();
   
   const [curso, setCurso] = useState(null);
@@ -65,23 +65,25 @@ export default function CursoViewPage({ user, onLogout }) {
 
       setCurso(cursoData);
 
+      // Cargar progreso basado en curso_activado_id
       const { data: progresoData, error: errorProgreso } = await supabase
         .from("progreso_usuarios")
         .select("*")
-        .eq("usuario", user.usuario)
-        .eq("curso_id", cursoData.curso_id)
+        .eq("usuario_id", user.id) // Cambiado a UUID
+        .eq("curso_activado_id", cursoData.id) // Nuevo campo
         .maybeSingle();
 
       if (!errorProgreso && progresoData) {
         setProgreso(progresoData);
         setTiempoVisto(progresoData.progreso || 0);
       } else {
+        // Crear nuevo registro con curso_activado_id
         const { data: nuevoProgreso, error: errorNuevo } = await supabase
           .from("progreso_usuarios")
           .insert([
             {
-              usuario: user.usuario,
-              curso_id: cursoData.curso_id,
+              usuario_id: user.id, // UUID
+              curso_activado_id: cursoData.id, // Nuevo campo
               fecha_inicio: new Date().toISOString(),
               progreso: 0,
               estado: "En curso",
@@ -144,6 +146,23 @@ export default function CursoViewPage({ user, onLogout }) {
       if (errorProgreso) {
         mostrarMensaje("error", "❌ Error al completar el curso");
         return;
+      }
+
+      // Actualizar también el campo de completado general
+      const { error: errorProgresoActivado } = await supabase
+        .from("progreso_usuarios")
+        .upsert({
+          usuario_id: user.id,
+          curso_activado_id: curso.id,
+          completado: true,
+          fecha_completado: new Date().toISOString()
+        }, {
+          onConflict: 'usuario_id,curso_activado_id'
+        });
+
+      if (errorProgresoActivado) {
+        console.error("Error actualizando progreso general:", errorProgresoActivado);
+        // No es fatal, solo un respaldo
       }
 
       mostrarMensaje("success", "🎉 ¡Curso completado exitosamente!");
@@ -382,7 +401,7 @@ export default function CursoViewPage({ user, onLogout }) {
                     </div>
                     {progreso.fecha_fin && (
                       <div className="flex justify-between">
-                        <span className="text-gray-600">Completado:</span>
+                        <span className="text-gray-500">Completado:</span>
                         <span className="font-semibold text-gray-900">
                           {new Date(progreso.fecha_fin).toLocaleDateString('es-PE', {
                             day: 'numeric',
