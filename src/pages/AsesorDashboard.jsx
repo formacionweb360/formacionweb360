@@ -26,6 +26,8 @@ export default function AsesorDashboard({ user, onLogout }) {
   const cargarCursos = async () => {
     setLoading(true);
     try {
+      console.log("🔄 Cargando cursos para usuario:", user.usuario); // 👈 LOG 1
+
       const { data, error } = await supabase
         .from("cursos_asesores")
         .select(`
@@ -48,7 +50,7 @@ export default function AsesorDashboard({ user, onLogout }) {
         .order('cursos_activados(fecha)', { ascending: false });
 
       if (error) {
-        console.error("Error cargando cursos del asesor:", error);
+        console.error("❌ Error cargando cursos del asesor:", error);
         mostrarMensaje("error", "❌ Error al cargar cursos");
         setCursos([]);
       } else {
@@ -58,14 +60,28 @@ export default function AsesorDashboard({ user, onLogout }) {
         // Cargar progreso para cada curso
         const cursosConProgreso = await Promise.all(
           cursosValidos.map(async (c) => {
+            const cursoId = c.cursos_activados.curso_id;
+            console.log(`🔍 Buscando progreso para curso_id=${cursoId} y usuario=${user.usuario}`); // 👈 LOG 2
+
             const {  progresoData, error: errorProgreso } = await supabase
               .from("progreso_usuarios")
               .select("estado")
-              .eq("usuario", user.usuario) // Asumiendo que user.usuario es el nombre de usuario
-              .eq("curso_id", c.cursos_activados.curso_id)
+              .eq("usuario", user.usuario)
+              .eq("curso_id", cursoId)
               .single();
 
-            const completado = progresoData?.estado === "Completado";
+            if (errorProgreso) {
+              console.error("❌ Error al cargar progreso:", errorProgreso);
+            }
+
+            console.log("📦 Progreso encontrado:", progresoData); // 👈 LOG 3
+
+            // Comparar estado de forma tolerante
+            const estadoLimpio = progresoData?.estado?.trim()?.toLowerCase();
+            const completado = estadoLimpio === "completado";
+            
+            console.log("✅ Estado limpio:", estadoLimpio, "| Completado:", completado); // 👈 LOG 4
+
             return { ...c, completado };
           })
         );
@@ -77,7 +93,7 @@ export default function AsesorDashboard({ user, onLogout }) {
         }
       }
     } catch (err) {
-      console.error("Excepción cargando cursos:", err);
+      console.error("❌ Excepción cargando cursos:", err);
       mostrarMensaje("error", "❌ Error al cargar cursos");
       setCursos([]);
     } finally {
