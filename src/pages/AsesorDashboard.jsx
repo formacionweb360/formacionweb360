@@ -61,7 +61,7 @@ export default function AsesorDashboard({ user, onLogout }) {
             const {  progresoData, error: errorProgreso } = await supabase
               .from("progreso_usuarios")
               .select("estado")
-              .eq("usuario", user.usuario)
+              .eq("usuario", user.usuario) // Asumiendo que user.usuario es el nombre de usuario
               .eq("curso_id", c.cursos_activados.curso_id)
               .single();
 
