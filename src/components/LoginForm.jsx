@@ -173,4 +173,28 @@ export default function LoginForm({ onLogin }) {
       `}</style>
     </div>
   );
+  /* Animaciones extras */
+  <style>{`
+    @keyframes aurora {
+      0%,100% { opacity:0.5; transform:translateY(0) scale(1); }
+      50% { opacity:0.9; transform:translateY(-40px) scale(1.1); }
+    }
+    .animate-aurora { animation: aurora 12s infinite ease-in-out; }
+    .animate-aurora-delayed { animation: aurora 14s infinite ease-in-out; animation-delay:3s }
+
+    @keyframes float2 {
+      0%{transform:translateY(0);opacity:.4}
+      50%{transform:translateY(-20px);opacity:1}
+      100%{transform:translateY(0);opacity:.4}
+    }
+    .float2{animation:float2 7s ease-in-out infinite}
+
+    @keyframes shoot2 {
+      0%{opacity:0;transform:translate(0,0)}
+      20%{opacity:1}
+      100%{opacity:0;transform:translate(-100px,80px)}
+    }
+    .shoot2{animation:shoot2 5s linear infinite}
+  `}</style>
 }
+
