@@ -676,4 +676,4 @@ export default function FormadorPage({ user, onLogout }) {
       </div>
     </div>
   );
-}, 
+}
