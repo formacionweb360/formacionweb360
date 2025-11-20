@@ -66,7 +66,6 @@ export default function FormadorPage({ user, onLogout }) {
     setLoading(true);
 
     try {
-      // ✅ CORREGIDO: Usar 'data' en lugar de 'gruposData'
       const {  data, error: gruposError } = await supabase
         .from("grupos")
         .select("*")
@@ -79,7 +78,6 @@ export default function FormadorPage({ user, onLogout }) {
         return;
       }
 
-      // ✅ CORREGIDO: Usar (data || []) para evitar error si data es undefined
       const gruposConConteo = await Promise.all(
         (data || []).map(async (g) => {
           const { count } = await supabase
@@ -259,7 +257,7 @@ export default function FormadorPage({ user, onLogout }) {
         return;
       }
 
-      const { data: grupo, error: errGrupo } = await supabase
+      const {  grupo, error: errGrupo } = await supabase
         .from("grupos")
         .select("nombre")
         .eq("id", grupo_id)
@@ -506,7 +504,7 @@ export default function FormadorPage({ user, onLogout }) {
                 <h3 className="font-semibold text-white mb-3 flex items-center gap-2">
                   <span className="bg-indigo-500/20 text-indigo-300 p-1 rounded border border-indigo-500/30">
                     <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-                      <path fillRule="evenodd" d="M18 10a8 8 0 100-16 8 8 0 000 16zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3.25a1 1 0 102 0V11a1 1 0 100-2V9z" clipRule="evenodd" />
+                      <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-6-3a2 2 0 11-4 0 2 2 0 014 0zm-2 4a5 5 0 00-4.546 2.916A5.986 5.986 0 005 10a6 6 0 0012 0c0-.35-.036-.687-.101-1.016A5 5 0 0010 11z" clipRule="evenodd" />
                     </svg>
                   </span>
                   Malla de cursos
@@ -578,7 +576,7 @@ export default function FormadorPage({ user, onLogout }) {
                 <p className="text-xs text-gray-500">Activa un curso para comenzar</p>
               </div>
             ) : (
-              <div className="space-y-3">
+              <div className="max-h-[60vh] overflow-y-auto space-y-3">
                 {gruposMostrados.map((grupoData) => {
                   const grupo = grupoData.grupo;
                   const cursosDelGrupo = grupoData.cursos;
@@ -624,7 +622,7 @@ export default function FormadorPage({ user, onLogout }) {
                           {cursosDelGrupo.map((a) => (
                             <div
                               key={a.id}
-                              className="border border-white/20 rounded-lg p-3 hover:shadow-md transition-all bg-white/10"
+                              className="border border-white/20 rounded-lg p-3 hover:shadow-md transition-shadow bg-white/10"
                             >
                               <div className="flex justify-between items-start">
                                 <div className="flex-1 min-w-0">
