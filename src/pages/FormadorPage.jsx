@@ -14,7 +14,7 @@ export default function FormadorPage({ user, onLogout }) {
   const [gruposConCursos, setGruposConCursos] = useState([]);
   const [loading, setLoading] = useState(false);
   const [mensaje, setMensaje] = useState({ tipo: "", texto: "" });
-  const [expandedGroups, setExpandedGroups] = useState(new Set());
+  const [expandedGroups, setExpandedGroups] = useState(new Set()); // ✅ Mantenido como Set
 
   const fechaHoy = new Date().toISOString().split("T")[0];
   const fechaHoyFormateada = new Date().toLocaleDateString('es-PE', {
@@ -58,16 +58,12 @@ export default function FormadorPage({ user, onLogout }) {
 
   const cargarGrupos = async (campana_id) => {
     if (!campana_id) {
-      console.log("No se proporcionó campana_id, omitiendo carga de grupos.");
-      setGrupos([]);
       return;
     }
-    console.log("Iniciando carga de grupos para campana_id:", campana_id);
     setLoading(true);
 
     try {
-      // ✅ CORREGIDO: Usar 'data' en lugar de 'gruposData'
-      const { data, error: gruposError } = await supabase
+      const {  gruposData, error: gruposError } = await supabase
         .from("grupos")
         .select("*")
         .eq("campana_id", campana_id);
@@ -78,14 +74,8 @@ export default function FormadorPage({ user, onLogout }) {
         return;
       }
 
-      // ✅ CORREGIDO: Verificar que 'data' exista antes de usar .map
-      if (!data) {
-        setGrupos([]);
-        return;
-      }
-
       const gruposConConteo = await Promise.all(
-        data.map(async (g) => {
+        gruposData.map(async (g) => {
           const { count } = await supabase
             .from("usuarios")
             .select("*", { count: "exact", head: true })
@@ -96,15 +86,13 @@ export default function FormadorPage({ user, onLogout }) {
           return {
             ...g,
             activos: count || 0,
-            id: Number(g.id),
+            id: Number(g.id), // ✅ Asegurar número
             nombre: String(g.nombre || "").trim(),
           };
         })
       );
 
       setGrupos(gruposConConteo);
-      console.log("Grupos cargados y procesados:", gruposConConteo);
-
     } catch (err) {
       console.error("Error *interno* en cargarGrupos:", err);
       setGrupos([]);
@@ -115,10 +103,8 @@ export default function FormadorPage({ user, onLogout }) {
   
   const cargarCursos = async (campana_id, grupo_id) => {
     if (!campana_id || !grupo_id) {
-        console.log("Falta campana_id o grupo_id, omitiendo carga de cursos.");
         return;
     }
-    console.log("Iniciando carga de cursos para campana_id:", campana_id, "grupo_id:", grupo_id);
     setLoading(true);
     try {
       let query = supabase
@@ -139,7 +125,6 @@ export default function FormadorPage({ user, onLogout }) {
       const { data, error } = await query;
       if (!error) {
         setCursos(data || []);
-        console.log("Cursos cargados:", data);
       } else {
         console.error("Error al cargar cursos:", error);
         setCursos([]);
@@ -202,14 +187,13 @@ export default function FormadorPage({ user, onLogout }) {
       );
       setActivos(activosConConteo);
 
-      // Agrupar cursos por grupo (usando grupo_id)
+      // Agrupar cursos por grupo
       const gruposMap = {};
       activosConConteo.forEach((a) => {
         const grupoId = a.grupo_id;
         if (!gruposMap[grupoId]) {
-          const grupoEncontrado = grupos.find(g => g.id === grupoId);
           gruposMap[grupoId] = {
-            grupo: grupoEncontrado || { nombre: "Sin grupo" },
+            grupo: a.grupos,
             cursos: [],
           };
         }
@@ -231,6 +215,7 @@ export default function FormadorPage({ user, onLogout }) {
       return;
     }
 
+    // ✅ Validar grupo_id
     const grupoIdNumerico = Number(grupo_id);
     if (isNaN(grupoIdNumerico) || grupoIdNumerico <= 0) {
       mostrarMensaje("error", "⚠️ Grupo inválido");
@@ -388,11 +373,10 @@ export default function FormadorPage({ user, onLogout }) {
   const toggleGroup = (groupId) => {
     setExpandedGroups(prev => {
       const newSet = new Set(prev);
-      const groupIdNum = Number(groupId);
-      if (newSet.has(groupIdNum)) {
-        newSet.delete(groupIdNum);
+      if (newSet.has(Number(groupId))) { // ✅ Comparar como número
+        newSet.delete(Number(groupId));
       } else {
-        newSet.add(groupIdNum);
+        newSet.add(Number(groupId));
       }
       return newSet;
     });
@@ -459,7 +443,118 @@ export default function FormadorPage({ user, onLogout }) {
         <div className="grid md:grid-cols-2 gap-6">
           {/* Panel de activación (izquierda) - sin cambios */}
           <div className="bg-white/10 backdrop-blur-md rounded-2xl border border-white/20 shadow-xl shadow-purple-500/5 p-6 space-y-4">
-            {/* ... (contenido del panel de activación igual) ... */}
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="font-semibold text-xl text-white flex items-center gap-2">
+                <span className="bg-indigo-500/20 text-indigo-300 p-2 rounded-lg border border-indigo-500/30">
+                  <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                  </svg>
+                </span>
+                Activar Curso
+              </h2>
+              {loading && (
+                <div className="w-5 h-5 border-2 border-purple-400 border-t-transparent rounded-full animate-spin"></div>
+              )}
+            </div>
+
+            {/* Selección de campaña */}
+            <div>
+              <label className="block text-sm font-medium text-gray-300 mb-2">
+                Campaña
+              </label>
+              <select
+                className="w-full bg-white/10 border border-white/20 rounded-lg p-3 focus:ring-2 focus:ring-purple-400 focus:border-transparent transition text-sm text-white placeholder-gray-400"
+                value={seleccion.campana_id}
+                onChange={(e) => handleCampanaChange(e.target.value)}
+                disabled={loading}
+              >
+                <option value="" className="bg-slate-800">Selecciona una campaña</option>
+                {campañas.map((c) => (
+                  <option key={c.id} value={c.id} className="bg-slate-800">
+                    {c.nombre}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Selección de grupo */}
+            <div>
+              <label className="block text-sm font-medium text-gray-300 mb-2">
+                Grupo
+              </label>
+              <select
+                className="w-full bg-white/10 border border-white/20 rounded-lg p-3 focus:ring-2 focus:ring-purple-400 focus:border-transparent transition text-sm text-white placeholder-gray-400 disabled:bg-gray-700"
+                value={seleccion.grupo_id}
+                onChange={(e) => handleGrupoChange(e.target.value)}
+                disabled={!seleccion.campana_id || loading}
+              >
+                <option value="" className="bg-slate-800">Selecciona un grupo</option>
+                {grupos.map((g) => (
+                  <option key={g.id} value={g.id} className="bg-slate-800">
+                    {g.nombre} ({g.activos || 0} asesores activos)
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Vista previa de malla */}
+            {cursos.length > 0 && (
+              <div className="bg-gradient-to-r from-purple-500/10 to-pink-500/10 backdrop-blur-sm rounded-xl border border-purple-500/20 p-4">
+                <h3 className="font-semibold text-white mb-3 flex items-center gap-2">
+                  <span className="bg-indigo-500/20 text-indigo-300 p-1 rounded border border-indigo-500/30">
+                    <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-6-3a2 2 0 11-4 0 2 2 0 014 0zm-2 4a5 5 0 00-4.546 2.916A5.986 5.986 0 005 10a6 6 0 0012 0c0-.35-.036-.687-.101-1.016A5 5 0 0010 11z" clipRule="evenodd" />
+                    </svg>
+                  </span>
+                  Malla de cursos
+                  <span className="text-sm font-normal text-gray-400">({cursos.length} cursos)</span>
+                </h3>
+                <div className="space-y-2 max-h-40 overflow-y-auto">
+                  {cursos.map((c, index) => (
+                    <div
+                      key={c.id}
+                      className="flex items-center justify-between bg-white/10 p-2 rounded-md shadow-sm text-sm"
+                    >
+                      <div className="flex items-center gap-2">
+                        <span className="flex items-center justify-center w-6 h-6 bg-indigo-500/20 text-indigo-300 rounded-full text-[0.6rem] font-bold border border-indigo-500/30">
+                          {index + 1}
+                        </span>
+                        <span className="font-medium text-gray-200 truncate max-w-[120px] md:max-w-[180px]">{c.titulo}</span>
+                      </div>
+                      <span className="text-xs text-gray-400">{c.duracion_minutos} min</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Selección de curso */}
+            <div>
+              <label className="block text-sm font-medium text-gray-300 mb-2">
+                Curso a activar
+              </label>
+              <select
+                className="w-full bg-white/10 border border-white/20 rounded-lg p-3 focus:ring-2 focus:ring-purple-400 focus:border-transparent transition text-sm text-white placeholder-gray-400 disabled:bg-gray-700"
+                value={seleccion.curso_id}
+                onChange={(e) => setSeleccion({ ...seleccion, curso_id: e.target.value })}
+                disabled={!cursos.length || loading}
+              >
+                <option value="" className="bg-slate-800">Selecciona el curso a activar</option>
+                {cursos.map((c) => (
+                  <option key={c.id} value={c.id} className="bg-slate-800">
+                    {c.titulo} - {c.duracion_minutos} min
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <button
+              onClick={activarCurso}
+              disabled={!seleccion.curso_id || loading}
+              className="w-full bg-gradient-to-r from-indigo-500 to-purple-600 text-white py-3 px-4 rounded-lg hover:shadow-lg hover:shadow-indigo-500/20 transition-all font-medium shadow-md disabled:opacity-50 disabled:cursor-not-allowed text-sm"
+            >
+              {loading ? "Activando..." : "✨ Activar curso de hoy"}
+            </button>
           </div>
 
           {/* Panel de grupos asignados (derecha) - CON ACORDEÓN */}
@@ -484,8 +579,8 @@ export default function FormadorPage({ user, onLogout }) {
                 {gruposConCursos.map((grupoData) => {
                   const grupo = grupoData.grupo;
                   const cursosDelGrupo = grupoData.cursos;
-                  const groupId = Number(grupo.id);
-                  const isExpanded = expandedGroups.has(groupId);
+                  const groupId = Number(grupo.id); // ✅ Convertir a número
+                  const isExpanded = expandedGroups.has(groupId); // ✅ Comparar con número
 
                   return (
                     <div
@@ -494,7 +589,7 @@ export default function FormadorPage({ user, onLogout }) {
                     >
                       {/* Encabezado del acordeón */}
                       <div
-                        onClick={() => toggleGroup(grupo.id)}
+                        onClick={() => toggleGroup(grupo.id)} // ✅ Pasar ID como string o número, toggle lo convierte
                         className="flex items-center justify-between p-4 cursor-pointer hover:bg-white/10 transition-colors"
                       >
                         <div className="flex items-center gap-2">
@@ -511,7 +606,7 @@ export default function FormadorPage({ user, onLogout }) {
                         <svg
                           className={`w-5 h-5 text-gray-400 transition-transform duration-300 ${
                             isExpanded ? "rotate-180" : ""
-                          }`}
+                          }`} // ✅ Rotación condicional
                           fill="none"
                           stroke="currentColor"
                           viewBox="0 0 24 24"
@@ -521,7 +616,7 @@ export default function FormadorPage({ user, onLogout }) {
                       </div>
 
                       {/* Contenido del acordeón - cursos del grupo */}
-                      {isExpanded && (
+                      {isExpanded && ( // ✅ Condición correcta
                         <div className="border-t border-white/20 p-4 space-y-3">
                           {cursosDelGrupo.map((a) => (
                             <div
