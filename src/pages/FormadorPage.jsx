@@ -14,7 +14,7 @@ export default function FormadorPage({ user, onLogout }) {
   const [gruposConCursos, setGruposConCursos] = useState([]); // Nuevo estado para agrupar
   const [loading, setLoading] = useState(false);
   const [mensaje, setMensaje] = useState({ tipo: "", texto: "" });
-  const [expandedGroups, setExpandedGroups] = useState(new Set()); // Estado para acordeones
+  const [expandedGroups, setExpandedGroups] = useState({}); // ✅ Cambiado a objeto
 
   const fechaHoy = new Date().toISOString().split("T")[0];
   const fechaHoyFormateada = new Date().toLocaleDateString('es-PE', {
@@ -63,7 +63,7 @@ export default function FormadorPage({ user, onLogout }) {
     setLoading(true);
 
     try {
-      const { data: gruposData, error: gruposError } = await supabase
+      const {  gruposData, error: gruposError } = await supabase
         .from("grupos")
         .select("*")
         .eq("campana_id", campana_id);
@@ -187,7 +187,7 @@ export default function FormadorPage({ user, onLogout }) {
       );
       setActivos(activosConConteo);
 
-      // Agrupar cursos por grupo para el acordeón
+      // Agrupar cursos por grupo
       const gruposMap = {};
       activosConConteo.forEach((a) => {
         const grupoId = a.grupo_id;
@@ -215,15 +215,23 @@ export default function FormadorPage({ user, onLogout }) {
       return;
     }
 
+    // ✅ Validar grupo_id
+    const grupoIdNumerico = Number(grupo_id);
+    if (isNaN(grupoIdNumerico) || grupoIdNumerico <= 0) {
+      mostrarMensaje("error", "⚠️ Grupo inválido");
+      return;
+    }
+
     setLoading(true);
 
     try {
-      const { data: existe } = await supabase
+      // Verificar si ya existe
+      const {  existe } = await supabase
         .from("cursos_activados")
         .select("*")
         .eq("fecha", fechaHoy)
         .eq("campana_id", campana_id)
-        .eq("grupo_id", grupo_id)
+        .eq("grupo_id", grupoIdNumerico)
         .eq("curso_id", curso_id)
         .maybeSingle();
 
@@ -232,12 +240,13 @@ export default function FormadorPage({ user, onLogout }) {
         return;
       }
 
-      const { data: activacion, error } = await supabase
+      // Insertar curso activado
+      const {  activacion, error } = await supabase
         .from("cursos_activados")
         .insert([
           {
             campana_id,
-            grupo_id,
+            grupo_id: grupoIdNumerico,
             curso_id,
             fecha: fechaHoy,
             activo: true,
@@ -253,19 +262,21 @@ export default function FormadorPage({ user, onLogout }) {
         return;
       }
 
-      const { data: grupo, error: errGrupo } = await supabase
+      // ✅ OBTENER EL GRUPO
+      const {  data: grupo, error: errGrupo } = await supabase
         .from("grupos")
         .select("nombre")
-        .eq("id", grupo_id)
+        .eq("id", grupoIdNumerico)
         .single();
 
       if (errGrupo || !grupo) {
-        console.error("Error al obtener el grupo:", errGrupo);
+        console.error("Error al obtener el grupo:", errGrupo, "ID:", grupoIdNumerico);
         mostrarMensaje("error", "❌ Error al obtener el grupo");
         return;
       }
 
-      const { data: asesores, error: errAsesores } = await supabase
+      // ✅ OBTENER ASESORES
+      const {  data: asesores, error: errAsesores } = await supabase
         .from("usuarios")
         .select("id")
         .eq("rol", "usuario")
@@ -295,7 +306,7 @@ export default function FormadorPage({ user, onLogout }) {
         mostrarMensaje("success", "✅ Curso activado (sin asesores en el grupo)");
       }
 
-      await cargarActivos(); // Refrescar agrupación
+      await cargarActivos();
       await cargarGrupos(seleccion.campana_id);
       setSeleccion({ ...seleccion, curso_id: "" });
 
@@ -336,7 +347,7 @@ export default function FormadorPage({ user, onLogout }) {
       }
 
       mostrarMensaje("success", "🗑️ Curso desactivado correctamente");
-      await cargarActivos(); // Refrescar agrupación
+      await cargarActivos();
 
     } catch (err) {
       mostrarMensaje("error", "❌ Error inesperado al desactivar");
@@ -362,17 +373,12 @@ export default function FormadorPage({ user, onLogout }) {
     }
   };
 
-  // Función para alternar grupo
+  // ✅ Función para alternar grupo (corregida)
   const toggleGroup = (groupId) => {
-    setExpandedGroups(prev => {
-      const newSet = new Set(prev);
-      if (newSet.has(groupId)) {
-        newSet.delete(groupId);
-      } else {
-        newSet.add(groupId);
-      }
-      return newSet;
-    });
+    setExpandedGroups(prev => ({
+      ...prev,
+      [groupId]: !prev[groupId] // ✅ Alterna solo el grupo clickeado
+    }));
   };
 
   return (
@@ -550,7 +556,7 @@ export default function FormadorPage({ user, onLogout }) {
             </button>
           </div>
 
-          {/* Panel de grupos asignados (derecha) - CON ACORDEÓN */}
+          {/* Panel de grupos asignados (derecha) - CON ACORDEÓN INDIVIDUAL */}
           <div className="bg-white/10 backdrop-blur-md rounded-2xl border border-white/20 shadow-xl shadow-purple-500/5 p-6">
             <h2 className="font-semibold text-xl text-white mb-4 flex items-center gap-2">
               <span className="bg-green-500/20 text-green-300 p-2 rounded-lg border border-green-500/30">
@@ -563,7 +569,7 @@ export default function FormadorPage({ user, onLogout }) {
 
             {gruposConCursos.length === 0 ? (
               <div className="text-center py-12">
-                <div className="text-6xl mb-4 text-gray-500">📭</div>
+                <div className="text-6xl mb-4 text-gray-500">📂</div>
                 <p className="text-gray-400 text-sm mb-1">No hay grupos con cursos activos</p>
                 <p className="text-xs text-gray-500">Activa un curso para asignarlo a un grupo</p>
               </div>
@@ -573,16 +579,16 @@ export default function FormadorPage({ user, onLogout }) {
                   const grupo = grupoData.grupo;
                   const cursosDelGrupo = grupoData.cursos;
                   const groupId = grupo.id;
-                  const isExpanded = expandedGroups.has(groupId);
+                  const isExpanded = expandedGroups[groupId] || false; // ✅ Leer del objeto
 
                   return (
                     <div
-                      key={groupId}
+                      key={grupo.id} // ✅ Key único
                       className="border border-white/20 rounded-lg overflow-hidden bg-white/5"
                     >
                       {/* Encabezado del acordeón */}
                       <div
-                        onClick={() => toggleGroup(groupId)}
+                        onClick={() => toggleGroup(grupo.id)} // ✅ Toggle con ID correcto
                         className="flex items-center justify-between p-4 cursor-pointer hover:bg-white/10 transition-colors"
                       >
                         <div className="flex items-center gap-2">
@@ -598,7 +604,7 @@ export default function FormadorPage({ user, onLogout }) {
                         </div>
                         <svg
                           className={`w-5 h-5 text-gray-400 transition-transform duration-300 ${
-                            isExpanded ? "rotate-180" : ""
+                            isExpanded ? "rotate-180" : "" // ✅ Rotación condicional
                           }`}
                           fill="none"
                           stroke="currentColor"
@@ -609,11 +615,11 @@ export default function FormadorPage({ user, onLogout }) {
                       </div>
 
                       {/* Contenido del acordeón - cursos del grupo */}
-                      {isExpanded && (
+                      {isExpanded && ( // ✅ Condición basada en el objeto
                         <div className="border-t border-white/20 p-4 space-y-3">
                           {cursosDelGrupo.map((a) => (
                             <div
-                              key={a.id}
+                              key={a.id} // ✅ Key único para cada curso
                               className="border border-white/20 rounded-lg p-3 hover:shadow-md transition-all bg-white/10"
                             >
                               <div className="flex justify-between items-start">
