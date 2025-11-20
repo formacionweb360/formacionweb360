@@ -11,7 +11,7 @@ export default function FormadorPage({ user, onLogout }) {
     curso_id: "",
   });  
   const [activos, setActivos] = useState([]);
-  const [gruposConCursos, setGruposConCursos] = useState([]); // Nuevo estado para agrupar
+  const [gruposConCursos, setGruposConCursos] = useState([]); // Para el acordeón
   const [loading, setLoading] = useState(false);
   const [mensaje, setMensaje] = useState({ tipo: "", texto: "" });
   const [expandedGroups, setExpandedGroups] = useState(new Set());
@@ -77,19 +77,22 @@ export default function FormadorPage({ user, onLogout }) {
         return;
       }
 
+      // ✅ Cargar conteo de asesores activos por grupo
       const gruposConConteo = await Promise.all(
         (data || []).map(async (g) => {
+          // ✅ Usar 'nombre' del grupo para buscar usuarios
           const { count } = await supabase
             .from("usuarios")
             .select("*", { count: "exact", head: true })
-            .eq("grupo_nombre", g.nombre)
+            .eq("grupo_nombre", g.nombre) // <- Campo clave
             .eq("rol", "usuario")
             .eq("estado", "Activo");
 
           return {
             ...g,
             activos: count || 0,
-            id: Number(g.id), // Asegurar que sea número
+            id: Number(g.id), // Asegurar tipo número
+            nombre: String(g.nombre || "").trim(), // Asegurar tipo string
           };
         })
       );
@@ -194,7 +197,7 @@ export default function FormadorPage({ user, onLogout }) {
       );
       setActivos(activosConConteo);
 
-      // Agrupar cursos por grupo
+      // Agrupar cursos por grupo para el acordeón
       const gruposMap = {};
       activosConConteo.forEach((a) => {
         const grupoId = a.grupo_id;
@@ -253,7 +256,7 @@ export default function FormadorPage({ user, onLogout }) {
         .insert([
           {
             campana_id,
-            grupo_id: grupoIdNumerico, // ✅ Usar el número
+            grupo_id: grupoIdNumerico,
             curso_id,
             fecha: fechaHoy,
             activo: true,
@@ -269,7 +272,7 @@ export default function FormadorPage({ user, onLogout }) {
         return;
       }
 
-      // ✅ OBTENER EL GRUPO
+      // ✅ OBTENER EL GRUPO POR SU ID
       const {  data: grupo, error: errGrupo } = await supabase
         .from("grupos")
         .select("nombre")
@@ -282,12 +285,12 @@ export default function FormadorPage({ user, onLogout }) {
         return;
       }
 
-      // ✅ OBTENER ASESORES
+      // ✅ OBTENER ASESORES DEL GRUPO POR NOMBRE
       const {  data: asesores, error: errAsesores } = await supabase
         .from("usuarios")
         .select("id")
         .eq("rol", "usuario")
-        .eq("grupo_nombre", grupo.nombre)
+        .eq("grupo_nombre", grupo.nombre) // <- Usamos el nombre del grupo obtenido
         .eq("estado", "Activo");
 
       if (errAsesores) {
@@ -297,23 +300,30 @@ export default function FormadorPage({ user, onLogout }) {
       }
 
       if (asesores && asesores.length > 0) {
-        const { error: errorInsert } = await supabase.from("cursos_asesores").insert(
-          asesores.map((u) => ({
-            curso_activado_id: activacion.id,
-            asesor_id: u.id,
-          }))
-        );
+        // ✅ Filtrar asesores válidos antes de insertar
+        const asesoresValidos = asesores.filter(asesor => asesor && asesor.id);
 
-        if (errorInsert) {
-          mostrarMensaje("error", "⚠️ Curso activado pero error al asignar asesores");
+        if (asesoresValidos.length === 0) {
+          mostrarMensaje("success", "✅ Curso activado (sin asesores válidos en el grupo)");
         } else {
-          mostrarMensaje("success", `✅ Curso activado y asignado a ${asesores.length} asesores`);
+          const { error: errorInsert } = await supabase.from("cursos_asesores").insert(
+            asesoresValidos.map((u) => ({
+              curso_activado_id: activacion.id,
+              asesor_id: u.id,
+            }))
+          );
+
+          if (errorInsert) {
+            mostrarMensaje("error", "⚠️ Curso activado pero error al asignar asesores");
+          } else {
+            mostrarMensaje("success", `✅ Curso activado y asignado a ${asesoresValidos.length} asesores`);
+          }
         }
       } else {
         mostrarMensaje("success", "✅ Curso activado (sin asesores en el grupo)");
       }
 
-      await cargarActivos();
+      await cargarActivos(); // Refrescar lista de activos y grupos
       await cargarGrupos(seleccion.campana_id);
       setSeleccion({ ...seleccion, curso_id: "" });
 
@@ -354,7 +364,7 @@ export default function FormadorPage({ user, onLogout }) {
       }
 
       mostrarMensaje("success", "🗑️ Curso desactivado correctamente");
-      await cargarActivos();
+      await cargarActivos(); // Refrescar lista
 
     } catch (err) {
       mostrarMensaje("error", "❌ Error inesperado al desactivar");
@@ -619,8 +629,7 @@ export default function FormadorPage({ user, onLogout }) {
                             isExpanded ? "rotate-180" : ""
                           }`}
                           fill="none"
-                          stroke="currentColor"
-                          viewBox="0 0 24 24"
+                          stroke="currentColor" viewBox="0 0 24 24"
                         >
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                         </svg>
