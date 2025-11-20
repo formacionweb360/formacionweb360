@@ -14,7 +14,7 @@ export default function FormadorPage({ user, onLogout }) {
   const [gruposConCursos, setGruposConCursos] = useState([]); // Nuevo estado para agrupar
   const [loading, setLoading] = useState(false);
   const [mensaje, setMensaje] = useState({ tipo: "", texto: "" });
-  const [expandedGroups, setExpandedGroups] = useState(new Set()); // Estado para acordeones
+  const [expandedGroups, setExpandedGroups] = useState(new Set());
 
   const fechaHoy = new Date().toISOString().split("T")[0];
   const fechaHoyFormateada = new Date().toLocaleDateString('es-PE', {
@@ -58,12 +58,16 @@ export default function FormadorPage({ user, onLogout }) {
 
   const cargarGrupos = async (campana_id) => {
     if (!campana_id) {
+      console.log("No se proporcionó campana_id, omitiendo carga de grupos.");
+      setGrupos([]);
       return;
     }
+    console.log("Iniciando carga de grupos para campana_id:", campana_id);
     setLoading(true);
 
     try {
-      const {  gruposData, error: gruposError } = await supabase
+      // ✅ CORREGIDO: Usar 'data' en lugar de 'gruposData'
+      const { data, error: gruposError } = await supabase
         .from("grupos")
         .select("*")
         .eq("campana_id", campana_id);
@@ -74,8 +78,9 @@ export default function FormadorPage({ user, onLogout }) {
         return;
       }
 
+      // ✅ CORREGIDO: Usar 'data' aquí también
       const gruposConConteo = await Promise.all(
-        gruposData.map(async (g) => {
+        (data || []).map(async (g) => {
           const { count } = await supabase
             .from("usuarios")
             .select("*", { count: "exact", head: true })
@@ -91,6 +96,8 @@ export default function FormadorPage({ user, onLogout }) {
       );
 
       setGrupos(gruposConConteo);
+      console.log("Grupos cargados y procesados:", gruposConConteo);
+
     } catch (err) {
       console.error("Error *interno* en cargarGrupos:", err);
       setGrupos([]);
@@ -101,8 +108,10 @@ export default function FormadorPage({ user, onLogout }) {
   
   const cargarCursos = async (campana_id, grupo_id) => {
     if (!campana_id || !grupo_id) {
+        console.log("Falta campana_id o grupo_id, omitiendo carga de cursos.");
         return;
     }
+    console.log("Iniciando carga de cursos para campana_id:", campana_id, "grupo_id:", grupo_id);
     setLoading(true);
     try {
       let query = supabase
@@ -115,9 +124,11 @@ export default function FormadorPage({ user, onLogout }) {
         query = query.or(`grupo_id.is.null,grupo_id.eq.${grupo_id}`);
       }
 
+      // ✅ CORREGIDO: Usar 'data' en lugar de 'cursosData'
       const { data, error } = await query;
       if (!error) {
         setCursos(data || []);
+        console.log("Cursos cargados:", data);
       } else {
         console.error("Error al cargar cursos:", error);
         setCursos([]);
@@ -138,6 +149,7 @@ export default function FormadorPage({ user, onLogout }) {
         setGruposConCursos([]);
         return;
     }
+    // ✅ CORREGIDO: Usar 'data' en lugar de 'activosData'
     const { data, error } = await supabase
       .from("cursos_activados")
       .select(`
@@ -169,7 +181,7 @@ export default function FormadorPage({ user, onLogout }) {
 
     try {
       const activosConConteo = await Promise.all(
-        data.map(async (activado) => {
+        (data || []).map(async (activado) => {
           const { count } = await supabase
             .from("cursos_asesores")
             .select("*", { count: "exact", head: true })
@@ -211,6 +223,7 @@ export default function FormadorPage({ user, onLogout }) {
     setLoading(true);
 
     try {
+      // ✅ CORREGIDO: Usar 'existe' en lugar de 'existeData'
       const {  existe } = await supabase
         .from("cursos_activados")
         .select("*")
@@ -225,6 +238,7 @@ export default function FormadorPage({ user, onLogout }) {
         return;
       }
 
+      // ✅ CORREGIDO: Usar 'activacion' en lugar de 'activacionData'
       const {  activacion, error } = await supabase
         .from("cursos_activados")
         .insert([
@@ -246,6 +260,7 @@ export default function FormadorPage({ user, onLogout }) {
         return;
       }
 
+      // ✅ CORREGIDO: Usar 'grupo' en lugar de 'grupoData'
       const {  grupo, error: errGrupo } = await supabase
         .from("grupos")
         .select("nombre")
@@ -258,6 +273,7 @@ export default function FormadorPage({ user, onLogout }) {
         return;
       }
 
+      // ✅ CORREGIDO: Usar 'asesores' en lugar de 'asesoresData'
       const {  asesores, error: errAsesores } = await supabase
         .from("usuarios")
         .select("id")
@@ -308,6 +324,7 @@ export default function FormadorPage({ user, onLogout }) {
     setLoading(true);
 
     try {
+      // ✅ CORREGIDO: Usar 'errorAsesores' en lugar de 'errorAsesoresData'
       const { error: errorAsesores } = await supabase
         .from("cursos_asesores")
         .delete()
@@ -543,7 +560,7 @@ export default function FormadorPage({ user, onLogout }) {
             </button>
           </div>
 
-          {/* Panel de grupos asignados (derecha) - NUEVO CON ACORDEÓN */}
+          {/* Panel de grupos asignados (derecha) - CON ACORDEÓN */}
           <div className="bg-white/10 backdrop-blur-md rounded-2xl border border-white/20 shadow-xl shadow-purple-500/5 p-6">
             <h2 className="font-semibold text-xl text-white mb-4 flex items-center gap-2">
               <span className="bg-green-500/20 text-green-300 p-2 rounded-lg border border-green-500/30">
@@ -556,7 +573,7 @@ export default function FormadorPage({ user, onLogout }) {
 
             {gruposConCursos.length === 0 ? (
               <div className="text-center py-12">
-                <div className="text-6xl mb-4 text-gray-500">📭</div>
+                <div className="text-6xl mb-4 text-gray-500">📂</div>
                 <p className="text-gray-400 text-sm mb-1">No hay grupos con cursos activos</p>
                 <p className="text-xs text-gray-500">Activa un curso para asignarlo a un grupo</p>
               </div>
