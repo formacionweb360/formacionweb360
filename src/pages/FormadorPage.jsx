@@ -66,7 +66,6 @@ export default function FormadorPage({ user, onLogout }) {
     setLoading(true);
 
     try {
-      // ✅ CORREGIDO: Usar 'data' en lugar de 'gruposData'
       const { data, error: gruposError } = await supabase
         .from("grupos")
         .select("*")
@@ -78,7 +77,6 @@ export default function FormadorPage({ user, onLogout }) {
         return;
       }
 
-      // ✅ CORREGIDO: Usar 'data' aquí también
       const gruposConConteo = await Promise.all(
         (data || []).map(async (g) => {
           const { count } = await supabase
@@ -90,7 +88,8 @@ export default function FormadorPage({ user, onLogout }) {
 
           return {
             ...g,
-            activos: count || 0
+            activos: count || 0,
+            id: Number(g.id), // Asegurar que sea número
           };
         })
       );
@@ -121,10 +120,14 @@ export default function FormadorPage({ user, onLogout }) {
         .eq("estado", "Activo");
 
       if (grupo_id) {
-        query = query.or(`grupo_id.is.null,grupo_id.eq.${grupo_id}`);
+        const grupoIdNum = Number(grupo_id);
+        if (!isNaN(grupoIdNum)) {
+          query = query.or(`grupo_id.is.null,grupo_id.eq.${grupoIdNum}`);
+        } else {
+          query = query.or(`grupo_id.is.null,grupo_id.eq.${grupo_id}`);
+        }
       }
 
-      // ✅ CORREGIDO: Usar 'data' en lugar de 'cursosData'
       const { data, error } = await query;
       if (!error) {
         setCursos(data || []);
@@ -149,7 +152,6 @@ export default function FormadorPage({ user, onLogout }) {
         setGruposConCursos([]);
         return;
     }
-    // ✅ CORREGIDO: Usar 'data' en lugar de 'activosData'
     const { data, error } = await supabase
       .from("cursos_activados")
       .select(`
@@ -181,7 +183,7 @@ export default function FormadorPage({ user, onLogout }) {
 
     try {
       const activosConConteo = await Promise.all(
-        (data || []).map(async (activado) => {
+        data.map(async (activado) => {
           const { count } = await supabase
             .from("cursos_asesores")
             .select("*", { count: "exact", head: true })
@@ -220,16 +222,23 @@ export default function FormadorPage({ user, onLogout }) {
       return;
     }
 
+    // ✅ Validar grupo_id
+    const grupoIdNumerico = Number(grupo_id);
+    if (isNaN(grupoIdNumerico) || grupoIdNumerico <= 0) {
+      mostrarMensaje("error", "⚠️ Grupo inválido");
+      return;
+    }
+
     setLoading(true);
 
     try {
-      // ✅ CORREGIDO: Usar 'existe' en lugar de 'existeData'
+      // Verificar si ya existe
       const {  existe } = await supabase
         .from("cursos_activados")
         .select("*")
         .eq("fecha", fechaHoy)
         .eq("campana_id", campana_id)
-        .eq("grupo_id", grupo_id)
+        .eq("grupo_id", grupoIdNumerico)
         .eq("curso_id", curso_id)
         .maybeSingle();
 
@@ -238,13 +247,13 @@ export default function FormadorPage({ user, onLogout }) {
         return;
       }
 
-      // ✅ CORREGIDO: Usar 'activacion' en lugar de 'activacionData'
+      // Insertar curso activado
       const {  activacion, error } = await supabase
         .from("cursos_activados")
         .insert([
           {
             campana_id,
-            grupo_id,
+            grupo_id: grupoIdNumerico, // ✅ Usar el número
             curso_id,
             fecha: fechaHoy,
             activo: true,
@@ -260,21 +269,21 @@ export default function FormadorPage({ user, onLogout }) {
         return;
       }
 
-      // ✅ CORREGIDO: Usar 'grupo' en lugar de 'grupoData'
-      const {  grupo, error: errGrupo } = await supabase
+      // ✅ OBTENER EL GRUPO
+      const {  data: grupo, error: errGrupo } = await supabase
         .from("grupos")
         .select("nombre")
-        .eq("id", grupo_id)
+        .eq("id", grupoIdNumerico)
         .single();
 
       if (errGrupo || !grupo) {
-        console.error("Error al obtener el grupo:", errGrupo);
+        console.error("Error al obtener el grupo:", errGrupo, "ID:", grupoIdNumerico);
         mostrarMensaje("error", "❌ Error al obtener el grupo");
         return;
       }
 
-      // ✅ CORREGIDO: Usar 'asesores' en lugar de 'asesoresData'
-      const {  asesores, error: errAsesores } = await supabase
+      // ✅ OBTENER ASESORES
+      const {  data: asesores, error: errAsesores } = await supabase
         .from("usuarios")
         .select("id")
         .eq("rol", "usuario")
@@ -324,7 +333,6 @@ export default function FormadorPage({ user, onLogout }) {
     setLoading(true);
 
     try {
-      // ✅ CORREGIDO: Usar 'errorAsesores' en lugar de 'errorAsesoresData'
       const { error: errorAsesores } = await supabase
         .from("cursos_asesores")
         .delete()
