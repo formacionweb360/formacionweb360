@@ -11,8 +11,10 @@ export default function FormadorPage({ user, onLogout }) {
     curso_id: "",
   });  
   const [activos, setActivos] = useState([]);
+  const [gruposConCursos, setGruposConCursos] = useState([]); // Nuevo estado para agrupar
   const [loading, setLoading] = useState(false);
   const [mensaje, setMensaje] = useState({ tipo: "", texto: "" });
+  const [expandedGroups, setExpandedGroups] = useState(new Set()); // Estado para acordeones
 
   const fechaHoy = new Date().toISOString().split("T")[0];
   const fechaHoyFormateada = new Date().toLocaleDateString('es-PE', {
@@ -83,7 +85,9 @@ export default function FormadorPage({ user, onLogout }) {
 
           return {
             ...g,
-            activos: count || 0
+            activos: count || 0,
+            id: Number(g.id), // Asegurar número
+            nombre: String(g.nombre || "").trim(), // Asegurar string
           };
         })
       );
@@ -110,7 +114,12 @@ export default function FormadorPage({ user, onLogout }) {
         .eq("estado", "Activo");
 
       if (grupo_id) {
-        query = query.or(`grupo_id.is.null,grupo_id.eq.${grupo_id}`);
+        const grupoIdNum = Number(grupo_id);
+        if (!isNaN(grupoIdNum)) {
+          query = query.or(`grupo_id.is.null,grupo_id.eq.${grupoIdNum}`);
+        } else {
+          query = query.or(`grupo_id.is.null,grupo_id.eq.${grupo_id}`);
+        }
       }
 
       const { data, error } = await query;
@@ -133,6 +142,7 @@ export default function FormadorPage({ user, onLogout }) {
     if (!user?.id) {
         console.error("User no está definido o no tiene ID. No se pueden cargar activos.");
         setActivos([]);
+        setGruposConCursos([]);
         return;
     }
     const { data, error } = await supabase
@@ -154,11 +164,13 @@ export default function FormadorPage({ user, onLogout }) {
     if (error) {
         console.error("Error al cargar cursos activos:", error);
         setActivos([]);
+        setGruposConCursos([]);
         return;
     }
 
     if (!data) {
         setActivos([]);
+        setGruposConCursos([]);
         return;
     }
 
@@ -174,6 +186,21 @@ export default function FormadorPage({ user, onLogout }) {
         })
       );
       setActivos(activosConConteo);
+
+      // Agrupar cursos por grupo para el acordeón
+      const gruposMap = {};
+      activosConConteo.forEach((a) => {
+        const grupoId = a.grupo_id;
+        if (!gruposMap[grupoId]) {
+          gruposMap[grupoId] = {
+            grupo: a.grupos,
+            cursos: [],
+          };
+        }
+        gruposMap[grupoId].cursos.push(a);
+      });
+
+      setGruposConCursos(Object.values(gruposMap));
     } catch (err) {
         console.error("Error contando asesores:", err);
         setActivos(data.map(a => ({...a, asesores_count: 0})));
@@ -268,7 +295,7 @@ export default function FormadorPage({ user, onLogout }) {
         mostrarMensaje("success", "✅ Curso activado (sin asesores en el grupo)");
       }
 
-      await cargarActivos();
+      await cargarActivos(); // Refrescar agrupación
       await cargarGrupos(seleccion.campana_id);
       setSeleccion({ ...seleccion, curso_id: "" });
 
@@ -309,7 +336,7 @@ export default function FormadorPage({ user, onLogout }) {
       }
 
       mostrarMensaje("success", "🗑️ Curso desactivado correctamente");
-      await cargarActivos();
+      await cargarActivos(); // Refrescar agrupación
 
     } catch (err) {
       mostrarMensaje("error", "❌ Error inesperado al desactivar");
@@ -333,6 +360,19 @@ export default function FormadorPage({ user, onLogout }) {
     if (grupo_id) {
       await cargarCursos(seleccion.campana_id, grupo_id);
     }
+  };
+
+  // Función para alternar grupo
+  const toggleGroup = (groupId) => {
+    setExpandedGroups(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(groupId)) {
+        newSet.delete(groupId);
+      } else {
+        newSet.add(groupId);
+      }
+      return newSet;
+    });
   };
 
   return (
@@ -394,7 +434,7 @@ export default function FormadorPage({ user, onLogout }) {
 
       <div className="max-w-[95vw] mx-auto px-4 md:px-8 py-6">
         <div className="grid md:grid-cols-2 gap-6">
-          {/* Panel de activación */}
+          {/* Panel de activación (izquierda) - sin cambios */}
           <div className="bg-white/10 backdrop-blur-md rounded-2xl border border-white/20 shadow-xl shadow-purple-500/5 p-6 space-y-4">
             <div className="flex items-center justify-between mb-4">
               <h2 className="font-semibold text-xl text-white flex items-center gap-2">
@@ -510,7 +550,7 @@ export default function FormadorPage({ user, onLogout }) {
             </button>
           </div>
 
-          {/* Panel de cursos activos */}
+          {/* Panel de grupos asignados (derecha) - CON ACORDEÓN */}
           <div className="bg-white/10 backdrop-blur-md rounded-2xl border border-white/20 shadow-xl shadow-purple-500/5 p-6">
             <h2 className="font-semibold text-xl text-white mb-4 flex items-center gap-2">
               <span className="bg-green-500/20 text-green-300 p-2 rounded-lg border border-green-500/30">
@@ -518,63 +558,110 @@ export default function FormadorPage({ user, onLogout }) {
                   <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
                 </svg>
               </span>
-              Cursos activos hoy
+              Grupos asignados hoy
             </h2>
 
-            {activos.length === 0 ? (
+            {gruposConCursos.length === 0 ? (
               <div className="text-center py-12">
                 <div className="text-6xl mb-4 text-gray-500">📭</div>
-                <p className="text-gray-400 text-sm">No hay cursos activados todavía</p>
-                <p className="text-xs text-gray-500 mt-1">Activa un curso para comenzar</p>
+                <p className="text-gray-400 text-sm mb-1">No hay grupos con cursos activos</p>
+                <p className="text-xs text-gray-500">Activa un curso para asignarlo a un grupo</p>
               </div>
             ) : (
-              <div className="space-y-3">
-                {activos.map((a) => (
-                  <div
-                    key={a.id}
-                    className="border border-white/20 rounded-lg p-4 hover:shadow-lg transition-all hover:border-purple-400/50 bg-white/5"
-                  >
-                    <div className="flex justify-between items-start mb-2">
-                      <div className="flex-1 min-w-0">
-                        <h3 className="font-semibold text-gray-100 mb-1">
-                          {a.cursos?.titulo || "Curso sin título"}
-                        </h3>
-                        <div className="flex flex-col gap-0.5 text-xs text-gray-400">
-                          <div className="flex items-center gap-1.5">
-                            <svg className="w-3.5 h-3.5 text-indigo-400 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
-                              <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-6-3a2 2 0 11-4 0 2 2 0 014 0zm-2 4a5 5 0 00-4.546 2.916A5.986 5.986 0 005 10a6 6 0 0012 0c0-.35-.036-.687-.101-1.016A5 5 0 0010 11z" clipRule="evenodd" />
-                            </svg>
-                            <span className="truncate">{a.grupos?.nombre || "Sin grupo"}</span>
-                          </div>
-                          <div className="flex items-center gap-1.5">
-                            <svg className="w-3.5 h-3.5 text-purple-400 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
-                              <path d="M5.5 16a3.5 3.5 0 01-.369-6.98 4 4 0 117.753-1.977A4.5 4.5 0 1113.5 16h-8z" />
-                            </svg>
-                            <span className="truncate">{a.campañas?.nombre || "Sin campaña"}</span>
-                          </div>
-                          <div className="flex items-center gap-1.5">
-                            <svg className="w-3.5 h-3.5 text-green-400 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
-                              <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                            </svg>
-                            <span className="font-medium text-green-400">
-                              {a.asesores_count || 0} asesores asignados
-                            </span>
-                          </div>
-                        </div>
-                      </div>
-                      <button
-                        onClick={() => desactivarCurso(a.id)}
-                        disabled={loading}
-                        className="text-red-400 hover:text-red-300 hover:bg-red-500/10 p-1.5 rounded-lg transition-colors disabled:opacity-50 flex-shrink-0 ml-2"
-                        title="Desactivar curso"
+              <div className="space-y-3 max-h-[calc(100vh-250px)] overflow-y-auto pr-2">
+                {gruposConCursos.map((grupoData) => {
+                  const grupo = grupoData.grupo;
+                  const cursosDelGrupo = grupoData.cursos;
+                  const groupId = grupo.id;
+                  const isExpanded = expandedGroups.has(groupId);
+
+                  return (
+                    <div
+                      key={groupId}
+                      className="border border-white/20 rounded-lg overflow-hidden bg-white/5"
+                    >
+                      {/* Encabezado del acordeón */}
+                      <div
+                        onClick={() => toggleGroup(groupId)}
+                        className="flex items-center justify-between p-4 cursor-pointer hover:bg-white/10 transition-colors"
                       >
-                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                        <div className="flex items-center gap-2">
+                          <span className="bg-indigo-500/20 text-indigo-300 p-1.5 rounded-full text-xs font-bold border border-indigo-500/30">
+                            {cursosDelGrupo.length}
+                          </span>
+                          <h3 className="font-semibold text-gray-100">
+                            {grupo.nombre}
+                          </h3>
+                          <span className="text-xs text-gray-400">
+                            ({grupo.activos || 0} asesores activos)
+                          </span>
+                        </div>
+                        <svg
+                          className={`w-5 h-5 text-gray-400 transition-transform duration-300 ${
+                            isExpanded ? "rotate-180" : ""
+                          }`}
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
+                        >
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                         </svg>
-                      </button>
+                      </div>
+
+                      {/* Contenido del acordeón - cursos del grupo */}
+                      {isExpanded && (
+                        <div className="border-t border-white/20 p-4 space-y-3">
+                          {cursosDelGrupo.map((a) => (
+                            <div
+                              key={a.id}
+                              className="border border-white/20 rounded-lg p-3 hover:shadow-md transition-all bg-white/10"
+                            >
+                              <div className="flex justify-between items-start">
+                                <div className="flex-1 min-w-0">
+                                  <h3 className="font-semibold text-gray-100 mb-1">
+                                    {a.cursos?.titulo || "Curso sin título"}
+                                  </h3>
+                                  <div className="flex flex-col gap-0.5 text-xs text-gray-400">
+                                    <div className="flex items-center gap-1.5">
+                                      <svg className="w-3.5 h-3.5 text-indigo-400 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                                        <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-6-3a2 2 0 11-4 0 2 2 0 014 0zm-2 4a5 5 0 00-4.546 2.916A5.986 5.986 0 005 10a6 6 0 0012 0c0-.35-.036-.687-.101-1.016A5 5 0 0010 11z" clipRule="evenodd" />
+                                      </svg>
+                                      <span className="truncate">{a.cursos?.duracion_minutos || 0} min</span>
+                                    </div>
+                                    <div className="flex items-center gap-1.5">
+                                      <svg className="w-3.5 h-3.5 text-purple-400 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                                        <path d="M5.5 16a3.5 3.5 0 01-.369-6.98 4 4 0 117.753-1.977A4.5 4.5 0 1113.5 16h-8z" />
+                                      </svg>
+                                      <span className="truncate">{a.campañas?.nombre || "Sin campaña"}</span>
+                                    </div>
+                                    <div className="flex items-center gap-1.5">
+                                      <svg className="w-3.5 h-3.5 text-green-400 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                                        <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                                      </svg>
+                                      <span className="font-medium text-green-400">
+                                        {a.asesores_count || 0} asesores asignados
+                                      </span>
+                                    </div>
+                                  </div>
+                                </div>
+                                <button
+                                  onClick={() => desactivarCurso(a.id)}
+                                  disabled={loading}
+                                  className="text-red-400 hover:text-red-300 hover:bg-red-500/10 p-1.5 rounded-lg transition-colors disabled:opacity-50 flex-shrink-0 ml-2"
+                                  title="Desactivar curso"
+                                >
+                                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                  </svg>
+                                </button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>
