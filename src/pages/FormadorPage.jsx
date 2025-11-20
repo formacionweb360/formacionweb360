@@ -600,7 +600,7 @@ export default function FormadorPage({ user, onLogout }) {
                             {grupo.nombre}
                           </h3>
                           <span className="text-xs text-gray-400">
-                            ({grupo.activos || 0} asesores activos)
+                            ({grupo.activos || 0})
                           </span>
                         </div>
                         <svg
