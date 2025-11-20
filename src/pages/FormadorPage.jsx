@@ -11,10 +11,10 @@ export default function FormadorPage({ user, onLogout }) {
     curso_id: "",
   });  
   const [activos, setActivos] = useState([]);
-  const [gruposConCursos, setGruposConCursos] = useState([]);
+  const [gruposConCursos, setGruposConCursos] = useState([]); // Nuevo estado para agrupar
   const [loading, setLoading] = useState(false);
   const [mensaje, setMensaje] = useState({ tipo: "", texto: "" });
-  const [expandedGroups, setExpandedGroups] = useState(new Set()); // ✅ Mantenido como Set
+  const [expandedGroups, setExpandedGroups] = useState(new Set()); // Estado para acordeones
 
   const fechaHoy = new Date().toISOString().split("T")[0];
   const fechaHoyFormateada = new Date().toLocaleDateString('es-PE', {
@@ -63,7 +63,7 @@ export default function FormadorPage({ user, onLogout }) {
     setLoading(true);
 
     try {
-      const {  gruposData, error: gruposError } = await supabase
+      const { data: gruposData, error: gruposError } = await supabase
         .from("grupos")
         .select("*")
         .eq("campana_id", campana_id);
@@ -86,8 +86,8 @@ export default function FormadorPage({ user, onLogout }) {
           return {
             ...g,
             activos: count || 0,
-            id: Number(g.id), // ✅ Asegurar número
-            nombre: String(g.nombre || "").trim(),
+            id: Number(g.id), // Asegurar número
+            nombre: String(g.nombre || "").trim(), // Asegurar string
           };
         })
       );
@@ -187,7 +187,7 @@ export default function FormadorPage({ user, onLogout }) {
       );
       setActivos(activosConConteo);
 
-      // Agrupar cursos por grupo
+      // Agrupar cursos por grupo para el acordeón
       const gruposMap = {};
       activosConConteo.forEach((a) => {
         const grupoId = a.grupo_id;
@@ -215,22 +215,15 @@ export default function FormadorPage({ user, onLogout }) {
       return;
     }
 
-    // ✅ Validar grupo_id
-    const grupoIdNumerico = Number(grupo_id);
-    if (isNaN(grupoIdNumerico) || grupoIdNumerico <= 0) {
-      mostrarMensaje("error", "⚠️ Grupo inválido");
-      return;
-    }
-
     setLoading(true);
 
     try {
-      const {  existe } = await supabase
+      const { data: existe } = await supabase
         .from("cursos_activados")
         .select("*")
         .eq("fecha", fechaHoy)
         .eq("campana_id", campana_id)
-        .eq("grupo_id", grupoIdNumerico)
+        .eq("grupo_id", grupo_id)
         .eq("curso_id", curso_id)
         .maybeSingle();
 
@@ -239,12 +232,12 @@ export default function FormadorPage({ user, onLogout }) {
         return;
       }
 
-      const {  activacion, error } = await supabase
+      const { data: activacion, error } = await supabase
         .from("cursos_activados")
         .insert([
           {
             campana_id,
-            grupo_id: grupoIdNumerico,
+            grupo_id,
             curso_id,
             fecha: fechaHoy,
             activo: true,
@@ -260,19 +253,19 @@ export default function FormadorPage({ user, onLogout }) {
         return;
       }
 
-      const {  grupo, error: errGrupo } = await supabase
+      const { data: grupo, error: errGrupo } = await supabase
         .from("grupos")
         .select("nombre")
-        .eq("id", grupoIdNumerico)
+        .eq("id", grupo_id)
         .single();
 
       if (errGrupo || !grupo) {
-        console.error("Error al obtener el grupo:", errGrupo, "ID:", grupoIdNumerico);
+        console.error("Error al obtener el grupo:", errGrupo);
         mostrarMensaje("error", "❌ Error al obtener el grupo");
         return;
       }
 
-      const {  asesores, error: errAsesores } = await supabase
+      const { data: asesores, error: errAsesores } = await supabase
         .from("usuarios")
         .select("id")
         .eq("rol", "usuario")
@@ -302,7 +295,7 @@ export default function FormadorPage({ user, onLogout }) {
         mostrarMensaje("success", "✅ Curso activado (sin asesores en el grupo)");
       }
 
-      await cargarActivos();
+      await cargarActivos(); // Refrescar agrupación
       await cargarGrupos(seleccion.campana_id);
       setSeleccion({ ...seleccion, curso_id: "" });
 
@@ -343,7 +336,7 @@ export default function FormadorPage({ user, onLogout }) {
       }
 
       mostrarMensaje("success", "🗑️ Curso desactivado correctamente");
-      await cargarActivos();
+      await cargarActivos(); // Refrescar agrupación
 
     } catch (err) {
       mostrarMensaje("error", "❌ Error inesperado al desactivar");
@@ -369,14 +362,14 @@ export default function FormadorPage({ user, onLogout }) {
     }
   };
 
-  // ✅ Función toggle corregida
+  // Función para alternar grupo
   const toggleGroup = (groupId) => {
     setExpandedGroups(prev => {
       const newSet = new Set(prev);
-      if (newSet.has(Number(groupId))) { // ✅ Comparar como número
-        newSet.delete(Number(groupId));
+      if (newSet.has(groupId)) {
+        newSet.delete(groupId);
       } else {
-        newSet.add(Number(groupId));
+        newSet.add(groupId);
       }
       return newSet;
     });
@@ -570,7 +563,7 @@ export default function FormadorPage({ user, onLogout }) {
 
             {gruposConCursos.length === 0 ? (
               <div className="text-center py-12">
-                <div className="text-6xl mb-4 text-gray-500">📂</div>
+                <div className="text-6xl mb-4 text-gray-500">📭</div>
                 <p className="text-gray-400 text-sm mb-1">No hay grupos con cursos activos</p>
                 <p className="text-xs text-gray-500">Activa un curso para asignarlo a un grupo</p>
               </div>
@@ -579,17 +572,17 @@ export default function FormadorPage({ user, onLogout }) {
                 {gruposConCursos.map((grupoData) => {
                   const grupo = grupoData.grupo;
                   const cursosDelGrupo = grupoData.cursos;
-                  const groupId = Number(grupo.id); // ✅ Convertir a número
-                  const isExpanded = expandedGroups.has(groupId); // ✅ Comparar con número
+                  const groupId = grupo.id;
+                  const isExpanded = expandedGroups.has(groupId);
 
                   return (
                     <div
-                      key={grupo.id}
+                      key={groupId}
                       className="border border-white/20 rounded-lg overflow-hidden bg-white/5"
                     >
                       {/* Encabezado del acordeón */}
                       <div
-                        onClick={() => toggleGroup(grupo.id)} // ✅ Pasar ID como string o número, toggle lo convierte
+                        onClick={() => toggleGroup(groupId)}
                         className="flex items-center justify-between p-4 cursor-pointer hover:bg-white/10 transition-colors"
                       >
                         <div className="flex items-center gap-2">
@@ -606,7 +599,7 @@ export default function FormadorPage({ user, onLogout }) {
                         <svg
                           className={`w-5 h-5 text-gray-400 transition-transform duration-300 ${
                             isExpanded ? "rotate-180" : ""
-                          }`} // ✅ Rotación condicional
+                          }`}
                           fill="none"
                           stroke="currentColor"
                           viewBox="0 0 24 24"
@@ -616,7 +609,7 @@ export default function FormadorPage({ user, onLogout }) {
                       </div>
 
                       {/* Contenido del acordeón - cursos del grupo */}
-                      {isExpanded && ( // ✅ Condición correcta
+                      {isExpanded && (
                         <div className="border-t border-white/20 p-4 space-y-3">
                           {cursosDelGrupo.map((a) => (
                             <div
