@@ -11,10 +11,10 @@ export default function FormadorPage({ user, onLogout }) {
     curso_id: "",
   });  
   const [activos, setActivos] = useState([]);
-  const [gruposConCursos, setGruposConCursos] = useState([]); // Nuevo estado para agrupar
+  const [gruposConCursos, setGruposConCursos] = useState([]);
   const [loading, setLoading] = useState(false);
   const [mensaje, setMensaje] = useState({ tipo: "", texto: "" });
-  const [expandedGroups, setExpandedGroups] = useState({}); // ✅ Cambiado a objeto
+  const [expandedGroups, setExpandedGroups] = useState(new Set()); // ✅ Mantenido como Set
 
   const fechaHoy = new Date().toISOString().split("T")[0];
   const fechaHoyFormateada = new Date().toLocaleDateString('es-PE', {
@@ -86,8 +86,8 @@ export default function FormadorPage({ user, onLogout }) {
           return {
             ...g,
             activos: count || 0,
-            id: Number(g.id), // Asegurar número
-            nombre: String(g.nombre || "").trim(), // Asegurar string
+            id: Number(g.id), // ✅ Asegurar número
+            nombre: String(g.nombre || "").trim(),
           };
         })
       );
@@ -225,7 +225,6 @@ export default function FormadorPage({ user, onLogout }) {
     setLoading(true);
 
     try {
-      // Verificar si ya existe
       const {  existe } = await supabase
         .from("cursos_activados")
         .select("*")
@@ -240,7 +239,6 @@ export default function FormadorPage({ user, onLogout }) {
         return;
       }
 
-      // Insertar curso activado
       const {  activacion, error } = await supabase
         .from("cursos_activados")
         .insert([
@@ -262,8 +260,7 @@ export default function FormadorPage({ user, onLogout }) {
         return;
       }
 
-      // ✅ OBTENER EL GRUPO
-      const {  data: grupo, error: errGrupo } = await supabase
+      const {  grupo, error: errGrupo } = await supabase
         .from("grupos")
         .select("nombre")
         .eq("id", grupoIdNumerico)
@@ -275,8 +272,7 @@ export default function FormadorPage({ user, onLogout }) {
         return;
       }
 
-      // ✅ OBTENER ASESORES
-      const {  data: asesores, error: errAsesores } = await supabase
+      const {  asesores, error: errAsesores } = await supabase
         .from("usuarios")
         .select("id")
         .eq("rol", "usuario")
@@ -373,12 +369,17 @@ export default function FormadorPage({ user, onLogout }) {
     }
   };
 
-  // ✅ Función para alternar grupo (corregida)
+  // ✅ Función toggle corregida
   const toggleGroup = (groupId) => {
-    setExpandedGroups(prev => ({
-      ...prev,
-      [groupId]: !prev[groupId] // ✅ Alterna solo el grupo clickeado
-    }));
+    setExpandedGroups(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(Number(groupId))) { // ✅ Comparar como número
+        newSet.delete(Number(groupId));
+      } else {
+        newSet.add(Number(groupId));
+      }
+      return newSet;
+    });
   };
 
   return (
@@ -556,7 +557,7 @@ export default function FormadorPage({ user, onLogout }) {
             </button>
           </div>
 
-          {/* Panel de grupos asignados (derecha) - CON ACORDEÓN INDIVIDUAL */}
+          {/* Panel de grupos asignados (derecha) - CON ACORDEÓN */}
           <div className="bg-white/10 backdrop-blur-md rounded-2xl border border-white/20 shadow-xl shadow-purple-500/5 p-6">
             <h2 className="font-semibold text-xl text-white mb-4 flex items-center gap-2">
               <span className="bg-green-500/20 text-green-300 p-2 rounded-lg border border-green-500/30">
@@ -578,17 +579,17 @@ export default function FormadorPage({ user, onLogout }) {
                 {gruposConCursos.map((grupoData) => {
                   const grupo = grupoData.grupo;
                   const cursosDelGrupo = grupoData.cursos;
-                  const groupId = grupo.id;
-                  const isExpanded = expandedGroups[groupId] || false; // ✅ Leer del objeto
+                  const groupId = Number(grupo.id); // ✅ Convertir a número
+                  const isExpanded = expandedGroups.has(groupId); // ✅ Comparar con número
 
                   return (
                     <div
-                      key={grupo.id} // ✅ Key único
+                      key={grupo.id}
                       className="border border-white/20 rounded-lg overflow-hidden bg-white/5"
                     >
                       {/* Encabezado del acordeón */}
                       <div
-                        onClick={() => toggleGroup(grupo.id)} // ✅ Toggle con ID correcto
+                        onClick={() => toggleGroup(grupo.id)} // ✅ Pasar ID como string o número, toggle lo convierte
                         className="flex items-center justify-between p-4 cursor-pointer hover:bg-white/10 transition-colors"
                       >
                         <div className="flex items-center gap-2">
@@ -604,8 +605,8 @@ export default function FormadorPage({ user, onLogout }) {
                         </div>
                         <svg
                           className={`w-5 h-5 text-gray-400 transition-transform duration-300 ${
-                            isExpanded ? "rotate-180" : "" // ✅ Rotación condicional
-                          }`}
+                            isExpanded ? "rotate-180" : ""
+                          }`} // ✅ Rotación condicional
                           fill="none"
                           stroke="currentColor"
                           viewBox="0 0 24 24"
@@ -615,11 +616,11 @@ export default function FormadorPage({ user, onLogout }) {
                       </div>
 
                       {/* Contenido del acordeón - cursos del grupo */}
-                      {isExpanded && ( // ✅ Condición basada en el objeto
+                      {isExpanded && ( // ✅ Condición correcta
                         <div className="border-t border-white/20 p-4 space-y-3">
                           {cursosDelGrupo.map((a) => (
                             <div
-                              key={a.id} // ✅ Key único para cada curso
+                              key={a.id}
                               className="border border-white/20 rounded-lg p-3 hover:shadow-md transition-all bg-white/10"
                             >
                               <div className="flex justify-between items-start">
