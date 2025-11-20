@@ -77,22 +77,22 @@ export default function FormadorPage({ user, onLogout }) {
         return;
       }
 
-      // ✅ Cargar conteo de asesores activos por grupo
       const gruposConConteo = await Promise.all(
         (data || []).map(async (g) => {
-          // ✅ Usar 'nombre' del grupo para buscar usuarios
+          const nombreGrupo = String(g.nombre || "").trim();
+
           const { count } = await supabase
             .from("usuarios")
             .select("*", { count: "exact", head: true })
-            .eq("grupo_nombre", g.nombre) // <- Campo clave
+            .eq("grupo_nombre", nombreGrupo)
             .eq("rol", "usuario")
             .eq("estado", "Activo");
 
           return {
             ...g,
             activos: count || 0,
-            id: Number(g.id), // Asegurar tipo número
-            nombre: String(g.nombre || "").trim(), // Asegurar tipo string
+            id: Number(g.id),
+            nombre: nombreGrupo,
           };
         })
       );
@@ -197,7 +197,6 @@ export default function FormadorPage({ user, onLogout }) {
       );
       setActivos(activosConConteo);
 
-      // Agrupar cursos por grupo para el acordeón
       const gruposMap = {};
       activosConConteo.forEach((a) => {
         const grupoId = a.grupo_id;
@@ -225,7 +224,6 @@ export default function FormadorPage({ user, onLogout }) {
       return;
     }
 
-    // ✅ Validar grupo_id
     const grupoIdNumerico = Number(grupo_id);
     if (isNaN(grupoIdNumerico) || grupoIdNumerico <= 0) {
       mostrarMensaje("error", "⚠️ Grupo inválido");
@@ -235,7 +233,6 @@ export default function FormadorPage({ user, onLogout }) {
     setLoading(true);
 
     try {
-      // Verificar si ya existe
       const {  existe } = await supabase
         .from("cursos_activados")
         .select("*")
@@ -250,7 +247,6 @@ export default function FormadorPage({ user, onLogout }) {
         return;
       }
 
-      // Insertar curso activado
       const {  activacion, error } = await supabase
         .from("cursos_activados")
         .insert([
@@ -272,8 +268,7 @@ export default function FormadorPage({ user, onLogout }) {
         return;
       }
 
-      // ✅ OBTENER EL GRUPO POR SU ID
-      const {  data: grupo, error: errGrupo } = await supabase
+      const {  grupo, error: errGrupo } = await supabase
         .from("grupos")
         .select("nombre")
         .eq("id", grupoIdNumerico)
@@ -285,12 +280,11 @@ export default function FormadorPage({ user, onLogout }) {
         return;
       }
 
-      // ✅ OBTENER ASESORES DEL GRUPO POR NOMBRE
       const {  data: asesores, error: errAsesores } = await supabase
         .from("usuarios")
         .select("id")
         .eq("rol", "usuario")
-        .eq("grupo_nombre", grupo.nombre) // <- Usamos el nombre del grupo obtenido
+        .eq("grupo_nombre", grupo.nombre)
         .eq("estado", "Activo");
 
       if (errAsesores) {
@@ -300,8 +294,8 @@ export default function FormadorPage({ user, onLogout }) {
       }
 
       if (asesores && asesores.length > 0) {
-        // ✅ Filtrar asesores válidos antes de insertar
-        const asesoresValidos = asesores.filter(asesor => asesor && asesor.id);
+        // ✅ Filtrar solo los elementos válidos
+        const asesoresValidos = asesores.filter(asesor => asesor && typeof asesor === 'object' && asesor.id !== undefined);
 
         if (asesoresValidos.length === 0) {
           mostrarMensaje("success", "✅ Curso activado (sin asesores válidos en el grupo)");
@@ -323,7 +317,7 @@ export default function FormadorPage({ user, onLogout }) {
         mostrarMensaje("success", "✅ Curso activado (sin asesores en el grupo)");
       }
 
-      await cargarActivos(); // Refrescar lista de activos y grupos
+      await cargarActivos();
       await cargarGrupos(seleccion.campana_id);
       setSeleccion({ ...seleccion, curso_id: "" });
 
@@ -364,7 +358,7 @@ export default function FormadorPage({ user, onLogout }) {
       }
 
       mostrarMensaje("success", "🗑️ Curso desactivado correctamente");
-      await cargarActivos(); // Refrescar lista
+      await cargarActivos();
 
     } catch (err) {
       mostrarMensaje("error", "❌ Error inesperado al desactivar");
@@ -390,7 +384,6 @@ export default function FormadorPage({ user, onLogout }) {
     }
   };
 
-  // Función para alternar grupo
   const toggleGroup = (groupId) => {
     setExpandedGroups(prev => {
       const newSet = new Set(prev);
@@ -629,7 +622,8 @@ export default function FormadorPage({ user, onLogout }) {
                             isExpanded ? "rotate-180" : ""
                           }`}
                           fill="none"
-                          stroke="currentColor" viewBox="0 0 24 24"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
                         >
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                         </svg>
