@@ -77,6 +77,8 @@ export default function FormadorPage({ user, onLogout }) {
         return;
       }
 
+      console.log("Grupos cargados:", data); // ✅ Log para debug
+
       const gruposConConteo = await Promise.all(
         (data || []).map(async (g) => {
           const nombreGrupo = String(g.nombre || "").trim();
@@ -224,15 +226,24 @@ export default function FormadorPage({ user, onLogout }) {
       return;
     }
 
+    // ✅ Validar grupo_id
     const grupoIdNumerico = Number(grupo_id);
     if (isNaN(grupoIdNumerico) || grupoIdNumerico <= 0) {
       mostrarMensaje("error", "⚠️ Grupo inválido");
       return;
     }
 
+    // ✅ Verificar que el grupo exista en la lista local
+    const grupoLocal = grupos.find(g => g.id === grupoIdNumerico);
+    if (!grupoLocal) {
+      mostrarMensaje("error", "⚠️ Grupo no encontrado en la lista. Recarga la página.");
+      return;
+    }
+
     setLoading(true);
 
     try {
+      // Verificar si ya existe
       const {  existe } = await supabase
         .from("cursos_activados")
         .select("*")
@@ -247,6 +258,7 @@ export default function FormadorPage({ user, onLogout }) {
         return;
       }
 
+      // Insertar curso activado
       const {  activacion, error } = await supabase
         .from("cursos_activados")
         .insert([
@@ -268,7 +280,8 @@ export default function FormadorPage({ user, onLogout }) {
         return;
       }
 
-      const {  grupo, error: errGrupo } = await supabase
+      // ✅ OBTENER EL GRUPO POR SU ID
+      const {   grupo, error: errGrupo } = await supabase
         .from("grupos")
         .select("nombre")
         .eq("id", grupoIdNumerico)
@@ -280,7 +293,8 @@ export default function FormadorPage({ user, onLogout }) {
         return;
       }
 
-      const {  data: asesores, error: errAsesores } = await supabase
+      // ✅ OBTENER ASESORES
+      const {   asesores, error: errAsesores } = await supabase
         .from("usuarios")
         .select("id")
         .eq("rol", "usuario")
@@ -380,6 +394,12 @@ export default function FormadorPage({ user, onLogout }) {
     setSeleccion({ ...seleccion, grupo_id, curso_id: "" });
     setCursos([]);
     if (grupo_id) {
+      // ✅ Validar que el grupo_id exista en la lista de grupos
+      const grupoValido = grupos.find(g => g.id === Number(grupo_id));
+      if (!grupoValido) {
+        mostrarMensaje("error", "⚠️ Grupo no válido. Por favor, selecciona otro.");
+        return;
+      }
       await cargarCursos(seleccion.campana_id, grupo_id);
     }
   };
