@@ -7,7 +7,7 @@ export default function FormadorPage({ user, onLogout }) {
   const [cursos, setCursos] = useState([]);
   const [seleccion, setSeleccion] = useState({
     campana_id: "",
-    dia: "", // <-- Nuevo campo
+    dia: "",
     grupo_id: "",
     curso_id: "",
   });  
@@ -15,7 +15,6 @@ export default function FormadorPage({ user, onLogout }) {
   const [gruposConCursos, setGruposConCursos] = useState([]);
   const [loading, setLoading] = useState(false);
   const [mensaje, setMensaje] = useState({ tipo: "", texto: "" });
-  // Cambiado: ahora usamos un ID único en lugar de un Set
   const [expandedGroupId, setExpandedGroupId] = useState(null);
 
   const fechaHoy = new Date().toISOString().split("T")[0];
@@ -103,48 +102,46 @@ export default function FormadorPage({ user, onLogout }) {
     }
   };
   
-  // Actualizado: ahora recibe `dia`
-const cargarCursos = async (campana_id, dia, grupo_id) => {
-  if (!campana_id || !dia || !grupo_id) {
-    return;
-  }
-  setLoading(true);
-  try {
-    let query = supabase
-      .from("cursos")
-      .select("*")
-      .eq("campana_id", campana_id)
-      .eq("dia", dia)
-      .eq("estado", "Activo");
-
-    if (grupo_id) {
-      const grupoIdNum = Number(grupo_id);
-      if (!isNaN(grupoIdNum)) {
-        // Sintaxis correcta para .or()
-        query = query.or(`grupo_id.is.null,grupo_id.eq.${grupoIdNum}`);
-      } else {
-        query = query.or(`grupo_id.is.null,grupo_id.eq.${grupo_id}`);
-      }
-    }
-
-    const { data, error } = await query;
-
-    if (error) {
-      console.error("Error al cargar cursos:", error);
-      setCursos([]);
-      mostrarMensaje("error", "Error al cargar cursos");
+  const cargarCursos = async (campana_id, dia, grupo_id) => {
+    if (!campana_id || !dia || !grupo_id) {
       return;
     }
+    setLoading(true);
+    try {
+      let query = supabase
+        .from("cursos")
+        .select("*")
+        .eq("campana_id", campana_id)
+        .eq("dia", dia)
+        .eq("estado", "Activo");
 
-    setCursos(data || []);
+      if (grupo_id) {
+        const grupoIdNum = Number(grupo_id);
+        if (!isNaN(grupoIdNum)) {
+          query = query.or(`grupo_id.is.null,grupo_id.eq.${grupoIdNum}`);
+        } else {
+          query = query.or(`grupo_id.is.null,grupo_id.eq.${grupo_id}`);
+        }
+      }
 
-  } catch (err) {
-    console.error("Error *interno* en cargarCursos:", err);
-    setCursos([]);
-  } finally {
-    setLoading(false);
-  }
-};
+      const { data, error } = await query;
+
+      if (error) {
+        console.error("Error al cargar cursos:", error);
+        setCursos([]);
+        mostrarMensaje("error", "Error al cargar cursos");
+        return;
+      }
+
+      setCursos(data || []);
+
+    } catch (err) {
+      console.error("Error *interno* en cargarCursos:", err);
+      setCursos([]);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const cargarActivos = async () => {
     if (!user?.id) {
@@ -214,7 +211,6 @@ const cargarCursos = async (campana_id, dia, grupo_id) => {
     }
   };
 
-  // Actualizado: ahora valida `dia`
   const activarCurso = async () => {
     const { campana_id, dia, grupo_id, curso_id } = seleccion;
 
@@ -226,7 +222,7 @@ const cargarCursos = async (campana_id, dia, grupo_id) => {
     setLoading(true);
 
     try {
-      const {  existe } = await supabase
+      const { data: existe } = await supabase
         .from("cursos_activados")
         .select("*")
         .eq("fecha", fechaHoy)
@@ -240,7 +236,7 @@ const cargarCursos = async (campana_id, dia, grupo_id) => {
         return;
       }
 
-      const {  activacion, error } = await supabase
+      const { data: activacion, error } = await supabase
         .from("cursos_activados")
         .insert([
           {
@@ -250,7 +246,6 @@ const cargarCursos = async (campana_id, dia, grupo_id) => {
             fecha: fechaHoy,
             activo: true,
             formador_id: user.id,
-            // ⛔ No agregamos `dia` aquí
           },
         ])
         .select()
@@ -274,7 +269,7 @@ const cargarCursos = async (campana_id, dia, grupo_id) => {
         return;
       }
 
-      const {  asesores, error: errAsesores } = await supabase
+      const { data: asesores, error: errAsesores } = await supabase
         .from("usuarios")
         .select("id")
         .eq("rol", "usuario")
@@ -354,7 +349,6 @@ const cargarCursos = async (campana_id, dia, grupo_id) => {
     }
   };
 
-  // Actualizado: ahora limpia `dia`
   const handleCampanaChange = async (campana_id) => {
     setSeleccion({ campana_id, dia: "", grupo_id: "", curso_id: "" });
     setGrupos([]);
@@ -364,17 +358,15 @@ const cargarCursos = async (campana_id, dia, grupo_id) => {
     }
   };
 
-  // Nuevo: maneja el cambio de día
   const handleDiaChange = async (dia) => {
     setSeleccion({ ...seleccion, dia, grupo_id: "", curso_id: "" });
     setGrupos([]);
     setCursos([]);
     if (dia) {
-      await cargarGrupos(seleccion.campana_id); // Recarga grupos si es necesario
+      await cargarGrupos(seleccion.campana_id);
     }
   };
 
-  // Actualizado: ahora pasa `dia` a `cargarCursos`
   const handleGrupoChange = async (grupo_id) => {
     setSeleccion({ ...seleccion, grupo_id, curso_id: "" });
     setCursos([]);
@@ -383,14 +375,14 @@ const cargarCursos = async (campana_id, dia, grupo_id) => {
     }
   };
 
-  // Actualizado: ahora solo un grupo puede estar expandido
   const toggleGroup = (groupId) => {
-    setExpandedGroupId(prev => prev === groupId ? null : groupId);
+    // Aseguramos que siempre se compare el mismo tipo de dato (número)
+    const numericGroupId = Number(groupId);
+    setExpandedGroupId(prev => prev === numericGroupId ? null : numericGroupId);
   };
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 overflow-hidden">
-      {/* Fondo dinámico con partículas sutiles (CSS-only) */}
       <style jsx>{`
         .bg-particles::before {
           content: "";
@@ -410,7 +402,6 @@ const cargarCursos = async (campana_id, dia, grupo_id) => {
         }
       `}</style>
 
-      {/* Header con botón de logout */}
       <div className="bg-black/30 backdrop-blur-md border-b border-white/10 sticky top-0 z-50 shadow-sm">
         <div className="max-w-[95vw] mx-auto px-4 md:px-8 py-6">
           <div className="flex items-center justify-between">
@@ -432,7 +423,6 @@ const cargarCursos = async (campana_id, dia, grupo_id) => {
         </div>
       </div>
 
-      {/* Mensaje de feedback */}
       {mensaje.texto && (
         <div className="max-w-[95vw] mx-auto px-4 md:px-8 pt-4">
           <div className={`p-4 rounded-lg shadow-sm border-l-4 animate-in slide-in-from-top duration-500 ${
@@ -447,7 +437,6 @@ const cargarCursos = async (campana_id, dia, grupo_id) => {
 
       <div className="max-w-[95vw] mx-auto px-4 md:px-8 py-6">
         <div className="grid md:grid-cols-2 gap-6">
-          {/* Panel de activación (izquierda) - con selección de día */}
           <div className="bg-white/10 backdrop-blur-md rounded-2xl border border-white/20 shadow-xl shadow-purple-500/5 p-6 space-y-4">
             <div className="flex items-center justify-between mb-4">
               <h2 className="font-semibold text-xl text-white flex items-center gap-2">
@@ -463,7 +452,6 @@ const cargarCursos = async (campana_id, dia, grupo_id) => {
               )}
             </div>
 
-            {/* Selección de campaña */}
             <div>
               <label className="block text-sm font-medium text-gray-300 mb-2">
                 Campaña
@@ -483,7 +471,6 @@ const cargarCursos = async (campana_id, dia, grupo_id) => {
               </select>
             </div>
 
-            {/* Selección de día */}
             <div>
               <label className="block text-sm font-medium text-gray-300 mb-2">
                 Día de capacitación
@@ -503,7 +490,6 @@ const cargarCursos = async (campana_id, dia, grupo_id) => {
               </select>
             </div>
 
-            {/* Selección de grupo */}
             <div>
               <label className="block text-sm font-medium text-gray-300 mb-2">
                 Grupo
@@ -512,7 +498,7 @@ const cargarCursos = async (campana_id, dia, grupo_id) => {
                 className="w-full bg-white/10 border border-white/20 rounded-lg p-3 focus:ring-2 focus:ring-purple-400 focus:border-transparent transition text-sm text-white placeholder-gray-400 disabled:bg-gray-700"
                 value={seleccion.grupo_id}
                 onChange={(e) => handleGrupoChange(e.target.value)}
-                disabled={!seleccion.dia || loading} // <-- Ahora depende del día
+                disabled={!seleccion.dia || loading}
               >
                 <option value="" className="bg-slate-800">Selecciona un grupo</option>
                 {grupos.map((g) => (
@@ -523,7 +509,6 @@ const cargarCursos = async (campana_id, dia, grupo_id) => {
               </select>
             </div>
 
-            {/* Vista previa de malla */}
             {cursos.length > 0 && (
               <div className="bg-gradient-to-r from-purple-500/10 to-pink-500/10 backdrop-blur-sm rounded-xl border border-purple-500/20 p-4">
                 <h3 className="font-semibold text-white mb-3 flex items-center gap-2">
@@ -532,7 +517,7 @@ const cargarCursos = async (campana_id, dia, grupo_id) => {
                       <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-6-3a2 2 0 11-4 0 2 2 0 014 0zm-2 4a5 5 0 00-4.546 2.916A5.986 5.986 0 005 10a6 6 0 0012 0c0-.35-.036-.687-.101-1.016A5 5 0 0010 11z" clipRule="evenodd" />
                     </svg>
                   </span>
-                  Malla de cursos (Día {seleccion.dia}) {/* <-- Mostramos el día */}
+                  Malla de cursos (Día {seleccion.dia})
                   <span className="text-sm font-normal text-gray-400">({cursos.length} cursos)</span>
                 </h3>
                 <div className="space-y-2 max-h-40 overflow-y-auto">
@@ -554,7 +539,6 @@ const cargarCursos = async (campana_id, dia, grupo_id) => {
               </div>
             )}
 
-            {/* Selección de curso */}
             <div>
               <label className="block text-sm font-medium text-gray-300 mb-2">
                 Curso a activar
@@ -583,7 +567,6 @@ const cargarCursos = async (campana_id, dia, grupo_id) => {
             </button>
           </div>
 
-          {/* Panel de grupos asignados (derecha) - CON ACORDEÓN */}
           <div className="bg-white/10 backdrop-blur-md rounded-2xl border border-white/20 shadow-xl shadow-purple-500/5 p-6">
             <h2 className="font-semibold text-xl text-white mb-4 flex items-center gap-2">
               <span className="bg-green-500/20 text-green-300 p-2 rounded-lg border border-green-500/30">
@@ -605,7 +588,8 @@ const cargarCursos = async (campana_id, dia, grupo_id) => {
                 {gruposConCursos.map((grupoData) => {
                   const grupo = grupoData.grupo;
                   const cursosDelGrupo = grupoData.cursos;
-                  const groupId = String(grupo.id); // <-- Convertimos a string para evitar problemas
+                  // Convertimos a número para asegurar la comparación correcta
+                  const groupId = Number(cursosDelGrupo[0]?.grupo_id);
                   const isExpanded = expandedGroupId === groupId;
 
                   return (
@@ -613,7 +597,6 @@ const cargarCursos = async (campana_id, dia, grupo_id) => {
                       key={groupId}
                       className="border border-white/20 rounded-lg overflow-hidden bg-white/5"
                     >
-                      {/* Encabezado del acordeón */}
                       <div
                         onClick={() => toggleGroup(groupId)}
                         className="flex items-center justify-between p-4 cursor-pointer hover:bg-white/10 transition-colors"
@@ -625,9 +608,6 @@ const cargarCursos = async (campana_id, dia, grupo_id) => {
                           <h3 className="font-semibold text-gray-100">
                             {grupo.nombre}
                           </h3>
-                          <span className="text-xs text-gray-400">
-                            ({grupo.activos || 0} asesores activos)
-                          </span>
                         </div>
                         <svg
                           className={`w-5 h-5 text-gray-400 transition-transform duration-300 ${
@@ -641,7 +621,6 @@ const cargarCursos = async (campana_id, dia, grupo_id) => {
                         </svg>
                       </div>
 
-                      {/* Contenido del acordeón - cursos del grupo */}
                       {isExpanded && (
                         <div className="border-t border-white/20 p-4 space-y-3">
                           {cursosDelGrupo.map((a) => (
