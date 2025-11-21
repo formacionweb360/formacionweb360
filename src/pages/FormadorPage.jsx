@@ -15,7 +15,8 @@ export default function FormadorPage({ user, onLogout }) {
   const [gruposConCursos, setGruposConCursos] = useState([]);
   const [loading, setLoading] = useState(false);
   const [mensaje, setMensaje] = useState({ tipo: "", texto: "" });
-  const [expandedGroups, setExpandedGroups] = useState(new Set());
+  // Cambiado: ahora usamos un ID único en lugar de un Set
+  const [expandedGroupId, setExpandedGroupId] = useState(null);
 
   const fechaHoy = new Date().toISOString().split("T")[0];
   const fechaHoyFormateada = new Date().toLocaleDateString('es-PE', {
@@ -382,16 +383,9 @@ const cargarCursos = async (campana_id, dia, grupo_id) => {
     }
   };
 
+  // Actualizado: ahora solo un grupo puede estar expandido
   const toggleGroup = (groupId) => {
-    setExpandedGroups(prev => {
-      const newSet = new Set(prev);
-      if (newSet.has(groupId)) {
-        newSet.delete(groupId);
-      } else {
-        newSet.add(groupId);
-      }
-      return newSet;
-    });
+    setExpandedGroupId(prev => prev === groupId ? null : groupId);
   };
 
   return (
@@ -612,7 +606,8 @@ const cargarCursos = async (campana_id, dia, grupo_id) => {
                   const grupo = grupoData.grupo;
                   const cursosDelGrupo = grupoData.cursos;
                   const groupId = grupo.id;
-                  const isExpanded = expandedGroups.has(groupId);
+                  // Cambiado: ahora usamos el ID único
+                  const isExpanded = expandedGroupId === groupId;
 
                   return (
                     <div
