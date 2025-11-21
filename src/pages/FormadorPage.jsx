@@ -7,17 +7,16 @@ export default function FormadorPage({ user, onLogout }) {
   const [cursos, setCursos] = useState([]);
   const [seleccion, setSeleccion] = useState({
     campana_id: "",
-    dia: "", // Nuevo campo
+    dia: "", // <-- Nuevo campo
     grupo_id: "",
     curso_id: "",
-  });
+  });  
   const [activos, setActivos] = useState([]);
   const [gruposConCursos, setGruposConCursos] = useState([]);
   const [loading, setLoading] = useState(false);
   const [mensaje, setMensaje] = useState({ tipo: "", texto: "" });
   const [expandedGroups, setExpandedGroups] = useState(new Set());
 
-  // Nueva variable para el día actual (opcional, si se quiere usar para filtrar activos)
   const fechaHoy = new Date().toISOString().split("T")[0];
   const fechaHoyFormateada = new Date().toLocaleDateString('es-PE', {
     weekday: 'long',
@@ -58,9 +57,8 @@ export default function FormadorPage({ user, onLogout }) {
     }
   };
 
-  // Cargar grupos por campaña y día
-  const cargarGrupos = async (campana_id, dia) => {
-    if (!campana_id || !dia) {
+  const cargarGrupos = async (campana_id) => {
+    if (!campana_id) {
       return;
     }
     setLoading(true);
@@ -77,7 +75,6 @@ export default function FormadorPage({ user, onLogout }) {
         return;
       }
 
-      // Filtrar y contar asesores activos del día específico
       const gruposConConteo = await Promise.all(
         gruposData.map(async (g) => {
           const { count } = await supabase
@@ -104,52 +101,47 @@ export default function FormadorPage({ user, onLogout }) {
       setLoading(false);
     }
   };
+  
+  // Actualizado: ahora recibe `dia`
+  const cargarCursos = async (campana_id, dia, grupo_id) => {
+    if (!campana_id || !dia || !grupo_id) {
+        return;
+    }
+    setLoading(true);
+    try {
+      let query = supabase
+        .from("cursos")
+        .select("*")
+        .eq("campana_id", campana_id)
+        .eq("dia", dia) // <-- Nuevo filtro
+        .eq("estado", "Activo");
 
-  // Cargar cursos por campaña, grupo y día
-const cargarCursos = async (campana_id, dia, grupo_id) => {
-  if (!campana_id || !dia || !grupo_id) {
-    return;
-  }
-  setLoading(true);
-  try {
-    let query = supabase
-      .from("cursos")
-      .select("*")
-      .eq("campana_id", campana_id)
-      .eq("dia", dia)
-      .eq("estado", "Activo");
-
-    if (grupo_id) {
-      const groupIdNum = Number(grupo_id);
-      if (!isNaN(groupIdNum)) {
-        // Si es número, usar como integer
-        query = query.or({ 'grupo_id': null, 'grupo_id': groupIdNum });
-      } else {
-        // Si no es número, usar como string
-        query = query.or({ 'grupo_id': null, 'grupo_id': grupo_id });
+      if (grupo_id) {
+        const grupoIdNum = Number(grupo_id);
+        if (!isNaN(grupoIdNum)) {
+          // Corregido: uso correcto de .or()
+          query = query.or({ 'grupo_id': null, 'grupo_id': grupoIdNum });
+        } else {
+          query = query.or({ 'grupo_id': null, 'grupo_id': grupo_id });
+        }
       }
-    }
 
-    const { data, error } = await query;
-
-    if (error) {
-      console.error("Error al cargar cursos:", error);
+      const { data, error } = await query;
+      if (!error) {
+        setCursos(data || []);
+      } else {
+        console.error("Error al cargar cursos:", error);
+        setCursos([]);
+        mostrarMensaje("error", "Error al cargar cursos");
+      }
+    } catch (err) {
+      console.error("Error *interno* en cargarCursos:", err);
       setCursos([]);
-      mostrarMensaje("error", "Error al cargar cursos");
-      return;
+    } finally {
+      setLoading(false);
     }
+  };
 
-    setCursos(data || []);
-
-  } catch (err) {
-    console.error("Error *interno* en cargarCursos:", err);
-    setCursos([]);
-  } finally {
-    setLoading(false);
-  }
-};
-
-  // Cargar cursos activos del día actual, agrupados por grupo y día
   const cargarActivos = async () => {
     if (!user?.id) {
         console.error("User no está definido o no tiene ID. No se pueden cargar activos.");
@@ -166,7 +158,6 @@ const cargarCursos = async (campana_id, dia, grupo_id) => {
         grupo_id, 
         fecha, 
         activo,
-        dia,
         cursos(titulo, duracion_minutos),
         grupos(nombre),
         campañas(nombre)
@@ -200,7 +191,6 @@ const cargarCursos = async (campana_id, dia, grupo_id) => {
       );
       setActivos(activosConConteo);
 
-      // Agrupar cursos por grupo para el acordeón
       const gruposMap = {};
       activosConConteo.forEach((a) => {
         const grupoId = a.grupo_id;
@@ -220,6 +210,7 @@ const cargarCursos = async (campana_id, dia, grupo_id) => {
     }
   };
 
+  // Actualizado: ahora valida `dia`
   const activarCurso = async () => {
     const { campana_id, dia, grupo_id, curso_id } = seleccion;
 
@@ -231,7 +222,6 @@ const cargarCursos = async (campana_id, dia, grupo_id) => {
     setLoading(true);
 
     try {
-      // Verificar si ya está activado para esta campaña, grupo, día y curso en la fecha de hoy
       const { data: existe } = await supabase
         .from("cursos_activados")
         .select("*")
@@ -239,11 +229,10 @@ const cargarCursos = async (campana_id, dia, grupo_id) => {
         .eq("campana_id", campana_id)
         .eq("grupo_id", grupo_id)
         .eq("curso_id", curso_id)
-        .eq("dia", dia) // Nuevo filtro
         .maybeSingle();
 
       if (existe) {
-        mostrarMensaje("error", "⚠️ Este curso ya está activado hoy para esa campaña, grupo y día");
+        mostrarMensaje("error", "⚠️ Este curso ya está activado hoy para esa campaña y grupo");
         return;
       }
 
@@ -257,7 +246,7 @@ const cargarCursos = async (campana_id, dia, grupo_id) => {
             fecha: fechaHoy,
             activo: true,
             formador_id: user.id,
-            dia, // Nuevo campo
+            // ⛔ No agregamos `dia` aquí
           },
         ])
         .select()
@@ -312,7 +301,7 @@ const cargarCursos = async (campana_id, dia, grupo_id) => {
       }
 
       await cargarActivos();
-      await cargarGrupos(seleccion.campana_id, seleccion.dia);
+      await cargarGrupos(seleccion.campana_id);
       setSeleccion({ ...seleccion, curso_id: "" });
 
     } catch (err) {
@@ -361,24 +350,27 @@ const cargarCursos = async (campana_id, dia, grupo_id) => {
     }
   };
 
-  // Manejar cambio de campaña: reinicia día, grupo y cursos
+  // Actualizado: ahora limpia `dia`
   const handleCampanaChange = async (campana_id) => {
     setSeleccion({ campana_id, dia: "", grupo_id: "", curso_id: "" });
     setGrupos([]);
     setCursos([]);
+    if (campana_id) {
+      await cargarGrupos(campana_id);
+    }
   };
 
-  // Manejar cambio de día: carga grupos y cursos
+  // Nuevo: maneja el cambio de día
   const handleDiaChange = async (dia) => {
     setSeleccion({ ...seleccion, dia, grupo_id: "", curso_id: "" });
     setGrupos([]);
     setCursos([]);
     if (dia) {
-      await cargarGrupos(seleccion.campana_id, dia);
+      await cargarGrupos(seleccion.campana_id); // Recarga grupos si es necesario
     }
   };
 
-  // Manejar cambio de grupo: carga cursos
+  // Actualizado: ahora pasa `dia` a `cargarCursos`
   const handleGrupoChange = async (grupo_id) => {
     setSeleccion({ ...seleccion, grupo_id, curso_id: "" });
     setCursos([]);
@@ -523,7 +515,7 @@ const cargarCursos = async (campana_id, dia, grupo_id) => {
                 className="w-full bg-white/10 border border-white/20 rounded-lg p-3 focus:ring-2 focus:ring-purple-400 focus:border-transparent transition text-sm text-white placeholder-gray-400 disabled:bg-gray-700"
                 value={seleccion.grupo_id}
                 onChange={(e) => handleGrupoChange(e.target.value)}
-                disabled={!seleccion.dia || loading}
+                disabled={!seleccion.dia || loading} // <-- Ahora depende del día
               >
                 <option value="" className="bg-slate-800">Selecciona un grupo</option>
                 {grupos.map((g) => (
@@ -543,7 +535,7 @@ const cargarCursos = async (campana_id, dia, grupo_id) => {
                       <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-6-3a2 2 0 11-4 0 2 2 0 014 0zm-2 4a5 5 0 00-4.546 2.916A5.986 5.986 0 005 10a6 6 0 0012 0c0-.35-.036-.687-.101-1.016A5 5 0 0010 11z" clipRule="evenodd" />
                     </svg>
                   </span>
-                  Malla de cursos (Día {seleccion.dia})
+                  Malla de cursos (Día {seleccion.dia}) {/* <-- Mostramos el día */}
                   <span className="text-sm font-normal text-gray-400">({cursos.length} cursos)</span>
                 </h3>
                 <div className="space-y-2 max-h-40 overflow-y-auto">
@@ -677,14 +669,6 @@ const cargarCursos = async (campana_id, dia, grupo_id) => {
                                         <path d="M5.5 16a3.5 3.5 0 01-.369-6.98 4 4 0 117.753-1.977A4.5 4.5 0 1113.5 16h-8z" />
                                       </svg>
                                       <span className="truncate">{a.campañas?.nombre || "Sin campaña"}</span>
-                                    </div>
-                                    <div className="flex items-center gap-1.5">
-                                      <svg className="w-3.5 h-3.5 text-blue-400 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
-                                        <path fillRule="evenodd" d="M6 2a1 1 0 00-1 1v1H4a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V6a2 2 0 00-2-2h-1V3a1 1 0 10-2 0v1H7V3a1 1 0 00-1-1zm0 5a1 1 0 000 2h8a1 1 0 100-2H6z" clipRule="evenodd" />
-                                      </svg>
-                                      <span className="font-medium text-blue-400">
-                                        Día {a.dia}
-                                      </span>
                                     </div>
                                     <div className="flex items-center gap-1.5">
                                       <svg className="w-3.5 h-3.5 text-green-400 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
