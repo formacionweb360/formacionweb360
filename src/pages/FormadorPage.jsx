@@ -72,7 +72,7 @@ export default function FormadorPage({ user, onLogout }) {
     setLoading(true);
 
     try {
-      const { data: gruposData, error: gruposError } = await supabase
+      const {  gruposData, error: gruposError } = await supabase
         .from("grupos")
         .select("*")
         .eq("campana_id", campana_id);
@@ -230,7 +230,7 @@ export default function FormadorPage({ user, onLogout }) {
     setLoading(true);
 
     try {
-      const { data: existe } = await supabase
+      const {  existe } = await supabase
         .from("cursos_activados")
         .select("*")
         .eq("fecha", fechaHoy)
@@ -244,7 +244,7 @@ export default function FormadorPage({ user, onLogout }) {
         return;
       }
 
-      const { data: activacion, error } = await supabase
+      const {  activacion, error } = await supabase
         .from("cursos_activados")
         .insert([
           {
@@ -265,7 +265,7 @@ export default function FormadorPage({ user, onLogout }) {
         return;
       }
 
-      const { data: grupo, error: errGrupo } = await supabase
+      const {  grupo, error: errGrupo } = await supabase
         .from("grupos")
         .select("nombre")
         .eq("id", grupo_id)
@@ -277,7 +277,7 @@ export default function FormadorPage({ user, onLogout }) {
         return;
       }
 
-      const { data: asesores, error: errAsesores } = await supabase
+      const {  asesores, error: errAsesores } = await supabase
         .from("usuarios")
         .select("id")
         .eq("rol", "usuario")
