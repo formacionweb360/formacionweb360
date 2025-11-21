@@ -3,6 +3,7 @@ import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router-d
 import LoginForm from "./components/LoginForm";
 import AdminPage from "./pages/AdminPage";
 import FormadorPage from "./pages/FormadorPage";
+import FormadorUsuariosPage from "./pages/FormadorUsuariosPage"; // ✅ Importar el nuevo componente
 import AsesorDashboard from "./pages/AsesorDashboard";
 import CursoViewPage from "./pages/CursoViewPage";
 
@@ -88,6 +89,18 @@ export default function App() {
           element={
             user.rol === "Formador" ? (
               <FormadorPage user={user} onLogout={handleLogout} />
+            ) : (
+              <Navigate to="/" replace />
+            )
+          }
+        />
+
+        {/* ✅ Nueva ruta para gestión de usuarios */}
+        <Route
+          path="/formador/usuarios"
+          element={
+            user.rol === "Formador" ? (
+              <FormadorUsuariosPage user={user} onLogout={handleLogout} />
             ) : (
               <Navigate to="/" replace />
             )
