@@ -226,7 +226,7 @@ const cargarCursos = async (campana_id, dia, grupo_id) => {
     setLoading(true);
 
     try {
-      const { data: existe } = await supabase
+      const {  existe } = await supabase
         .from("cursos_activados")
         .select("*")
         .eq("fecha", fechaHoy)
@@ -240,7 +240,7 @@ const cargarCursos = async (campana_id, dia, grupo_id) => {
         return;
       }
 
-      const { data: activacion, error } = await supabase
+      const {  activacion, error } = await supabase
         .from("cursos_activados")
         .insert([
           {
@@ -274,7 +274,7 @@ const cargarCursos = async (campana_id, dia, grupo_id) => {
         return;
       }
 
-      const { data: asesores, error: errAsesores } = await supabase
+      const {  asesores, error: errAsesores } = await supabase
         .from("usuarios")
         .select("id")
         .eq("rol", "usuario")
@@ -605,8 +605,7 @@ const cargarCursos = async (campana_id, dia, grupo_id) => {
                 {gruposConCursos.map((grupoData) => {
                   const grupo = grupoData.grupo;
                   const cursosDelGrupo = grupoData.cursos;
-                  const groupId = grupo.id;
-                  // Cambiado: ahora usamos el ID único
+                  const groupId = String(grupo.id); // <-- Convertimos a string para evitar problemas
                   const isExpanded = expandedGroupId === groupId;
 
                   return (
