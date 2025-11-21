@@ -16,8 +16,13 @@ export default function FormadorPage({ user, onLogout }) {
   const [loading, setLoading] = useState(false);
   const [mensaje, setMensaje] = useState({ tipo: "", texto: "" });
   const [expandedGroupId, setExpandedGroupId] = useState(null);
-  const [usuarios, setUsuarios] = useState([]); // Nuevo estado para usuarios
   const [activeTab, setActiveTab] = useState("activar"); // Nuevo estado para pestañas
+
+  // Estados para la pestaña de usuarios
+  const [filtroCampana, setFiltroCampana] = useState("");
+  const [filtroGrupo, setFiltroGrupo] = useState("");
+  const [usuariosFiltrados, setUsuariosFiltrados] = useState([]);
+  const [mostrarTabla, setMostrarTabla] = useState(false); // Controla si se muestra la tabla
 
   const fechaHoy = new Date().toISOString().split("T")[0];
   const fechaHoyFormateada = new Date().toLocaleDateString('es-PE', {
@@ -29,9 +34,6 @@ export default function FormadorPage({ user, onLogout }) {
 
   useEffect(() => {
     cargarDatos();
-    if (user?.campana_id) {
-      cargarUsuariosPorCampana(); // Cargar usuarios de la campaña del formador
-    }
   }, [user]);
 
   const mostrarMensaje = (tipo, texto) => {
@@ -386,26 +388,44 @@ export default function FormadorPage({ user, onLogout }) {
     setExpandedGroupId(prev => prev === numericGroupId ? null : numericGroupId);
   };
 
-  // --- Nuevas funciones para usuarios ---
-  const cargarUsuariosPorCampana = async () => {
+  // --- Nueva función para buscar usuarios con filtros ---
+  const buscarUsuarios = async () => {
+    if (!filtroCampana) {
+      mostrarMensaje("error", "⚠️ Debes seleccionar una campaña");
+      return;
+    }
+
     setLoading(true);
     try {
-      const { data, error } = await supabase
+      let query = supabase
         .from("usuarios")
         .select("id, nombre, usuario, estado, grupo_nombre")
-        .eq("campana_id", user.campana_id)
+        .eq("campana_id", filtroCampana)
         .neq("rol", "Formador");
 
-      if (error) throw error;
-      setUsuarios(data || []);
+      if (filtroGrupo) {
+        query = query.eq("grupo_nombre", filtroGrupo);
+      }
+
+      const { data, error } = await query;
+
+      if (error) {
+        throw error;
+      }
+
+      setUsuariosFiltrados(data || []);
+      setMostrarTabla(true); // Mostrar tabla solo tras buscar
+      mostrarMensaje("success", `🔍 Encontrados ${data?.length || 0} usuarios`);
     } catch (err) {
-      console.error("Error al cargar usuarios:", err);
-      mostrarMensaje("error", "Error al cargar usuarios.");
+      console.error("Error al buscar usuarios:", err);
+      mostrarMensaje("error", "❌ Error al cargar usuarios.");
+      setMostrarTabla(false);
     } finally {
       setLoading(false);
     }
   };
 
+  // --- Nueva función para cambiar estado de usuario ---
   const cambiarEstadoUsuario = async (id, nuevoEstado) => {
     const { error } = await supabase
       .from("usuarios")
@@ -416,7 +436,7 @@ export default function FormadorPage({ user, onLogout }) {
       console.error("Error al actualizar estado:", error);
       mostrarMensaje("error", "No se pudo actualizar el estado.");
     } else {
-      setUsuarios(prev =>
+      setUsuariosFiltrados(prev =>
         prev.map(u => u.id === id ? { ...u, estado: nuevoEstado } : u)
       );
       mostrarMensaje("success", `Usuario ${nuevoEstado.toLowerCase()}.`);
@@ -766,61 +786,121 @@ export default function FormadorPage({ user, onLogout }) {
               Gestión de Usuarios
             </h2>
 
-            {loading ? (
-              <div className="text-center py-12">
-                <div className="w-8 h-8 border-4 border-purple-400 border-t-transparent rounded-full animate-spin mx-auto"></div>
-                <p className="text-gray-400 mt-4">Cargando usuarios...</p>
+            {/* Filtros */}
+            <div className="grid md:grid-cols-3 gap-4 mb-6 bg-white/5 p-4 rounded-xl border border-white/10">
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-2">Campaña</label>
+                <select
+                  className="w-full bg-white/10 border border-white/20 rounded-lg p-3 focus:ring-2 focus:ring-purple-400 focus:border-transparent transition text-sm text-white placeholder-gray-400"
+                  value={filtroCampana}
+                  onChange={(e) => setFiltroCampana(e.target.value)}
+                >
+                  <option value="" className="bg-slate-800">Selecciona una campaña</option>
+                  {campañas.map((c) => (
+                    <option key={c.id} value={c.id} className="bg-slate-800">
+                      {c.nombre}
+                    </option>
+                  ))}
+                </select>
               </div>
-            ) : usuarios.length === 0 ? (
-              <div className="text-center py-12">
-                <div className="text-6xl mb-4 text-gray-500">📭</div>
-                <p className="text-gray-400 text-sm mb-1">No hay usuarios en tu campaña</p>
-                <p className="text-xs text-gray-500">Los usuarios se cargarán cuando se asigne una campaña</p>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-2">Grupo</label>
+                <select
+                  className="w-full bg-white/10 border border-white/20 rounded-lg p-3 focus:ring-2 focus:ring-purple-400 focus:border-transparent transition text-sm text-white placeholder-gray-400"
+                  value={filtroGrupo}
+                  onChange={(e) => setFiltroGrupo(e.target.value)}
+                  disabled={!filtroCampana}
+                >
+                  <option value="" className="bg-slate-800">Todos los grupos</option>
+                  {grupos
+                    .filter(g => g.campana_id == filtroCampana) // Filtrar grupos por campaña seleccionada
+                    .map((g) => (
+                      <option key={g.id} value={g.nombre} className="bg-slate-800">
+                        {g.nombre}
+                      </option>
+                    ))
+                  }
+                </select>
               </div>
-            ) : (
+
+              <div className="flex items-end">
+                <button
+                  onClick={buscarUsuarios}
+                  disabled={!filtroCampana || loading}
+                  className="w-full bg-gradient-to-r from-indigo-500 to-purple-600 text-white py-3 px-4 rounded-lg hover:shadow-lg hover:shadow-indigo-500/20 transition-all font-medium shadow-md disabled:opacity-50 disabled:cursor-not-allowed text-sm"
+                >
+                  {loading ? "Buscando..." : "🔍 Buscar Usuarios"}
+                </button>
+              </div>
+            </div>
+
+            {/* Tabla de resultados */}
+            {mostrarTabla && (
               <div className="overflow-x-auto">
-                <table className="min-w-full divide-y divide-gray-200/20">
-                  <thead>
-                    <tr>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Nombre</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Usuario</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Grupo</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Estado</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Acción</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-200/10">
-                    {usuarios.map((u) => (
-                      <tr key={u.id} className="hover:bg-white/5 transition-colors">
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-200">{u.nombre}</td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">{u.usuario}</td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">{u.grupo_nombre || "Sin grupo"}</td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <span className={`inline-flex text-xs leading-5 font-semibold rounded-full px-2.5 py-0.5 ${
-                            u.estado === "Activo" 
-                              ? "bg-green-500/20 text-green-400 border border-green-500/30" 
-                              : "bg-red-500/20 text-red-400 border border-red-500/30"
-                          }`}>
-                            {u.estado}
-                          </span>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm">
-                          <button
-                            onClick={() => toggleEstado(u)}
-                            disabled={loading}
-                            className={`px-3 py-1.5 rounded-md text-xs font-medium transition ${
-                              u.estado === "Activo" 
-                                ? "bg-red-500/20 text-red-400 hover:bg-red-500/30 border border-red-500/30 hover:text-white" 
-                                : "bg-green-500/20 text-green-400 hover:bg-green-500/30 border border-green-500/30 hover:text-white"
-                            } disabled:opacity-50 disabled:cursor-not-allowed`}
-                          >
-                            {u.estado === "Activo" ? "Inactivar" : "Activar"}
-                          </button>
-                        </td>
+                {loading ? (
+                  <div className="text-center py-12">
+                    <div className="w-8 h-8 border-4 border-purple-400 border-t-transparent rounded-full animate-spin mx-auto"></div>
+                    <p className="text-gray-400 mt-4">Cargando usuarios...</p>
+                  </div>
+                ) : usuariosFiltrados.length === 0 ? (
+                  <div className="text-center py-12">
+                    <div className="text-6xl mb-4 text-gray-500">📬</div>
+                    <p className="text-gray-400 text-sm mb-1">No se encontraron usuarios con esos filtros</p>
+                    <p className="text-xs text-gray-500">Intenta con otros valores o verifica que existan usuarios asignados.</p>
+                  </div>
+                ) : (
+                  <table className="min-w-full divide-y divide-gray-200/20">
+                    <thead>
+                      <tr>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Nombre</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Usuario</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Grupo</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Estado</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Acción</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
+                    </thead>
+                    <tbody className="divide-y divide-gray-200/10">
+                      {usuariosFiltrados.map((u) => (
+                        <tr key={u.id} className="hover:bg-white/5 transition-colors">
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-200">{u.nombre}</td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">{u.usuario}</td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">{u.grupo_nombre || "Sin grupo"}</td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <span className={`inline-flex text-xs leading-5 font-semibold rounded-full px-2.5 py-0.5 ${
+                              u.estado === "Activo" 
+                                ? "bg-green-500/20 text-green-400 border border-green-500/30" 
+                                : "bg-red-500/20 text-red-400 border border-red-500/30"
+                            }`}>
+                              {u.estado}
+                            </span>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm">
+                            <button
+                              onClick={() => toggleEstado(u)}
+                              disabled={loading}
+                              className={`px-3 py-1.5 rounded-md text-xs font-medium transition ${
+                                u.estado === "Activo" 
+                                  ? "bg-red-500/20 text-red-400 hover:bg-red-500/30 border border-red-500/30 hover:text-white" 
+                                  : "bg-green-500/20 text-green-400 hover:bg-green-500/30 border border-green-500/30 hover:text-white"
+                              } disabled:opacity-50 disabled:cursor-not-allowed`}
+                            >
+                              {u.estado === "Activo" ? "Inactivar" : "Activar"}
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+              </div>
+            )}
+
+            {!mostrarTabla && (
+              <div className="text-center py-12">
+                <div className="text-6xl mb-4 text-gray-500">📬</div>
+                <p className="text-gray-400 text-sm mb-1">¿Dónde están mis usuarios?</p>
+                <p className="text-xs text-gray-500">Usa los filtros arriba y haz clic en “Buscar” para verlos.</p>
               </div>
             )}
           </div>
