@@ -103,44 +103,47 @@ export default function FormadorPage({ user, onLogout }) {
   };
   
   // Actualizado: ahora recibe `dia`
-  const cargarCursos = async (campana_id, dia, grupo_id) => {
-    if (!campana_id || !dia || !grupo_id) {
-        return;
-    }
-    setLoading(true);
-    try {
-      let query = supabase
-        .from("cursos")
-        .select("*")
-        .eq("campana_id", campana_id)
-        .eq("dia", dia) // <-- Nuevo filtro
-        .eq("estado", "Activo");
+const cargarCursos = async (campana_id, dia, grupo_id) => {
+  if (!campana_id || !dia || !grupo_id) {
+    return;
+  }
+  setLoading(true);
+  try {
+    let query = supabase
+      .from("cursos")
+      .select("*")
+      .eq("campana_id", campana_id)
+      .eq("dia", dia)
+      .eq("estado", "Activo");
 
-      if (grupo_id) {
-        const grupoIdNum = Number(grupo_id);
-        if (!isNaN(grupoIdNum)) {
-          // Corregido: uso correcto de .or()
-          query = query.or({ 'grupo_id': null, 'grupo_id': grupoIdNum });
-        } else {
-          query = query.or({ 'grupo_id': null, 'grupo_id': grupo_id });
-        }
-      }
-
-      const { data, error } = await query;
-      if (!error) {
-        setCursos(data || []);
+    if (grupo_id) {
+      const grupoIdNum = Number(grupo_id);
+      if (!isNaN(grupoIdNum)) {
+        // Sintaxis correcta para .or()
+        query = query.or(`grupo_id.is.null,grupo_id.eq.${grupoIdNum}`);
       } else {
-        console.error("Error al cargar cursos:", error);
-        setCursos([]);
-        mostrarMensaje("error", "Error al cargar cursos");
+        query = query.or(`grupo_id.is.null,grupo_id.eq.${grupo_id}`);
       }
-    } catch (err) {
-      console.error("Error *interno* en cargarCursos:", err);
-      setCursos([]);
-    } finally {
-      setLoading(false);
     }
-  };
+
+    const { data, error } = await query;
+
+    if (error) {
+      console.error("Error al cargar cursos:", error);
+      setCursos([]);
+      mostrarMensaje("error", "Error al cargar cursos");
+      return;
+    }
+
+    setCursos(data || []);
+
+  } catch (err) {
+    console.error("Error *interno* en cargarCursos:", err);
+    setCursos([]);
+  } finally {
+    setLoading(false);
+  }
+};
 
   const cargarActivos = async () => {
     if (!user?.id) {
