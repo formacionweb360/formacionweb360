@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { supabase } from "../services/supabaseClient";
 
 export default function FormadorPage({ user, onLogout }) {
@@ -17,8 +17,12 @@ export default function FormadorPage({ user, onLogout }) {
   const [mensaje, setMensaje] = useState({ tipo: "", texto: "" });
   const [expandedGroupId, setExpandedGroupId] = useState(null);
 
-  // === NUEVO: Estado para la tabla de dotación ===
+  // === Estados para Dotación ===
   const [usuariosDotacion, setUsuariosDotacion] = useState([]);
+  const [gruposDisponibles, setGruposDisponibles] = useState([]);
+  const [filtroGrupo, setFiltroGrupo] = useState("todos");
+  const [paginaActual, setPaginaActual] = useState(1);
+  const REGISTROS_POR_PAGINA = 10;
 
   const fechaHoy = new Date().toISOString().split("T")[0];
   const fechaHoyFormateada = new Date().toLocaleDateString('es-PE', {
@@ -30,7 +34,7 @@ export default function FormadorPage({ user, onLogout }) {
 
   useEffect(() => {
     cargarDatos();
-    cargarUsuariosDotacion(); // === NUEVO ===
+    cargarUsuariosDotacion();
   }, []);
 
   const mostrarMensaje = (tipo, texto) => {
@@ -62,9 +66,7 @@ export default function FormadorPage({ user, onLogout }) {
   };
 
   const cargarGrupos = async (campana_id) => {
-    if (!campana_id) {
-      return;
-    }
+    if (!campana_id) return;
     setLoading(true);
 
     try {
@@ -107,9 +109,7 @@ export default function FormadorPage({ user, onLogout }) {
   };
 
   const cargarCursos = async (campana_id, dia, grupo_id) => {
-    if (!campana_id || !dia || !grupo_id) {
-      return;
-    }
+    if (!campana_id || !dia || !grupo_id) return;
     setLoading(true);
     try {
       let query = supabase
@@ -129,14 +129,12 @@ export default function FormadorPage({ user, onLogout }) {
       }
 
       const { data, error } = await query;
-
       if (error) {
         console.error("Error al cargar cursos:", error);
         setCursos([]);
         mostrarMensaje("error", "Error al cargar cursos");
         return;
       }
-
       setCursos(data || []);
     } catch (err) {
       console.error("Error *interno* en cargarCursos:", err);
@@ -148,7 +146,7 @@ export default function FormadorPage({ user, onLogout }) {
 
   const cargarActivos = async () => {
     if (!user?.id) {
-      console.error("User no está definido o no tiene ID. No se pueden cargar activos.");
+      console.error("User no está definido o no tiene ID.");
       setActivos([]);
       setGruposConCursos([]);
       return;
@@ -189,7 +187,6 @@ export default function FormadorPage({ user, onLogout }) {
             .from("cursos_asesores")
             .select("*", { count: "exact", head: true })
             .eq("curso_activado_id", activado.id);
-
           return { ...activado, asesores_count: count || 0 };
         })
       );
@@ -199,14 +196,10 @@ export default function FormadorPage({ user, onLogout }) {
       activosConConteo.forEach((a) => {
         const grupoId = a.grupo_id;
         if (!gruposMap[grupoId]) {
-          gruposMap[grupoId] = {
-            grupo: a.grupos,
-            cursos: [],
-          };
+          gruposMap[grupoId] = { grupo: a.grupos, cursos: [] };
         }
         gruposMap[grupoId].cursos.push(a);
       });
-
       setGruposConCursos(Object.values(gruposMap));
     } catch (err) {
       console.error("Error contando asesores:", err);
@@ -214,31 +207,38 @@ export default function FormadorPage({ user, onLogout }) {
     }
   };
 
-  // === NUEVO: cargar usuarios para dotación ===
+  // === Cargar usuarios para dotación + grupos únicos ===
   const cargarUsuariosDotacion = async () => {
     setLoading(true);
     try {
-      const { data, error } = await supabase
+      // Cargamos usuarios con grupo_nombre
+      const { data: usuarios, error: errUsuarios } = await supabase
         .from("usuarios")
-        .select("id, usuario, rol, nombre, estado, grupo_id")
+        .select("id, usuario, rol, nombre, estado, grupo_nombre")
         .order("nombre", { ascending: true });
 
-      if (error) {
-        console.error("Error al cargar usuarios para dotación:", error);
-        mostrarMensaje("error", "Error al cargar la dotación");
-        return;
-      }
+      if (errUsuarios) throw errUsuarios;
 
-      setUsuariosDotacion(data || []);
+      setUsuariosDotacion(usuarios || []);
+
+      // Extraemos grupo_nombre únicos (sin duplicados, sin null/undefined)
+      const gruposSet = new Set(
+        (usuarios || [])
+          .map(u => u.grupo_nombre)
+          .filter(g => g && typeof g === 'string')
+      );
+      const gruposArray = Array.from(gruposSet).sort();
+      setGruposDisponibles(gruposArray);
     } catch (err) {
-      console.error("Error interno al cargar usuarios:", err);
-      mostrarMensaje("error", "Error inesperado al cargar dotación");
+      console.error("Error al cargar dotación:", err);
+      mostrarMensaje("error", "Error al cargar usuarios");
+      setUsuariosDotacion([]);
+      setGruposDisponibles([]);
     } finally {
       setLoading(false);
     }
   };
 
-  // === NUEVO: actualizar estado de usuario ===
   const actualizarEstadoUsuario = async (userId, nuevoEstado) => {
     setLoading(true);
     try {
@@ -247,22 +247,15 @@ export default function FormadorPage({ user, onLogout }) {
         .update({ estado: nuevoEstado })
         .eq("id", userId);
 
-      if (error) {
-        console.error("Error al actualizar estado del usuario:", error);
-        mostrarMensaje("error", "Error al actualizar estado");
-        return;
-      }
+      if (error) throw error;
 
       setUsuariosDotacion(prev =>
-        prev.map(u =>
-          u.id === userId ? { ...u, estado: nuevoEstado } : u
-        )
+        prev.map(u => (u.id === userId ? { ...u, estado: nuevoEstado } : u))
       );
-
       mostrarMensaje("success", "✅ Estado actualizado correctamente");
     } catch (err) {
-      console.error("Error interno al actualizar estado:", err);
-      mostrarMensaje("error", "Error inesperado al actualizar");
+      console.error("Error al actualizar estado:", err);
+      mostrarMensaje("error", "Error al actualizar el estado");
     } finally {
       setLoading(false);
     }
@@ -270,14 +263,12 @@ export default function FormadorPage({ user, onLogout }) {
 
   const activarCurso = async () => {
     const { campana_id, dia, grupo_id, curso_id } = seleccion;
-
     if (!campana_id || !dia || !grupo_id || !curso_id) {
       mostrarMensaje("error", "⚠️ Debes seleccionar campaña, día, grupo y curso");
       return;
     }
 
     setLoading(true);
-
     try {
       const { data: existe } = await supabase
         .from("cursos_activados")
@@ -373,7 +364,6 @@ export default function FormadorPage({ user, onLogout }) {
     }
 
     setLoading(true);
-
     try {
       const { error: errorAsesores } = await supabase
         .from("cursos_asesores")
@@ -408,32 +398,49 @@ export default function FormadorPage({ user, onLogout }) {
     setSeleccion({ campana_id, dia: "", grupo_id: "", curso_id: "" });
     setGrupos([]);
     setCursos([]);
-    if (campana_id) {
-      await cargarGrupos(campana_id);
-    }
+    if (campana_id) await cargarGrupos(campana_id);
   };
 
   const handleDiaChange = async (dia) => {
     setSeleccion({ ...seleccion, dia, grupo_id: "", curso_id: "" });
     setGrupos([]);
     setCursos([]);
-    if (dia) {
-      await cargarGrupos(seleccion.campana_id);
-    }
+    if (dia) await cargarGrupos(seleccion.campana_id);
   };
 
   const handleGrupoChange = async (grupo_id) => {
     setSeleccion({ ...seleccion, grupo_id, curso_id: "" });
     setCursos([]);
-    if (grupo_id) {
-      await cargarCursos(seleccion.campana_id, seleccion.dia, grupo_id);
-    }
+    if (grupo_id) await cargarCursos(seleccion.campana_id, seleccion.dia, grupo_id);
   };
 
   const toggleGroup = (groupId) => {
     const numericGroupId = Number(groupId);
     setExpandedGroupId(prev => prev === numericGroupId ? null : numericGroupId);
   };
+
+  // === Lógica de filtrado y paginación (con useMemo para optimización) ===
+  const { usuariosPaginados, totalPaginas } = useMemo(() => {
+    let usuariosFiltrados = [...usuariosDotacion];
+
+    // Aplicar filtro por grupo_nombre
+    if (filtroGrupo !== "todos") {
+      usuariosFiltrados = usuariosFiltrados.filter(u => u.grupo_nombre === filtroGrupo);
+    }
+
+    // Paginación
+    const total = usuariosFiltrados.length;
+    const desde = (paginaActual - 1) * REGISTROS_POR_PAGINA;
+    const hasta = desde + REGISTROS_POR_PAGINA;
+    const pagina = usuariosFiltrados.slice(desde, hasta);
+
+    const totalPag = Math.ceil(total / REGISTROS_POR_PAGINA) || 1;
+
+    return {
+      usuariosPaginados: pagina,
+      totalPaginas: totalPag,
+    };
+  }, [usuariosDotacion, filtroGrupo, paginaActual]);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 overflow-hidden">
@@ -735,7 +742,7 @@ export default function FormadorPage({ user, onLogout }) {
         </div>
       </div>
 
-      {/* === NUEVA SECCIÓN: TABLA DE DOTACIÓN === */}
+      {/* === NUEVA SECCIÓN MEJORADA: TABLA DE DOTACIÓN CON FILTRO Y PAGINACIÓN === */}
       <div className="max-w-[95vw] mx-auto px-4 md:px-8 py-6">
         <div className="bg-white/10 backdrop-blur-md rounded-2xl border border-white/20 shadow-xl shadow-purple-500/5 p-6">
           <h2 className="font-semibold text-xl text-white mb-4 flex items-center gap-2">
@@ -747,72 +754,124 @@ export default function FormadorPage({ user, onLogout }) {
             Tabla de Dotación (Usuarios)
           </h2>
 
+          {/* Filtros */}
+          <div className="flex flex-wrap items-center gap-4 mb-6">
+            <div>
+              <label className="block text-sm font-medium text-gray-300 mb-1">Filtrar por Grupo</label>
+              <select
+                value={filtroGrupo}
+                onChange={(e) => {
+                  setFiltroGrupo(e.target.value);
+                  setPaginaActual(1); // Reiniciar a página 1 al cambiar filtro
+                }}
+                className="bg-white/10 border border-white/20 text-white rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-purple-400 focus:border-transparent"
+              >
+                <option value="todos" className="bg-slate-800">Todos los grupos</option>
+                {gruposDisponibles.map(grupo => (
+                  <option key={grupo} value={grupo} className="bg-slate-800">{grupo}</option>
+                ))}
+              </select>
+            </div>
+            <div className="text-sm text-gray-400 mt-5">
+              Mostrando {usuariosPaginados.length} de {usuariosDotacion.filter(u =>
+                filtroGrupo === "todos" ? true : u.grupo_nombre === filtroGrupo
+              ).length} usuarios
+            </div>
+          </div>
+
           {loading && !usuariosDotacion.length ? (
             <div className="text-center py-12">
               <div className="animate-spin w-8 h-8 border-2 border-purple-400 border-t-transparent rounded-full mx-auto mb-4"></div>
               <p className="text-gray-400 text-sm">Cargando dotación...</p>
             </div>
           ) : (
-            <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-white/10">
-                <thead>
-                  <tr>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Nombre</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Usuario</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Rol</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Grupo ID</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Estado</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Acción</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-white/5">
-                  {usuariosDotacion.map((u) => (
-                    <tr key={u.id} className="hover:bg-white/5 transition-colors">
-                      <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-100">{u.nombre}</td>
-                      <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-200">{u.usuario}</td>
-                      <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-200">
-                        <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
-                          u.rol === 'Administrador' ? 'bg-purple-500/20 text-purple-300' :
-                          u.rol === 'Formador' ? 'bg-green-500/20 text-green-300' :
-                          'bg-blue-500/20 text-blue-300'
-                        }`}>
-                          {u.rol}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-200">{u.grupo_id || '-'}</td>
-                      <td className="px-4 py-3 whitespace-nowrap text-sm">
-                        <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
-                          u.estado === 'Activo' ? 'bg-green-500/20 text-green-300' : 'bg-red-500/20 text-red-300'
-                        }`}>
-                          {u.estado}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3 whitespace-nowrap text-sm">
-                        <button
-                          onClick={() => actualizarEstadoUsuario(u.id, u.estado === 'Activo' ? 'Inactivo' : 'Activo')}
-                          disabled={loading}
-                          className={`px-3 py-1 rounded-md text-xs font-medium transition-colors ${
-                            u.estado === 'Activo'
-                              ? 'bg-red-500/20 text-red-300 hover:bg-red-500/30'
-                              : 'bg-green-500/20 text-green-300 hover:bg-green-500/30'
-                          } disabled:opacity-50`}
-                        >
-                          {u.estado === 'Activo' ? 'Marcar Inactivo' : 'Marcar Activo'}
-                        </button>
-                      </td>
+            <>
+              <div className="overflow-x-auto">
+                <table className="min-w-full divide-y divide-white/10">
+                  <thead>
+                    <tr>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Nombre</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Usuario</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Rol</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Grupo</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Estado</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Acción</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
+                  </thead>
+                  <tbody className="divide-y divide-white/5">
+                    {usuariosPaginados.length > 0 ? (
+                      usuariosPaginados.map((u) => (
+                        <tr key={u.id} className="hover:bg-white/5 transition-colors">
+                          <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-100">{u.nombre}</td>
+                          <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-200">{u.usuario}</td>
+                          <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-200">
+                            <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
+                              u.rol === 'Administrador' ? 'bg-purple-500/20 text-purple-300' :
+                              u.rol === 'Formador' ? 'bg-green-500/20 text-green-300' :
+                              'bg-blue-500/20 text-blue-300'
+                            }`}>
+                              {u.rol}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-200">{u.grupo_nombre || '-'}</td>
+                          <td className="px-4 py-3 whitespace-nowrap text-sm">
+                            <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
+                              u.estado === 'Activo' ? 'bg-green-500/20 text-green-300' : 'bg-red-500/20 text-red-300'
+                            }`}>
+                              {u.estado}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3 whitespace-nowrap text-sm">
+                            <button
+                              onClick={() => actualizarEstadoUsuario(u.id, u.estado === 'Activo' ? 'Inactivo' : 'Activo')}
+                              disabled={loading}
+                              className={`px-3 py-1 rounded-md text-xs font-medium transition-colors ${
+                                u.estado === 'Activo'
+                                  ? 'bg-red-500/20 text-red-300 hover:bg-red-500/30'
+                                  : 'bg-green-500/20 text-green-300 hover:bg-green-500/30'
+                              } disabled:opacity-50`}
+                            >
+                              {u.estado === 'Activo' ? 'Marcar Inactivo' : 'Marcar Activo'}
+                            </button>
+                          </td>
+                        </tr>
+                      ))
+                    ) : (
+                      <tr>
+                        <td colSpan="6" className="px-4 py-8 text-center text-gray-400">
+                          No se encontraron usuarios con ese filtro.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
 
-          {usuariosDotacion.length === 0 && !loading && (
-            <div className="text-center py-12">
-              <div className="text-6xl mb-4 text-gray-500">📭</div>
-              <p className="text-gray-400 text-sm mb-1">No hay usuarios registrados</p>
-              <p className="text-xs text-gray-500">Verifica la tabla en Supabase.</p>
-            </div>
+              {/* Controles de paginación */}
+              {totalPaginas > 1 && (
+                <div className="flex items-center justify-between mt-6">
+                  <button
+                    onClick={() => setPaginaActual(p => Math.max(1, p - 1))}
+                    disabled={paginaActual === 1 || loading}
+                    className="px-4 py-2 bg-white/10 text-white rounded-lg disabled:opacity-50 disabled:cursor-not-allowed hover:bg-white/20 transition"
+                  >
+                    ← Anterior
+                  </button>
+
+                  <span className="text-gray-300 text-sm">
+                    Página {paginaActual} de {totalPaginas}
+                  </span>
+
+                  <button
+                    onClick={() => setPaginaActual(p => Math.min(totalPaginas, p + 1))}
+                    disabled={paginaActual === totalPaginas || loading}
+                    className="px-4 py-2 bg-white/10 text-white rounded-lg disabled:opacity-50 disabled:cursor-not-allowed hover:bg-white/20 transition"
+                  >
+                    Siguiente →
+                  </button>
+                </div>
+              )}
+            </>
           )}
         </div>
       </div>
