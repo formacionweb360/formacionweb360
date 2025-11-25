@@ -19,7 +19,7 @@ export default function FormadorPage({ user, onLogout }) {
 
   // === Estados para Dotación de Asesores ===
   const [usuariosDotacion, setUsuariosDotacion] = useState([]);
-  const [gruposDisponibles, setGruposDisponibles] = useState([]);
+  const [todosLosGrupos, setTodosLosGrupos] = useState([]); // Nombres desde tabla 'grupos'
   const [filtroGrupo, setFiltroGrupo] = useState("todos");
   const [paginaActual, setPaginaActual] = useState(1);
   const REGISTROS_POR_PAGINA = 10;
@@ -35,6 +35,7 @@ export default function FormadorPage({ user, onLogout }) {
   useEffect(() => {
     cargarDatos();
     cargarUsuariosDotacion();
+    cargarNombresDeGrupos(); // 👈 Cargar grupos desde tabla 'grupos'
   }, []);
 
   const mostrarMensaje = (tipo, texto) => {
@@ -211,31 +212,42 @@ export default function FormadorPage({ user, onLogout }) {
   const cargarUsuariosDotacion = async () => {
     setLoading(true);
     try {
-      const {  usuarios, error: errUsuarios } = await supabase
+      const {  usuarios, error } = await supabase
         .from("usuarios")
-        .select("id, usuario, rol, nombre, estado, grupo_nombre")
-        .eq("rol", "usuario") // 👈 Solo asesores
+        .select("id, usuario, nombre, estado, grupo_nombre")
+        .eq("rol", "usuario") // Solo asesores
         .order("nombre", { ascending: true });
 
-      if (errUsuarios) throw errUsuarios;
+      if (error) throw error;
 
       setUsuariosDotacion(usuarios || []);
-
-      // Grupos únicos de los asesores
-      const gruposSet = new Set(
-        (usuarios || [])
-          .map(u => u.grupo_nombre)
-          .filter(g => g && typeof g === 'string')
-      );
-      const gruposArray = Array.from(gruposSet).sort();
-      setGruposDisponibles(gruposArray);
     } catch (err) {
-      console.error("Error al cargar dotación:", err);
-      mostrarMensaje("error", "Error al cargar asesores");
+      console.error("Error al cargar asesores:", err);
+      mostrarMensaje("error", "Error al cargar la dotación de asesores");
       setUsuariosDotacion([]);
-      setGruposDisponibles([]);
     } finally {
       setLoading(false);
+    }
+  };
+
+  // === Cargar todos los nombres de grupo desde la tabla 'grupos' ===
+  const cargarNombresDeGrupos = async () => {
+    try {
+      const {  grupos, error } = await supabase
+        .from("grupos")
+        .select("nombre")
+        .order("nombre", { ascending: true });
+
+      if (error) throw error;
+
+      const nombres = grupos
+        .map(g => g.nombre)
+        .filter(nombre => nombre && typeof nombre === 'string');
+      
+      setTodosLosGrupos([...new Set(nombres)]); // Evitar duplicados
+    } catch (err) {
+      console.error("Error al cargar nombres de grupos:", err);
+      setTodosLosGrupos([]);
     }
   };
 
@@ -261,6 +273,25 @@ export default function FormadorPage({ user, onLogout }) {
     }
   };
 
+  // === Lógica de filtrado y paginación ===
+  const { usuariosPaginados, totalPaginas } = useMemo(() => {
+    let filtrados = [...usuariosDotacion];
+
+    if (filtroGrupo !== "todos") {
+      filtrados = filtrados.filter(u => u.grupo_nombre === filtroGrupo);
+    }
+
+    const total = filtrados.length;
+    const desde = (paginaActual - 1) * REGISTROS_POR_PAGINA;
+    const hasta = desde + REGISTROS_POR_PAGINA;
+    const pagina = filtrados.slice(desde, hasta);
+    const totalPag = Math.ceil(total / REGISTROS_POR_PAGINA) || 1;
+
+    return { usuariosPaginados: pagina, totalPaginas };
+  }, [usuariosDotacion, filtroGrupo, paginaActual]);
+
+  // === Resto de funciones (activarCurso, desactivarCurso, etc.) ===
+
   const activarCurso = async () => {
     const { campana_id, dia, grupo_id, curso_id } = seleccion;
     if (!campana_id || !dia || !grupo_id || !curso_id) {
@@ -270,7 +301,7 @@ export default function FormadorPage({ user, onLogout }) {
 
     setLoading(true);
     try {
-      const { data: existe } = await supabase
+      const {  existe } = await supabase
         .from("cursos_activados")
         .select("*")
         .eq("fecha", fechaHoy)
@@ -305,7 +336,7 @@ export default function FormadorPage({ user, onLogout }) {
         return;
       }
 
-      const { data: grupo, error: errGrupo } = await supabase
+      const {  grupo, error: errGrupo } = await supabase
         .from("grupos")
         .select("nombre")
         .eq("id", grupo_id)
@@ -418,27 +449,6 @@ export default function FormadorPage({ user, onLogout }) {
     const numericGroupId = Number(groupId);
     setExpandedGroupId(prev => prev === numericGroupId ? null : numericGroupId);
   };
-
-  // === Lógica de filtrado y paginación (solo asesores) ===
-  const { usuariosPaginados, totalPaginas } = useMemo(() => {
-    let usuariosFiltrados = [...usuariosDotacion];
-
-    if (filtroGrupo !== "todos") {
-      usuariosFiltrados = usuariosFiltrados.filter(u => u.grupo_nombre === filtroGrupo);
-    }
-
-    const total = usuariosFiltrados.length;
-    const desde = (paginaActual - 1) * REGISTROS_POR_PAGINA;
-    const hasta = desde + REGISTROS_POR_PAGINA;
-    const pagina = usuariosFiltrados.slice(desde, hasta);
-
-    const totalPag = Math.ceil(total / REGISTROS_POR_PAGINA) || 1;
-
-    return {
-      usuariosPaginados: pagina,
-      totalPaginas: totalPag,
-    };
-  }, [usuariosDotacion, filtroGrupo, paginaActual]);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 overflow-hidden">
@@ -740,7 +750,7 @@ export default function FormadorPage({ user, onLogout }) {
         </div>
       </div>
 
-      {/* === SECCIÓN ACTUALIZADA: DOTACIÓN DE ASESORES === */}
+      {/* === SECCIÓN: DOTACIÓN DE ASESORES (CORREGIDA) === */}
       <div className="max-w-[95vw] mx-auto px-4 md:px-8 py-6">
         <div className="bg-white/10 backdrop-blur-md rounded-2xl border border-white/20 shadow-xl shadow-purple-500/5 p-6">
           <h2 className="font-semibold text-xl text-white mb-4 flex items-center gap-2">
@@ -752,7 +762,6 @@ export default function FormadorPage({ user, onLogout }) {
             Dotación de Asesores
           </h2>
 
-          {/* Filtros */}
           <div className="flex flex-wrap items-center gap-4 mb-6">
             <div>
               <label className="block text-sm font-medium text-gray-300 mb-1">Filtrar por Grupo</label>
@@ -765,7 +774,7 @@ export default function FormadorPage({ user, onLogout }) {
                 className="bg-white/10 border border-white/20 text-white rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-purple-400 focus:border-transparent"
               >
                 <option value="todos" className="bg-slate-800">Todos los grupos</option>
-                {gruposDisponibles.map(grupo => (
+                {todosLosGrupos.map(grupo => (
                   <option key={grupo} value={grupo} className="bg-slate-800">{grupo}</option>
                 ))}
               </select>
@@ -827,7 +836,7 @@ export default function FormadorPage({ user, onLogout }) {
                     ) : (
                       <tr>
                         <td colSpan="5" className="px-4 py-8 text-center text-gray-400">
-                          No se encontraron asesores con ese filtro.
+                          No se encontraron asesores.
                         </td>
                       </tr>
                     )}
@@ -835,7 +844,6 @@ export default function FormadorPage({ user, onLogout }) {
                 </table>
               </div>
 
-              {/* Controles de paginación */}
               {totalPaginas > 1 && (
                 <div className="flex items-center justify-between mt-6">
                   <button
@@ -845,11 +853,7 @@ export default function FormadorPage({ user, onLogout }) {
                   >
                     ← Anterior
                   </button>
-
-                  <span className="text-gray-300 text-sm">
-                    Página {paginaActual} de {totalPaginas}
-                  </span>
-
+                  <span className="text-gray-300 text-sm">Página {paginaActual} de {totalPaginas}</span>
                   <button
                     onClick={() => setPaginaActual(p => Math.min(totalPaginas, p + 1))}
                     disabled={paginaActual === totalPaginas || loading}
