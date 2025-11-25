@@ -211,6 +211,7 @@ export default function FormadorPage({ user, onLogout }) {
   const cargarUsuariosDotacion = async () => {
     setLoading(true);
     try {
+      // Cargamos usuarios con grupo_nombre
       const { data: usuarios, error: errUsuarios } = await supabase
         .from("usuarios")
         .select("id, usuario, rol, nombre, estado, grupo_nombre")
@@ -220,6 +221,7 @@ export default function FormadorPage({ user, onLogout }) {
 
       setUsuariosDotacion(usuarios || []);
 
+      // Extraemos grupo_nombre únicos (sin duplicados, sin null/undefined)
       const gruposSet = new Set(
         (usuarios || [])
           .map(u => u.grupo_nombre)
@@ -417,47 +419,28 @@ export default function FormadorPage({ user, onLogout }) {
     setExpandedGroupId(prev => prev === numericGroupId ? null : numericGroupId);
   };
 
-  // === Lógica de filtrado y paginación ===
+  // === Lógica de filtrado y paginación (con useMemo para optimización) ===
   const { usuariosPaginados, totalPaginas } = useMemo(() => {
     let usuariosFiltrados = [...usuariosDotacion];
+
+    // Aplicar filtro por grupo_nombre
     if (filtroGrupo !== "todos") {
       usuariosFiltrados = usuariosFiltrados.filter(u => u.grupo_nombre === filtroGrupo);
     }
+
+    // Paginación
     const total = usuariosFiltrados.length;
     const desde = (paginaActual - 1) * REGISTROS_POR_PAGINA;
     const hasta = desde + REGISTROS_POR_PAGINA;
     const pagina = usuariosFiltrados.slice(desde, hasta);
+
     const totalPag = Math.ceil(total / REGISTROS_POR_PAGINA) || 1;
-    return { usuariosPaginados: pagina, totalPaginas };
+
+    return {
+      usuariosPaginados: pagina,
+      totalPaginas: totalPag,
+    };
   }, [usuariosDotacion, filtroGrupo, paginaActual]);
-
-  // === DATOS DE LA MALLA DE CAPACITACIÓN (estructurados por día) ===
-  const mallaActividades = [
-    ["Espera Grupal", "00:30:00", "REPASO DÍA 1", "00:30:00", "REPASO DÍA 3", "00:30:00", "NEXUM Y CRM", "00:30:00"],
-    ["Charla Selección", "01:30:00", "DINAMICA 2", "00:30:00", "DINAMICA 3", "01:00:00", "TALLER DE TIPIFICACIONES", "01:00:00"],
-    ["Consulta RUC - Examen Psicológico", "00:30:00", "DIRECCIONES", "00:30:00", "ESTRUCTURA DE LLAMADA", "01:00:00", "REPASO GENERAL", "00:30:00"],
-    ["Presentación General", "00:20:00", "PROCESO DELIVERY", "01:00:00", "TALLER DE SPEECH DE VENTA", "01:00:00", "EXAMEN FINAL", "00:30:00"],
-    ["DÍNAMICA 1 - Rompe Hielo", "00:30:00", "Examen 2", "00:30:00", "TALLER DE ARGUMENTACIÓN", "00:30:00", "BREAK", "00:30:00"],
-    ["Charla ISO", "00:30:00", "CICLO DE FACTURACION", "01:00:00", "BREAK", "00:30:00", "CHARLA DE CALIDAD", "01:00:00"],
-    ["Examen ISO", "00:20:00", "BREAK", "00:30:00", "TALLER DE MANEJO DE OBJECIONES", "01:00:00", "CHARLA DE BACKOFFICE", "01:00:00"],
-    ["Break", "00:30:00", "EXAMEN PRÁCTICO CICLOS DE FACTURACIÓN", "01:00:00", "APLICATIVOS DE GESTIÓN", "01:00:00", "ROLL PLAY FINAL", "02:00:00"],
-    ["Producto Portabilidad", "01:50:00", "DITO - APP", "01:00:00", "EXAMEN 3 APLICATIVOS DE GESTIÓN", "00:30:00", "", ""],
-    ["Examen 1", "00:30:00", "Examen 4", "00:30:00", "", "", "", ""],
-  ];
-
-  const actividadesPorDia = {
-    1: [],
-    2: [],
-    3: [],
-    4: [],
-  };
-
-  mallaActividades.forEach(row => {
-    if (row[0]) actividadesPorDia[1].push({ actividad: row[0], tiempo: row[1] });
-    if (row[2]) actividadesPorDia[2].push({ actividad: row[2], tiempo: row[3] });
-    if (row[4]) actividadesPorDia[3].push({ actividad: row[4], tiempo: row[5] });
-    if (row[6]) actividadesPorDia[4].push({ actividad: row[6], tiempo: row[7] });
-  });
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 overflow-hidden">
@@ -477,13 +460,6 @@ export default function FormadorPage({ user, onLogout }) {
         @keyframes pulse {
           0% { opacity: 0.2; }
           100% { opacity: 0.4; }
-        }
-        .hide-scrollbar::-webkit-scrollbar {
-          display: none;
-        }
-        .hide-scrollbar {
-          -ms-overflow-style: none;
-          scrollbar-width: none;
         }
       `}</style>
 
@@ -766,7 +742,7 @@ export default function FormadorPage({ user, onLogout }) {
         </div>
       </div>
 
-      {/* === SECCIÓN: TABLA DE DOTACIÓN (USUARIOS) === */}
+      {/* === NUEVA SECCIÓN MEJORADA: TABLA DE DOTACIÓN CON FILTRO Y PAGINACIÓN === */}
       <div className="max-w-[95vw] mx-auto px-4 md:px-8 py-6">
         <div className="bg-white/10 backdrop-blur-md rounded-2xl border border-white/20 shadow-xl shadow-purple-500/5 p-6">
           <h2 className="font-semibold text-xl text-white mb-4 flex items-center gap-2">
@@ -778,6 +754,7 @@ export default function FormadorPage({ user, onLogout }) {
             Tabla de Dotación (Usuarios)
           </h2>
 
+          {/* Filtros */}
           <div className="flex flex-wrap items-center gap-4 mb-6">
             <div>
               <label className="block text-sm font-medium text-gray-300 mb-1">Filtrar por Grupo</label>
@@ -785,7 +762,7 @@ export default function FormadorPage({ user, onLogout }) {
                 value={filtroGrupo}
                 onChange={(e) => {
                   setFiltroGrupo(e.target.value);
-                  setPaginaActual(1);
+                  setPaginaActual(1); // Reiniciar a página 1 al cambiar filtro
                 }}
                 className="bg-white/10 border border-white/20 text-white rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-purple-400 focus:border-transparent"
               >
@@ -870,6 +847,7 @@ export default function FormadorPage({ user, onLogout }) {
                 </table>
               </div>
 
+              {/* Controles de paginación */}
               {totalPaginas > 1 && (
                 <div className="flex items-center justify-between mt-6">
                   <button
@@ -879,7 +857,11 @@ export default function FormadorPage({ user, onLogout }) {
                   >
                     ← Anterior
                   </button>
-                  <span className="text-gray-300 text-sm">Página {paginaActual} de {totalPaginas}</span>
+
+                  <span className="text-gray-300 text-sm">
+                    Página {paginaActual} de {totalPaginas}
+                  </span>
+
                   <button
                     onClick={() => setPaginaActual(p => Math.min(totalPaginas, p + 1))}
                     disabled={paginaActual === totalPaginas || loading}
@@ -894,7 +876,7 @@ export default function FormadorPage({ user, onLogout }) {
         </div>
       </div>
 
-      {/* === NUEVA SECCIÓN: MALLA DE CAPACITACIÓN EN CARDS (Carrusel Horizontal) === */}
+      {/* === NUEVA SECCIÓN: MALLA DE CAPACITACIÓN === */}
       <div className="max-w-[95vw] mx-auto px-4 md:px-8 py-6">
         <div className="bg-white/10 backdrop-blur-md rounded-2xl border border-white/20 shadow-xl shadow-purple-500/5 p-6">
           <h2 className="font-semibold text-xl text-white mb-4 flex items-center gap-2">
@@ -906,43 +888,128 @@ export default function FormadorPage({ user, onLogout }) {
             Malla de Capacitación
           </h2>
 
-          <div className="flex overflow-x-auto gap-6 pb-4 hide-scrollbar" style={{ scrollSnapType: 'x mandatory' }}>
-            {[1, 2, 3, 4].map(dia => (
-              <div
-                key={dia}
-                className="bg-white/5 rounded-xl border border-white/10 shadow-lg p-4 w-64 flex-shrink-0 snap-start"
-                style={{ minWidth: '16rem' }}
-              >
-                <div className="text-center mb-3">
-                  <h3 className="font-bold text-lg text-amber-300">Día {dia}</h3>
-                  <div className="w-12 h-0.5 bg-amber-500/30 mx-auto mt-1"></div>
-                </div>
-                <div className="space-y-2 max-h-96 overflow-y-auto pr-1">
-                  {actividadesPorDia[dia].length > 0 ? (
-                    actividadesPorDia[dia].map((item, idx) => (
-                      <div
-                        key={idx}
-                        className="flex justify-between items-start bg-white/5 rounded-lg p-2 hover:bg-white/10 transition"
-                      >
-                        <span className="text-gray-200 text-sm font-medium">{item.actividad}</span>
-                        <span className="text-gray-400 text-xs bg-black/20 px-2 py-0.5 rounded whitespace-nowrap">
-                          {item.tiempo}
-                        </span>
-                      </div>
-                    ))
-                  ) : (
-                    <div className="text-gray-500 text-center text-sm py-4">Sin actividades</div>
-                  )}
-                </div>
-              </div>
-            ))}
-          </div>
-
-          <div className="text-center mt-2">
-            <p className="text-xs text-gray-500">Desliza horizontalmente para ver más días</p>
+          <div className="overflow-x-auto">
+            <table className="min-w-full divide-y divide-white/10 text-sm">
+              <thead>
+                <tr className="bg-white/5">
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Actividades | Día 1</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Tiempo</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Actividades | Día 2</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Tiempo</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Actividades | Día 3</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Tiempo</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Actividades | Día 4</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Tiempo</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-white/5">
+                <tr>
+                  <td className="px-4 py-3 whitespace-nowrap text-gray-200">Espera Grupal</td>
+                  <td className="px-4 py-3 whitespace-nowrap text-gray-200">00:30:00</td>
+                  <td className="px-4 py-3 whitespace-nowrap text-gray-200">REPASO DÍA 1</td>
+                  <td className="px-4 py-3 whitespace-nowrap text-gray-200">00:30:00</td>
+                  <td className="px-4 py-3 whitespace-nowrap text-gray-200">REPASO DÍA 3</td>
+                  <td className="px-4 py-3 whitespace-nowrap text-gray-200">00:30:00</td>
+                  <td className="px-4 py-3 whitespace-nowrap text-gray-200">NEXUM Y CRM</td>
+                  <td className="px-4 py-3 whitespace-nowrap text-gray-200">00:30:00</td>
+                </tr>
+                <tr>
+                  <td className="px-4 py-3 whitespace-nowrap text-gray-200">Charla Selección</td>
+                  <td className="px-4 py-3 whitespace-nowrap text-gray-200">01:30:00</td>
+                  <td className="px-4 py-3 whitespace-nowrap text-gray-200">DINAMICA 2</td>
+                  <td className="px-4 py-3 whitespace-nowrap text-gray-200">00:30:00</td>
+                  <td className="px-4 py-3 whitespace-nowrap text-gray-200">DINAMICA 3</td>
+                  <td className="px-4 py-3 whitespace-nowrap text-gray-200">01:00:00</td>
+                  <td className="px-4 py-3 whitespace-nowrap text-gray-200">TALLER DE TIPIFICACIONES</td>
+                  <td className="px-4 py-3 whitespace-nowrap text-gray-200">01:00:00</td>
+                </tr>
+                <tr>
+                  <td className="px-4 py-3 whitespace-nowrap text-gray-200">Consulta RUC - Examen Psicológico</td>
+                  <td className="px-4 py-3 whitespace-nowrap text-gray-200">00:30:00</td>
+                  <td className="px-4 py-3 whitespace-nowrap text-gray-200">DIRECCIONES</td>
+                  <td className="px-4 py-3 whitespace-nowrap text-gray-200">00:30:00</td>
+                  <td className="px-4 py-3 whitespace-nowrap text-gray-200">ESTRUCTURA DE LLAMADA</td>
+                  <td className="px-4 py-3 whitespace-nowrap text-gray-200">01:00:00</td>
+                  <td className="px-4 py-3 whitespace-nowrap text-gray-200">REPASO GENERAL</td>
+                  <td className="px-4 py-3 whitespace-nowrap text-gray-200">00:30:00</td>
+                </tr>
+                <tr>
+                  <td className="px-4 py-3 whitespace-nowrap text-gray-200">Presentación General</td>
+                  <td className="px-4 py-3 whitespace-nowrap text-gray-200">00:20:00</td>
+                  <td className="px-4 py-3 whitespace-nowrap text-gray-200">PROCESO DELIVERY</td>
+                  <td className="px-4 py-3 whitespace-nowrap text-gray-200">01:00:00</td>
+                  <td className="px-4 py-3 whitespace-nowrap text-gray-200">TALLER DE SPEECH DE VENTA</td>
+                  <td className="px-4 py-3 whitespace-nowrap text-gray-200">01:00:00</td>
+                  <td className="px-4 py-3 whitespace-nowrap text-gray-200">EXAMEN FINAL</td>
+                  <td className="px-4 py-3 whitespace-nowrap text-gray-200">00:30:00</td>
+                </tr>
+                <tr>
+                  <td className="px-4 py-3 whitespace-nowrap text-gray-200">DÍNAMICA 1 - Rompe Hielo</td>
+                  <td className="px-4 py-3 whitespace-nowrap text-gray-200">00:30:00</td>
+                  <td className="px-4 py-3 whitespace-nowrap text-gray-200">Examen 2</td>
+                  <td className="px-4 py-3 whitespace-nowrap text-gray-200">00:30:00</td>
+                  <td className="px-4 py-3 whitespace-nowrap text-gray-200">TALLER DE ARGUMENTACIÓN</td>
+                  <td className="px-4 py-3 whitespace-nowrap text-gray-200">00:30:00</td>
+                  <td className="px-4 py-3 whitespace-nowrap text-gray-200">BREAK</td>
+                  <td className="px-4 py-3 whitespace-nowrap text-gray-200">00:30:00</td>
+                </tr>
+                <tr>
+                  <td className="px-4 py-3 whitespace-nowrap text-gray-200">Charla ISO</td>
+                  <td className="px-4 py-3 whitespace-nowrap text-gray-200">00:30:00</td>
+                  <td className="px-4 py-3 whitespace-nowrap text-gray-200">CICLO DE FACTURACION</td>
+                  <td className="px-4 py-3 whitespace-nowrap text-gray-200">01:00:00</td>
+                  <td className="px-4 py-3 whitespace-nowrap text-gray-200">BREAK</td>
+                  <td className="px-4 py-3 whitespace-nowrap text-gray-200">00:30:00</td>
+                  <td className="px-4 py-3 whitespace-nowrap text-gray-200">CHARLA DE CALIDAD</td>
+                  <td className="px-4 py-3 whitespace-nowrap text-gray-200">01:00:00</td>
+                </tr>
+                <tr>
+                  <td className="px-4 py-3 whitespace-nowrap text-gray-200">Examen ISO</td>
+                  <td className="px-4 py-3 whitespace-nowrap text-gray-200">00:20:00</td>
+                  <td className="px-4 py-3 whitespace-nowrap text-gray-200">BREAK</td>
+                  <td className="px-4 py-3 whitespace-nowrap text-gray-200">00:30:00</td>
+                  <td className="px-4 py-3 whitespace-nowrap text-gray-200">TALLER DE MANEJO DE OBJECIONES</td>
+                  <td className="px-4 py-3 whitespace-nowrap text-gray-200">01:00:00</td>
+                  <td className="px-4 py-3 whitespace-nowrap text-gray-200">CHARLA DE BACKOFFICE</td>
+                  <td className="px-4 py-3 whitespace-nowrap text-gray-200">01:00:00</td>
+                </tr>
+                <tr>
+                  <td className="px-4 py-3 whitespace-nowrap text-gray-200">Break</td>
+                  <td className="px-4 py-3 whitespace-nowrap text-gray-200">00:30:00</td>
+                  <td className="px-4 py-3 whitespace-nowrap text-gray-200">EXAMEN PRÁCTICO CICLOS DE FACTURACIÓN</td>
+                  <td className="px-4 py-3 whitespace-nowrap text-gray-200">01:00:00</td>
+                  <td className="px-4 py-3 whitespace-nowrap text-gray-200">APLICATIVOS DE GESTIÓN</td>
+                  <td className="px-4 py-3 whitespace-nowrap text-gray-200">01:00:00</td>
+                  <td className="px-4 py-3 whitespace-nowrap text-gray-200">ROLL PLAY FINAL</td>
+                  <td className="px-4 py-3 whitespace-nowrap text-gray-200">02:00:00</td>
+                </tr>
+                <tr>
+                  <td className="px-4 py-3 whitespace-nowrap text-gray-200">Producto Portabilidad</td>
+                  <td className="px-4 py-3 whitespace-nowrap text-gray-200">01:50:00</td>
+                  <td className="px-4 py-3 whitespace-nowrap text-gray-200">DITO - APP</td>
+                  <td className="px-4 py-3 whitespace-nowrap text-gray-200">01:00:00</td>
+                  <td className="px-4 py-3 whitespace-nowrap text-gray-200">EXAMEN 3 APLICATIVOS DE GESTIÓN</td>
+                  <td className="px-4 py-3 whitespace-nowrap text-gray-200">00:30:00</td>
+                  <td className="px-4 py-3 whitespace-nowrap text-gray-200">—</td>
+                  <td className="px-4 py-3 whitespace-nowrap text-gray-200">—</td>
+                </tr>
+                <tr>
+                  <td className="px-4 py-3 whitespace-nowrap text-gray-200">Examen 1</td>
+                  <td className="px-4 py-3 whitespace-nowrap text-gray-200">00:30:00</td>
+                  <td className="px-4 py-3 whitespace-nowrap text-gray-200">Examen 4</td>
+                  <td className="px-4 py-3 whitespace-nowrap text-gray-200">00:30:00</td>
+                  <td className="px-4 py-3 whitespace-nowrap text-gray-200">—</td>
+                  <td className="px-4 py-3 whitespace-nowrap text-gray-200">—</td>
+                  <td className="px-4 py-3 whitespace-nowrap text-gray-200">—</td>
+                  <td className="px-4 py-3 whitespace-nowrap text-gray-200">—</td>
+                </tr>
+              </tbody>
+            </table>
           </div>
         </div>
       </div>
+
+      
     </div>
   );
 }
