@@ -16,7 +16,6 @@ export default function FormadorPage({ user, onLogout }) {
   const [loading, setLoading] = useState(false);
   const [mensaje, setMensaje] = useState({ tipo: "", texto: "" });
   const [expandedGroupId, setExpandedGroupId] = useState(null);
-  const [activeTab, setActiveTab] = useState("activar"); // "activar", "asignados", "malla"
 
   // === Estados para Dotación ===
   const [usuariosDotacion, setUsuariosDotacion] = useState([]);
@@ -212,6 +211,7 @@ export default function FormadorPage({ user, onLogout }) {
   const cargarUsuariosDotacion = async () => {
     setLoading(true);
     try {
+      // Cargamos usuarios con grupo_nombre
       const { data: usuarios, error: errUsuarios } = await supabase
         .from("usuarios")
         .select("id, usuario, rol, nombre, estado, grupo_nombre")
@@ -221,6 +221,7 @@ export default function FormadorPage({ user, onLogout }) {
 
       setUsuariosDotacion(usuarios || []);
 
+      // Extraemos grupo_nombre únicos (sin duplicados, sin null/undefined)
       const gruposSet = new Set(
         (usuarios || [])
           .map(u => u.grupo_nombre)
@@ -418,33 +419,28 @@ export default function FormadorPage({ user, onLogout }) {
     setExpandedGroupId(prev => prev === numericGroupId ? null : numericGroupId);
   };
 
-  // === Lógica de filtrado y paginación ===
+  // === Lógica de filtrado y paginación (con useMemo para optimización) ===
   const { usuariosPaginados, totalPaginas } = useMemo(() => {
     let usuariosFiltrados = [...usuariosDotacion];
+
+    // Aplicar filtro por grupo_nombre
     if (filtroGrupo !== "todos") {
       usuariosFiltrados = usuariosFiltrados.filter(u => u.grupo_nombre === filtroGrupo);
     }
+
+    // Paginación
     const total = usuariosFiltrados.length;
     const desde = (paginaActual - 1) * REGISTROS_POR_PAGINA;
     const hasta = desde + REGISTROS_POR_PAGINA;
     const pagina = usuariosFiltrados.slice(desde, hasta);
-    const totalPag = Math.ceil(total / REGISTROS_POR_PAGINA) || 1;
-    return { usuariosPaginados: pagina, totalPaginas };
-  }, [usuariosDotacion, filtroGrupo, paginaActual]);
 
-  // === Datos de la malla (tabla fija) ===
-  const mallaData = [
-    ["Espera Grupal", "00:30:00", "REPASO DÍA 1", "00:30:00", "REPASO DÍA 3", "00:30:00", "NEXUM Y CRM", "00:30:00", "", ""],
-    ["Charla Selección", "01:30:00", "DINAMICA 2", "00:30:00", "DINAMICA 3", "01:00:00", "TALLER DE TIPIFICACIONES", "01:00:00", "", ""],
-    ["Consulta RUC - Examen Psicológico", "00:30:00", "DIRECCIONES", "00:30:00", "ESTRUCTURA DE LLAMADA", "01:00:00", "REPASO GENERAL", "00:30:00", "", ""],
-    ["Presentación General", "00:20:00", "PROCESO DELIVERY", "01:00:00", "TALLER DE SPEECH DE VENTA", "01:00:00", "EXAMEN FINAL", "00:30:00", "", ""],
-    ["DÍNAMICA 1 - Rompe Hielo", "00:30:00", "Examen 2", "00:30:00", "TALLER DE ARGUMENTACIÓN", "00:30:00", "BREAK", "00:30:00", "", ""],
-    ["Charla ISO", "00:30:00", "CICLO DE FACTURACION", "01:00:00", "BREAK", "00:30:00", "CHARLA DE CALIDAD", "01:00:00", "", ""],
-    ["Examen ISO", "00:20:00", "BREAK", "00:30:00", "TALLER DE MANEJO DE OBJECIONES", "01:00:00", "CHARLA DE BACKOFFICE", "01:00:00", "", ""],
-    ["Break", "00:30:00", "EXAMEN PRÁCTICO CICLOS DE FACTURACIÓN", "01:00:00", "APLICATIVOS DE GESTIÓN", "01:00:00", "ROLL PLAY FINAL", "02:00:00", "", ""],
-    ["Producto Portabilidad", "01:50:00", "DITO - APP", "01:00:00", "EXAMEN 3 APLICATIVOS DE GESTIÓN", "00:30:00", "", "", "", ""],
-    ["Examen 1", "00:30:00", "Examen 4", "00:30:00", "", "", "", "", "", ""],
-  ];
+    const totalPag = Math.ceil(total / REGISTROS_POR_PAGINA) || 1;
+
+    return {
+      usuariosPaginados: pagina,
+      totalPaginas: totalPag,
+    };
+  }, [usuariosDotacion, filtroGrupo, paginaActual]);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 overflow-hidden">
@@ -501,30 +497,8 @@ export default function FormadorPage({ user, onLogout }) {
       )}
 
       <div className="max-w-[95vw] mx-auto px-4 md:px-8 py-6">
-        {/* Pestañas */}
-        <div className="flex border-b border-white/20 mb-6">
-          <button
-            className={`px-4 py-2 font-medium text-sm ${activeTab === "activar" ? "text-white border-b-2 border-purple-400" : "text-gray-400 hover:text-gray-200"}`}
-            onClick={() => setActiveTab("activar")}
-          >
-            Activar Curso
-          </button>
-          <button
-            className={`px-4 py-2 font-medium text-sm ${activeTab === "asignados" ? "text-white border-b-2 border-purple-400" : "text-gray-400 hover:text-gray-200"}`}
-            onClick={() => setActiveTab("asignados")}
-          >
-            Grupos Asignados Hoy
-          </button>
-          <button
-            className={`px-4 py-2 font-medium text-sm ${activeTab === "malla" ? "text-white border-b-2 border-purple-400" : "text-gray-400 hover:text-gray-200"}`}
-            onClick={() => setActiveTab("malla")}
-          >
-            Malla de Capacitación
-          </button>
-        </div>
-
-        {/* Contenido de pestañas */}
-        {activeTab === "activar" && (
+        <div className="grid md:grid-cols-2 gap-6">
+          {/* Sección izquierda: Activar Curso */}
           <div className="bg-white/10 backdrop-blur-md rounded-2xl border border-white/20 shadow-xl shadow-purple-500/5 p-6 space-y-4">
             <div className="flex items-center justify-between mb-4">
               <h2 className="font-semibold text-xl text-white flex items-center gap-2">
@@ -535,11 +509,15 @@ export default function FormadorPage({ user, onLogout }) {
                 </span>
                 Activar Curso
               </h2>
-              {loading && <div className="w-5 h-5 border-2 border-purple-400 border-t-transparent rounded-full animate-spin"></div>}
+              {loading && (
+                <div className="w-5 h-5 border-2 border-purple-400 border-t-transparent rounded-full animate-spin"></div>
+              )}
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-300 mb-2">Campaña</label>
+              <label className="block text-sm font-medium text-gray-300 mb-2">
+                Campaña
+              </label>
               <select
                 className="w-full bg-white/10 border border-white/20 rounded-lg p-3 focus:ring-2 focus:ring-purple-400 focus:border-transparent transition text-sm text-white placeholder-gray-400"
                 value={seleccion.campana_id}
@@ -548,13 +526,17 @@ export default function FormadorPage({ user, onLogout }) {
               >
                 <option value="" className="bg-slate-800">Selecciona una campaña</option>
                 {campañas.map((c) => (
-                  <option key={c.id} value={c.id} className="bg-slate-800">{c.nombre}</option>
+                  <option key={c.id} value={c.id} className="bg-slate-800">
+                    {c.nombre}
+                  </option>
                 ))}
               </select>
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-300 mb-2">Día de capacitación</label>
+              <label className="block text-sm font-medium text-gray-300 mb-2">
+                Día de capacitación
+              </label>
               <select
                 className="w-full bg-white/10 border border-white/20 rounded-lg p-3 focus:ring-2 focus:ring-purple-400 focus:border-transparent transition text-sm text-white placeholder-gray-400 disabled:bg-gray-700"
                 value={seleccion.dia}
@@ -571,7 +553,9 @@ export default function FormadorPage({ user, onLogout }) {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-300 mb-2">Grupo</label>
+              <label className="block text-sm font-medium text-gray-300 mb-2">
+                Grupo
+              </label>
               <select
                 className="w-full bg-white/10 border border-white/20 rounded-lg p-3 focus:ring-2 focus:ring-purple-400 focus:border-transparent transition text-sm text-white placeholder-gray-400 disabled:bg-gray-700"
                 value={seleccion.grupo_id}
@@ -580,7 +564,9 @@ export default function FormadorPage({ user, onLogout }) {
               >
                 <option value="" className="bg-slate-800">Selecciona un grupo</option>
                 {grupos.map((g) => (
-                  <option key={g.id} value={g.id} className="bg-slate-800">{g.nombre} ({g.activos || 0} asesores activos)</option>
+                  <option key={g.id} value={g.id} className="bg-slate-800">
+                    {g.nombre} ({g.activos || 0} asesores activos)
+                  </option>
                 ))}
               </select>
             </div>
@@ -598,7 +584,10 @@ export default function FormadorPage({ user, onLogout }) {
                 </h3>
                 <div className="space-y-2 max-h-40 overflow-y-auto">
                   {cursos.map((c, index) => (
-                    <div key={c.id} className="flex items-center justify-between bg-white/10 p-2 rounded-md shadow-sm text-sm">
+                    <div
+                      key={c.id}
+                      className="flex items-center justify-between bg-white/10 p-2 rounded-md shadow-sm text-sm"
+                    >
                       <div className="flex items-center gap-2">
                         <span className="flex items-center justify-center w-6 h-6 bg-indigo-500/20 text-indigo-300 rounded-full text-[0.6rem] font-bold border border-indigo-500/30">
                           {index + 1}
@@ -613,7 +602,9 @@ export default function FormadorPage({ user, onLogout }) {
             )}
 
             <div>
-              <label className="block text-sm font-medium text-gray-300 mb-2">Curso a activar</label>
+              <label className="block text-sm font-medium text-gray-300 mb-2">
+                Curso a activar
+              </label>
               <select
                 className="w-full bg-white/10 border border-white/20 rounded-lg p-3 focus:ring-2 focus:ring-purple-400 focus:border-transparent transition text-sm text-white placeholder-gray-400 disabled:bg-gray-700"
                 value={seleccion.curso_id}
@@ -622,7 +613,9 @@ export default function FormadorPage({ user, onLogout }) {
               >
                 <option value="" className="bg-slate-800">Selecciona el curso a activar</option>
                 {cursos.map((c) => (
-                  <option key={c.id} value={c.id} className="bg-slate-800">{c.titulo} - {c.duracion_minutos} min</option>
+                  <option key={c.id} value={c.id} className="bg-slate-800">
+                    {c.titulo} - {c.duracion_minutos} min
+                  </option>
                 ))}
               </select>
             </div>
@@ -635,9 +628,8 @@ export default function FormadorPage({ user, onLogout }) {
               {loading ? "Activando..." : "✨ Activar curso de hoy"}
             </button>
           </div>
-        )}
 
-        {activeTab === "asignados" && (
+          {/* Sección derecha: Grupos asignados hoy */}
           <div className="bg-white/10 backdrop-blur-md rounded-2xl border border-white/20 shadow-xl shadow-purple-500/5 p-6">
             <h2 className="font-semibold text-xl text-white mb-4 flex items-center gap-2">
               <span className="bg-green-500/20 text-green-300 p-2 rounded-lg border border-green-500/30">
@@ -663,7 +655,10 @@ export default function FormadorPage({ user, onLogout }) {
                   const isExpanded = expandedGroupId === groupId;
 
                   return (
-                    <div key={groupId} className="border border-white/20 rounded-lg overflow-hidden bg-white/5">
+                    <div
+                      key={groupId}
+                      className="border border-white/20 rounded-lg overflow-hidden bg-white/5"
+                    >
                       <div
                         onClick={() => toggleGroup(groupId)}
                         className="flex items-center justify-between p-4 cursor-pointer hover:bg-white/10 transition-colors"
@@ -672,10 +667,14 @@ export default function FormadorPage({ user, onLogout }) {
                           <span className="bg-indigo-500/20 text-indigo-300 p-1.5 rounded-full text-xs font-bold border border-indigo-500/30">
                             {cursosDelGrupo.length}
                           </span>
-                          <h3 className="font-semibold text-gray-100">{grupo.nombre}</h3>
+                          <h3 className="font-semibold text-gray-100">
+                            {grupo.nombre}
+                          </h3>
                         </div>
                         <svg
-                          className={`w-5 h-5 text-gray-400 transition-transform duration-300 ${isExpanded ? "rotate-180" : ""}`}
+                          className={`w-5 h-5 text-gray-400 transition-transform duration-300 ${
+                            isExpanded ? "rotate-180" : ""
+                          }`}
                           fill="none"
                           stroke="currentColor"
                           viewBox="0 0 24 24"
@@ -687,10 +686,15 @@ export default function FormadorPage({ user, onLogout }) {
                       {isExpanded && (
                         <div className="border-t border-white/20 p-4 space-y-3">
                           {cursosDelGrupo.map((a) => (
-                            <div key={a.id} className="border border-white/20 rounded-lg p-3 hover:shadow-md transition-all bg-white/10">
+                            <div
+                              key={a.id}
+                              className="border border-white/20 rounded-lg p-3 hover:shadow-md transition-all bg-white/10"
+                            >
                               <div className="flex justify-between items-start">
                                 <div className="flex-1 min-w-0">
-                                  <h3 className="font-semibold text-gray-100 mb-1">{a.cursos?.titulo || "Curso sin título"}</h3>
+                                  <h3 className="font-semibold text-gray-100 mb-1">
+                                    {a.cursos?.titulo || "Curso sin título"}
+                                  </h3>
                                   <div className="flex flex-col gap-0.5 text-xs text-gray-400">
                                     <div className="flex items-center gap-1.5">
                                       <svg className="w-3.5 h-3.5 text-indigo-400 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
@@ -708,7 +712,9 @@ export default function FormadorPage({ user, onLogout }) {
                                       <svg className="w-3.5 h-3.5 text-green-400 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
                                         <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
                                       </svg>
-                                      <span className="font-medium text-green-400">{a.asesores_count || 0} asesores asignados</span>
+                                      <span className="font-medium text-green-400">
+                                        {a.asesores_count || 0} asesores asignados
+                                      </span>
                                     </div>
                                   </div>
                                 </div>
@@ -733,52 +739,10 @@ export default function FormadorPage({ user, onLogout }) {
               </div>
             )}
           </div>
-        )}
-
-        {activeTab === "malla" && (
-          <div className="bg-white/10 backdrop-blur-md rounded-2xl border border-white/20 shadow-xl shadow-purple-500/5 p-6">
-            <h2 className="font-semibold text-xl text-white mb-4 flex items-center gap-2">
-              <span className="bg-amber-500/20 text-amber-300 p-2 rounded-lg border border-amber-500/30">
-                <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
-                  <path fillRule="evenodd" d="M4 4a2 2 0 00-2 2v8a2 2 0 002 2h12a2 2 0 002-2V6a2 2 0 00-2-2H4zm2 6a2 2 0 114 0v2a2 2 0 11-4 0v-2zm8 0a2 2 0 114 0v2a2 2 0 11-4 0v-2z" clipRule="evenodd" />
-                </svg>
-              </span>
-              Malla de Capacitación
-            </h2>
-            <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-white/10 text-sm">
-                <thead>
-                  <tr className="bg-white/5">
-                    {[1, 2, 3, 4, 5].map(dia => (
-                      <>
-                        <th key={`act-${dia}`} className="px-3 py-2 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Actividades | Día {dia}</th>
-                        <th key={`time-${dia}`} className="px-3 py-2 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Tiempo</th>
-                      </>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-white/5">
-                  {mallaData.map((row, idx) => (
-                    <tr key={idx} className="hover:bg-white/5 transition-colors">
-                      {row.map((cell, cellIdx) => (
-                        <td
-                          key={cellIdx}
-                          className="px-3 py-2 whitespace-nowrap text-gray-200"
-                          style={{ minWidth: '140px' }}
-                        >
-                          {cell || <span className="text-gray-500">—</span>}
-                        </td>
-                      ))}
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        )}
+        </div>
       </div>
 
-      {/* === SECCIÓN: TABLA DE DOTACIÓN (USUARIOS) === */}
+      {/* === NUEVA SECCIÓN MEJORADA: TABLA DE DOTACIÓN CON FILTRO Y PAGINACIÓN === */}
       <div className="max-w-[95vw] mx-auto px-4 md:px-8 py-6">
         <div className="bg-white/10 backdrop-blur-md rounded-2xl border border-white/20 shadow-xl shadow-purple-500/5 p-6">
           <h2 className="font-semibold text-xl text-white mb-4 flex items-center gap-2">
@@ -790,6 +754,7 @@ export default function FormadorPage({ user, onLogout }) {
             Tabla de Dotación (Usuarios)
           </h2>
 
+          {/* Filtros */}
           <div className="flex flex-wrap items-center gap-4 mb-6">
             <div>
               <label className="block text-sm font-medium text-gray-300 mb-1">Filtrar por Grupo</label>
@@ -797,7 +762,7 @@ export default function FormadorPage({ user, onLogout }) {
                 value={filtroGrupo}
                 onChange={(e) => {
                   setFiltroGrupo(e.target.value);
-                  setPaginaActual(1);
+                  setPaginaActual(1); // Reiniciar a página 1 al cambiar filtro
                 }}
                 className="bg-white/10 border border-white/20 text-white rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-purple-400 focus:border-transparent"
               >
@@ -882,6 +847,7 @@ export default function FormadorPage({ user, onLogout }) {
                 </table>
               </div>
 
+              {/* Controles de paginación */}
               {totalPaginas > 1 && (
                 <div className="flex items-center justify-between mt-6">
                   <button
@@ -891,7 +857,11 @@ export default function FormadorPage({ user, onLogout }) {
                   >
                     ← Anterior
                   </button>
-                  <span className="text-gray-300 text-sm">Página {paginaActual} de {totalPaginas}</span>
+
+                  <span className="text-gray-300 text-sm">
+                    Página {paginaActual} de {totalPaginas}
+                  </span>
+
                   <button
                     onClick={() => setPaginaActual(p => Math.min(totalPaginas, p + 1))}
                     disabled={paginaActual === totalPaginas || loading}
