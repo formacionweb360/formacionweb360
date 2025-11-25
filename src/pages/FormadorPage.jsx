@@ -16,13 +16,6 @@ export default function FormadorPage({ user, onLogout }) {
   const [loading, setLoading] = useState(false);
   const [mensaje, setMensaje] = useState({ tipo: "", texto: "" });
   const [expandedGroupId, setExpandedGroupId] = useState(null);
-  const [activeTab, setActiveTab] = useState("activar"); // Nuevo estado para pestañas
-
-  // Estados para la pestaña de usuarios
-  const [filtroCampana, setFiltroCampana] = useState("");
-  const [filtroGrupo, setFiltroGrupo] = useState("");
-  const [usuariosFiltrados, setUsuariosFiltrados] = useState([]);
-  const [mostrarTabla, setMostrarTabla] = useState(false); // Controla si se muestra la tabla
 
   const fechaHoy = new Date().toISOString().split("T")[0];
   const fechaHoyFormateada = new Date().toLocaleDateString('es-PE', {
@@ -34,7 +27,7 @@ export default function FormadorPage({ user, onLogout }) {
 
   useEffect(() => {
     cargarDatos();
-  }, [user]);
+  }, []);
 
   const mostrarMensaje = (tipo, texto) => {
     setMensaje({ tipo, texto });
@@ -53,7 +46,6 @@ export default function FormadorPage({ user, onLogout }) {
     }
   };
 
-  // --- Funciones existentes ---
   const cargarCampañas = async () => {
     const { data, error } = await supabase.from("campañas").select("*");
     if (!error) {
@@ -72,7 +64,7 @@ export default function FormadorPage({ user, onLogout }) {
     setLoading(true);
 
     try {
-      const {  gruposData, error: gruposError } = await supabase
+      const { data: gruposData, error: gruposError } = await supabase
         .from("grupos")
         .select("*")
         .eq("campana_id", campana_id);
@@ -230,7 +222,7 @@ export default function FormadorPage({ user, onLogout }) {
     setLoading(true);
 
     try {
-      const {  existe } = await supabase
+      const { data: existe } = await supabase
         .from("cursos_activados")
         .select("*")
         .eq("fecha", fechaHoy)
@@ -244,7 +236,7 @@ export default function FormadorPage({ user, onLogout }) {
         return;
       }
 
-      const {  activacion, error } = await supabase
+      const { data: activacion, error } = await supabase
         .from("cursos_activados")
         .insert([
           {
@@ -265,7 +257,7 @@ export default function FormadorPage({ user, onLogout }) {
         return;
       }
 
-      const {  grupo, error: errGrupo } = await supabase
+      const { data: grupo, error: errGrupo } = await supabase
         .from("grupos")
         .select("nombre")
         .eq("id", grupo_id)
@@ -277,7 +269,7 @@ export default function FormadorPage({ user, onLogout }) {
         return;
       }
 
-      const {  asesores, error: errAsesores } = await supabase
+      const { data: asesores, error: errAsesores } = await supabase
         .from("usuarios")
         .select("id")
         .eq("rol", "usuario")
@@ -384,68 +376,9 @@ export default function FormadorPage({ user, onLogout }) {
   };
 
   const toggleGroup = (groupId) => {
+    // Aseguramos que siempre se compare el mismo tipo de dato (número)
     const numericGroupId = Number(groupId);
     setExpandedGroupId(prev => prev === numericGroupId ? null : numericGroupId);
-  };
-
-  // --- Nueva función para buscar usuarios con filtros ---
-  const buscarUsuarios = async () => {
-    if (!filtroCampana) {
-      mostrarMensaje("error", "⚠️ Debes seleccionar una campaña");
-      return;
-    }
-
-    setLoading(true);
-    try {
-      let query = supabase
-        .from("usuarios")
-        .select("id, nombre, usuario, estado, grupo_nombre")
-        .eq("campana_id", filtroCampana)
-        .neq("rol", "Formador");
-
-      if (filtroGrupo) {
-        query = query.eq("grupo_nombre", filtroGrupo);
-      }
-
-      const { data, error } = await query;
-
-      if (error) {
-        throw error;
-      }
-
-      setUsuariosFiltrados(data || []);
-      setMostrarTabla(true); // Mostrar tabla solo tras buscar
-      mostrarMensaje("success", `🔍 Encontrados ${data?.length || 0} usuarios`);
-    } catch (err) {
-      console.error("Error al buscar usuarios:", err);
-      mostrarMensaje("error", "❌ Error al cargar usuarios.");
-      setMostrarTabla(false);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // --- Nueva función para cambiar estado de usuario ---
-  const cambiarEstadoUsuario = async (id, nuevoEstado) => {
-    const { error } = await supabase
-      .from("usuarios")
-      .update({ estado: nuevoEstado })
-      .eq("id", id);
-
-    if (error) {
-      console.error("Error al actualizar estado:", error);
-      mostrarMensaje("error", "No se pudo actualizar el estado.");
-    } else {
-      setUsuariosFiltrados(prev =>
-        prev.map(u => u.id === id ? { ...u, estado: nuevoEstado } : u)
-      );
-      mostrarMensaje("success", `Usuario ${nuevoEstado.toLowerCase()}.`);
-    }
-  };
-
-  const toggleEstado = (usuario) => {
-    const nuevoEstado = usuario.estado === "Activo" ? "Inactivo" : "Activo";
-    cambiarEstadoUsuario(usuario.id, nuevoEstado);
   };
 
   return (
@@ -502,409 +435,249 @@ export default function FormadorPage({ user, onLogout }) {
         </div>
       )}
 
-      {/* Pestañas */}
-      <div className="max-w-[95vw] mx-auto px-4 md:px-8 py-4">
-        <div className="flex space-x-1 bg-white/10 backdrop-blur-md rounded-xl p-1 border border-white/20">
-          <button
-            onClick={() => setActiveTab("activar")}
-            className={`flex-1 py-3 px-4 rounded-lg text-sm font-medium transition-all ${
-              activeTab === "activar"
-                ? "bg-gradient-to-r from-indigo-500 to-purple-600 text-white shadow-lg"
-                : "text-gray-300 hover:text-white hover:bg-white/10"
-            }`}
-          >
-            ✨ Activar Curso
-          </button>
-          <button
-            onClick={() => setActiveTab("usuarios")}
-            className={`flex-1 py-3 px-4 rounded-lg text-sm font-medium transition-all ${
-              activeTab === "usuarios"
-                ? "bg-gradient-to-r from-indigo-500 to-purple-600 text-white shadow-lg"
-                : "text-gray-300 hover:text-white hover:bg-white/10"
-            }`}
-          >
-            👥 Gestión de Usuarios
-          </button>
-        </div>
-      </div>
-
       <div className="max-w-[95vw] mx-auto px-4 md:px-8 py-6">
-        {/* Contenido por pestaña */}
-        {activeTab === "activar" && (
-          <div className="grid md:grid-cols-2 gap-6">
-            <div className="bg-white/10 backdrop-blur-md rounded-2xl border border-white/20 shadow-xl shadow-purple-500/5 p-6 space-y-4">
-              {/* Contenido existente de activar curso */}
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="font-semibold text-xl text-white flex items-center gap-2">
-                  <span className="bg-indigo-500/20 text-indigo-300 p-2 rounded-lg border border-indigo-500/30">
-                    <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
-                      <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                    </svg>
-                  </span>
-                  Activar Curso
-                </h2>
-                {loading && (
-                  <div className="w-5 h-5 border-2 border-purple-400 border-t-transparent rounded-full animate-spin"></div>
-                )}
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-300 mb-2">
-                  Campaña
-                </label>
-                <select
-                  className="w-full bg-white/10 border border-white/20 rounded-lg p-3 focus:ring-2 focus:ring-purple-400 focus:border-transparent transition text-sm text-white placeholder-gray-400"
-                  value={seleccion.campana_id}
-                  onChange={(e) => handleCampanaChange(e.target.value)}
-                  disabled={loading}
-                >
-                  <option value="" className="bg-slate-800">Selecciona una campaña</option>
-                  {campañas.map((c) => (
-                    <option key={c.id} value={c.id} className="bg-slate-800">
-                      {c.nombre}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-300 mb-2">
-                  Día de capacitación
-                </label>
-                <select
-                  className="w-full bg-white/10 border border-white/20 rounded-lg p-3 focus:ring-2 focus:ring-purple-400 focus:border-transparent transition text-sm text-white placeholder-gray-400 disabled:bg-gray-700"
-                  value={seleccion.dia}
-                  onChange={(e) => handleDiaChange(e.target.value)}
-                  disabled={!seleccion.campana_id || loading}
-                >
-                  <option value="" className="bg-slate-800">Selecciona un día</option>
-                  <option value="1" className="bg-slate-800">Día 1</option>
-                  <option value="2" className="bg-slate-800">Día 2</option>
-                  <option value="3" className="bg-slate-800">Día 3</option>
-                  <option value="4" className="bg-slate-800">Día 4</option>
-                  <option value="5" className="bg-slate-800">Día 5</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-300 mb-2">
-                  Grupo
-                </label>
-                <select
-                  className="w-full bg-white/10 border border-white/20 rounded-lg p-3 focus:ring-2 focus:ring-purple-400 focus:border-transparent transition text-sm text-white placeholder-gray-400 disabled:bg-gray-700"
-                  value={seleccion.grupo_id}
-                  onChange={(e) => handleGrupoChange(e.target.value)}
-                  disabled={!seleccion.dia || loading}
-                >
-                  <option value="" className="bg-slate-800">Selecciona un grupo</option>
-                  {grupos.map((g) => (
-                    <option key={g.id} value={g.id} className="bg-slate-800">
-                      {g.nombre} ({g.activos || 0} asesores activos)
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              {cursos.length > 0 && (
-                <div className="bg-gradient-to-r from-purple-500/10 to-pink-500/10 backdrop-blur-sm rounded-xl border border-purple-500/20 p-4">
-                  <h3 className="font-semibold text-white mb-3 flex items-center gap-2">
-                    <span className="bg-indigo-500/20 text-indigo-300 p-1 rounded border border-indigo-500/30">
-                      <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-                        <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-6-3a2 2 0 11-4 0 2 2 0 014 0zm-2 4a5 5 0 00-4.546 2.916A5.986 5.986 0 005 10a6 6 0 0012 0c0-.35-.036-.687-.101-1.016A5 5 0 0010 11z" clipRule="evenodd" />
-                      </svg>
-                    </span>
-                    Malla de cursos (Día {seleccion.dia})
-                    <span className="text-sm font-normal text-gray-400">({cursos.length} cursos)</span>
-                  </h3>
-                  <div className="space-y-2 max-h-40 overflow-y-auto">
-                    {cursos.map((c, index) => (
-                      <div
-                        key={c.id}
-                        className="flex items-center justify-between bg-white/10 p-2 rounded-md shadow-sm text-sm"
-                      >
-                        <div className="flex items-center gap-2">
-                          <span className="flex items-center justify-center w-6 h-6 bg-indigo-500/20 text-indigo-300 rounded-full text-[0.6rem] font-bold border border-indigo-500/30">
-                            {index + 1}
-                          </span>
-                          <span className="font-medium text-gray-200 truncate max-w-[120px] md:max-w-[180px]">{c.titulo}</span>
-                        </div>
-                        <span className="text-xs text-gray-400">{c.duracion_minutos} min</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              <div>
-                <label className="block text-sm font-medium text-gray-300 mb-2">
-                  Curso a activar
-                </label>
-                <select
-                  className="w-full bg-white/10 border border-white/20 rounded-lg p-3 focus:ring-2 focus:ring-purple-400 focus:border-transparent transition text-sm text-white placeholder-gray-400 disabled:bg-gray-700"
-                  value={seleccion.curso_id}
-                  onChange={(e) => setSeleccion({ ...seleccion, curso_id: e.target.value })}
-                  disabled={!cursos.length || loading}
-                >
-                  <option value="" className="bg-slate-800">Selecciona el curso a activar</option>
-                  {cursos.map((c) => (
-                    <option key={c.id} value={c.id} className="bg-slate-800">
-                      {c.titulo} - {c.duracion_minutos} min
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <button
-                onClick={activarCurso}
-                disabled={!seleccion.curso_id || loading}
-                className="w-full bg-gradient-to-r from-indigo-500 to-purple-600 text-white py-3 px-4 rounded-lg hover:shadow-lg hover:shadow-indigo-500/20 transition-all font-medium shadow-md disabled:opacity-50 disabled:cursor-not-allowed text-sm"
-              >
-                {loading ? "Activando..." : "✨ Activar curso de hoy"}
-              </button>
-            </div>
-
-            <div className="bg-white/10 backdrop-blur-md rounded-2xl border border-white/20 shadow-xl shadow-purple-500/5 p-6">
-              <h2 className="font-semibold text-xl text-white mb-4 flex items-center gap-2">
-                <span className="bg-green-500/20 text-green-300 p-2 rounded-lg border border-green-500/30">
+        <div className="grid md:grid-cols-2 gap-6">
+          <div className="bg-white/10 backdrop-blur-md rounded-2xl border border-white/20 shadow-xl shadow-purple-500/5 p-6 space-y-4">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="font-semibold text-xl text-white flex items-center gap-2">
+                <span className="bg-indigo-500/20 text-indigo-300 p-2 rounded-lg border border-indigo-500/30">
                   <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
                     <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
                   </svg>
                 </span>
-                Grupos asignados hoy
+                Activar Curso
               </h2>
-
-              {gruposConCursos.length === 0 ? (
-                <div className="text-center py-12">
-                  <div className="text-6xl mb-4 text-gray-500">📭</div>
-                  <p className="text-gray-400 text-sm mb-1">No hay grupos con cursos activos</p>
-                  <p className="text-xs text-gray-500">Activa un curso para asignarlo a un grupo</p>
-                </div>
-              ) : (
-                <div className="space-y-3 max-h-[calc(100vh-250px)] overflow-y-auto pr-2">
-                  {gruposConCursos.map((grupoData) => {
-                    const grupo = grupoData.grupo;
-                    const cursosDelGrupo = grupoData.cursos;
-                    const groupId = Number(cursosDelGrupo[0]?.grupo_id);
-                    const isExpanded = expandedGroupId === groupId;
-
-                    return (
-                      <div
-                        key={groupId}
-                        className="border border-white/20 rounded-lg overflow-hidden bg-white/5"
-                      >
-                        <div
-                          onClick={() => toggleGroup(groupId)}
-                          className="flex items-center justify-between p-4 cursor-pointer hover:bg-white/10 transition-colors"
-                        >
-                          <div className="flex items-center gap-2">
-                            <span className="bg-indigo-500/20 text-indigo-300 p-1.5 rounded-full text-xs font-bold border border-indigo-500/30">
-                              {cursosDelGrupo.length}
-                            </span>
-                            <h3 className="font-semibold text-gray-100">
-                              {grupo.nombre}
-                            </h3>
-                          </div>
-                          <svg
-                            className={`w-5 h-5 text-gray-400 transition-transform duration-300 ${
-                              isExpanded ? "rotate-180" : ""
-                            }`}
-                            fill="none"
-                            stroke="currentColor"
-                            viewBox="0 0 24 24"
-                          >
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                          </svg>
-                        </div>
-
-                        {isExpanded && (
-                          <div className="border-t border-white/20 p-4 space-y-3">
-                            {cursosDelGrupo.map((a) => (
-                              <div
-                                key={a.id}
-                                className="border border-white/20 rounded-lg p-3 hover:shadow-md transition-all bg-white/10"
-                              >
-                                <div className="flex justify-between items-start">
-                                  <div className="flex-1 min-w-0">
-                                    <h3 className="font-semibold text-gray-100 mb-1">
-                                      {a.cursos?.titulo || "Curso sin título"}
-                                    </h3>
-                                    <div className="flex flex-col gap-0.5 text-xs text-gray-400">
-                                      <div className="flex items-center gap-1.5">
-                                        <svg className="w-3.5 h-3.5 text-indigo-400 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
-                                          <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-6-3a2 2 0 11-4 0 2 2 0 014 0zm-2 4a5 5 0 00-4.546 2.916A5.986 5.986 0 005 10a6 6 0 0012 0c0-.35-.036-.687-.101-1.016A5 5 0 0010 11z" clipRule="evenodd" />
-                                        </svg>
-                                        <span className="truncate">{a.cursos?.duracion_minutos || 0} min</span>
-                                      </div>
-                                      <div className="flex items-center gap-1.5">
-                                        <svg className="w-3.5 h-3.5 text-purple-400 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
-                                          <path d="M5.5 16a3.5 3.5 0 01-.369-6.98 4 4 0 117.753-1.977A4.5 4.5 0 1113.5 16h-8z" />
-                                        </svg>
-                                        <span className="truncate">{a.campañas?.nombre || "Sin campaña"}</span>
-                                      </div>
-                                      <div className="flex items-center gap-1.5">
-                                        <svg className="w-3.5 h-3.5 text-green-400 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
-                                          <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                                        </svg>
-                                        <span className="font-medium text-green-400">
-                                          {a.asesores_count || 0} asesores asignados
-                                        </span>
-                                      </div>
-                                    </div>
-                                  </div>
-                                  <button
-                                    onClick={() => desactivarCurso(a.id)}
-                                    disabled={loading}
-                                    className="text-red-400 hover:text-red-300 hover:bg-red-500/10 p-1.5 rounded-lg transition-colors disabled:opacity-50 flex-shrink-0 ml-2"
-                                    title="Desactivar curso"
-                                  >
-                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                                    </svg>
-                                  </button>
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
+              {loading && (
+                <div className="w-5 h-5 border-2 border-purple-400 border-t-transparent rounded-full animate-spin"></div>
               )}
             </div>
-          </div>
-        )}
 
-        {activeTab === "usuarios" && (
+            <div>
+              <label className="block text-sm font-medium text-gray-300 mb-2">
+                Campaña
+              </label>
+              <select
+                className="w-full bg-white/10 border border-white/20 rounded-lg p-3 focus:ring-2 focus:ring-purple-400 focus:border-transparent transition text-sm text-white placeholder-gray-400"
+                value={seleccion.campana_id}
+                onChange={(e) => handleCampanaChange(e.target.value)}
+                disabled={loading}
+              >
+                <option value="" className="bg-slate-800">Selecciona una campaña</option>
+                {campañas.map((c) => (
+                  <option key={c.id} value={c.id} className="bg-slate-800">
+                    {c.nombre}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-300 mb-2">
+                Día de capacitación
+              </label>
+              <select
+                className="w-full bg-white/10 border border-white/20 rounded-lg p-3 focus:ring-2 focus:ring-purple-400 focus:border-transparent transition text-sm text-white placeholder-gray-400 disabled:bg-gray-700"
+                value={seleccion.dia}
+                onChange={(e) => handleDiaChange(e.target.value)}
+                disabled={!seleccion.campana_id || loading}
+              >
+                <option value="" className="bg-slate-800">Selecciona un día</option>
+                <option value="1" className="bg-slate-800">Día 1</option>
+                <option value="2" className="bg-slate-800">Día 2</option>
+                <option value="3" className="bg-slate-800">Día 3</option>
+                <option value="4" className="bg-slate-800">Día 4</option>
+                <option value="5" className="bg-slate-800">Día 5</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-300 mb-2">
+                Grupo
+              </label>
+              <select
+                className="w-full bg-white/10 border border-white/20 rounded-lg p-3 focus:ring-2 focus:ring-purple-400 focus:border-transparent transition text-sm text-white placeholder-gray-400 disabled:bg-gray-700"
+                value={seleccion.grupo_id}
+                onChange={(e) => handleGrupoChange(e.target.value)}
+                disabled={!seleccion.dia || loading}
+              >
+                <option value="" className="bg-slate-800">Selecciona un grupo</option>
+                {grupos.map((g) => (
+                  <option key={g.id} value={g.id} className="bg-slate-800">
+                    {g.nombre} ({g.activos || 0} asesores activos)
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {cursos.length > 0 && (
+              <div className="bg-gradient-to-r from-purple-500/10 to-pink-500/10 backdrop-blur-sm rounded-xl border border-purple-500/20 p-4">
+                <h3 className="font-semibold text-white mb-3 flex items-center gap-2">
+                  <span className="bg-indigo-500/20 text-indigo-300 p-1 rounded border border-indigo-500/30">
+                    <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-6-3a2 2 0 11-4 0 2 2 0 014 0zm-2 4a5 5 0 00-4.546 2.916A5.986 5.986 0 005 10a6 6 0 0012 0c0-.35-.036-.687-.101-1.016A5 5 0 0010 11z" clipRule="evenodd" />
+                    </svg>
+                  </span>
+                  Malla de cursos (Día {seleccion.dia})
+                  <span className="text-sm font-normal text-gray-400">({cursos.length} cursos)</span>
+                </h3>
+                <div className="space-y-2 max-h-40 overflow-y-auto">
+                  {cursos.map((c, index) => (
+                    <div
+                      key={c.id}
+                      className="flex items-center justify-between bg-white/10 p-2 rounded-md shadow-sm text-sm"
+                    >
+                      <div className="flex items-center gap-2">
+                        <span className="flex items-center justify-center w-6 h-6 bg-indigo-500/20 text-indigo-300 rounded-full text-[0.6rem] font-bold border border-indigo-500/30">
+                          {index + 1}
+                        </span>
+                        <span className="font-medium text-gray-200 truncate max-w-[120px] md:max-w-[180px]">{c.titulo}</span>
+                      </div>
+                      <span className="text-xs text-gray-400">{c.duracion_minutos} min</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <div>
+              <label className="block text-sm font-medium text-gray-300 mb-2">
+                Curso a activar
+              </label>
+              <select
+                className="w-full bg-white/10 border border-white/20 rounded-lg p-3 focus:ring-2 focus:ring-purple-400 focus:border-transparent transition text-sm text-white placeholder-gray-400 disabled:bg-gray-700"
+                value={seleccion.curso_id}
+                onChange={(e) => setSeleccion({ ...seleccion, curso_id: e.target.value })}
+                disabled={!cursos.length || loading}
+              >
+                <option value="" className="bg-slate-800">Selecciona el curso a activar</option>
+                {cursos.map((c) => (
+                  <option key={c.id} value={c.id} className="bg-slate-800">
+                    {c.titulo} - {c.duracion_minutos} min
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <button
+              onClick={activarCurso}
+              disabled={!seleccion.curso_id || loading}
+              className="w-full bg-gradient-to-r from-indigo-500 to-purple-600 text-white py-3 px-4 rounded-lg hover:shadow-lg hover:shadow-indigo-500/20 transition-all font-medium shadow-md disabled:opacity-50 disabled:cursor-not-allowed text-sm"
+            >
+              {loading ? "Activando..." : "✨ Activar curso de hoy"}
+            </button>
+          </div>
+
           <div className="bg-white/10 backdrop-blur-md rounded-2xl border border-white/20 shadow-xl shadow-purple-500/5 p-6">
             <h2 className="font-semibold text-xl text-white mb-4 flex items-center gap-2">
-              <span className="bg-indigo-500/20 text-indigo-300 p-2 rounded-lg border border-indigo-500/30">
+              <span className="bg-green-500/20 text-green-300 p-2 rounded-lg border border-green-500/30">
                 <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
                   <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
                 </svg>
               </span>
-              Gestión de Usuarios
+              Grupos asignados hoy
             </h2>
 
-            {/* Filtros */}
-            <div className="grid md:grid-cols-3 gap-4 mb-6 bg-white/5 p-4 rounded-xl border border-white/10">
-              <div>
-                <label className="block text-sm font-medium text-gray-300 mb-2">Campaña</label>
-                <select
-                  className="w-full bg-white/10 border border-white/20 rounded-lg p-3 focus:ring-2 focus:ring-purple-400 focus:border-transparent transition text-sm text-white placeholder-gray-400"
-                  value={filtroCampana}
-                  onChange={(e) => setFiltroCampana(e.target.value)}
-                >
-                  <option value="" className="bg-slate-800">Selecciona una campaña</option>
-                  {campañas.map((c) => (
-                    <option key={c.id} value={c.id} className="bg-slate-800">
-                      {c.nombre}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-300 mb-2">Grupo</label>
-                <select
-                  className="w-full bg-white/10 border border-white/20 rounded-lg p-3 focus:ring-2 focus:ring-purple-400 focus:border-transparent transition text-sm text-white placeholder-gray-400"
-                  value={filtroGrupo}
-                  onChange={(e) => setFiltroGrupo(e.target.value)}
-                  disabled={!filtroCampana}
-                >
-                  <option value="" className="bg-slate-800">Todos los grupos</option>
-                  {grupos
-                    .filter(g => g.campana_id == filtroCampana) // Filtrar grupos por campaña seleccionada
-                    .map((g) => (
-                      <option key={g.id} value={g.nombre} className="bg-slate-800">
-                        {g.nombre}
-                      </option>
-                    ))
-                  }
-                </select>
-              </div>
-
-              <div className="flex items-end">
-                <button
-                  onClick={buscarUsuarios}
-                  disabled={!filtroCampana || loading}
-                  className="w-full bg-gradient-to-r from-indigo-500 to-purple-600 text-white py-3 px-4 rounded-lg hover:shadow-lg hover:shadow-indigo-500/20 transition-all font-medium shadow-md disabled:opacity-50 disabled:cursor-not-allowed text-sm"
-                >
-                  {loading ? "Buscando..." : "🔍 Buscar Usuarios"}
-                </button>
-              </div>
-            </div>
-
-            {/* Tabla de resultados */}
-            {mostrarTabla && (
-              <div className="overflow-x-auto">
-                {loading ? (
-                  <div className="text-center py-12">
-                    <div className="w-8 h-8 border-4 border-purple-400 border-t-transparent rounded-full animate-spin mx-auto"></div>
-                    <p className="text-gray-400 mt-4">Cargando usuarios...</p>
-                  </div>
-                ) : usuariosFiltrados.length === 0 ? (
-                  <div className="text-center py-12">
-                    <div className="text-6xl mb-4 text-gray-500">📬</div>
-                    <p className="text-gray-400 text-sm mb-1">No se encontraron usuarios con esos filtros</p>
-                    <p className="text-xs text-gray-500">Intenta con otros valores o verifica que existan usuarios asignados.</p>
-                  </div>
-                ) : (
-                  <table className="min-w-full divide-y divide-gray-200/20">
-                    <thead>
-                      <tr>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Nombre</th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Usuario</th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Grupo</th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Estado</th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Acción</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-200/10">
-                      {usuariosFiltrados.map((u) => (
-                        <tr key={u.id} className="hover:bg-white/5 transition-colors">
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-200">{u.nombre}</td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">{u.usuario}</td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">{u.grupo_nombre || "Sin grupo"}</td>
-                          <td className="px-6 py-4 whitespace-nowrap">
-                            <span className={`inline-flex text-xs leading-5 font-semibold rounded-full px-2.5 py-0.5 ${
-                              u.estado === "Activo" 
-                                ? "bg-green-500/20 text-green-400 border border-green-500/30" 
-                                : "bg-red-500/20 text-red-400 border border-red-500/30"
-                            }`}>
-                              {u.estado}
-                            </span>
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm">
-                            <button
-                              onClick={() => toggleEstado(u)}
-                              disabled={loading}
-                              className={`px-3 py-1.5 rounded-md text-xs font-medium transition ${
-                                u.estado === "Activo" 
-                                  ? "bg-red-500/20 text-red-400 hover:bg-red-500/30 border border-red-500/30 hover:text-white" 
-                                  : "bg-green-500/20 text-green-400 hover:bg-green-500/30 border border-green-500/30 hover:text-white"
-                              } disabled:opacity-50 disabled:cursor-not-allowed`}
-                            >
-                              {u.estado === "Activo" ? "Inactivar" : "Activar"}
-                            </button>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                )}
-              </div>
-            )}
-
-            {!mostrarTabla && (
+            {gruposConCursos.length === 0 ? (
               <div className="text-center py-12">
-                <div className="text-6xl mb-4 text-gray-500">📬</div>
-                <p className="text-gray-400 text-sm mb-1">¿Dónde están mis usuarios?</p>
-                <p className="text-xs text-gray-500">Usa los filtros arriba y haz clic en “Buscar” para verlos.</p>
+                <div className="text-6xl mb-4 text-gray-500">📭</div>
+                <p className="text-gray-400 text-sm mb-1">No hay grupos con cursos activos</p>
+                <p className="text-xs text-gray-500">Activa un curso para asignarlo a un grupo</p>
+              </div>
+            ) : (
+              <div className="space-y-3 max-h-[calc(100vh-250px)] overflow-y-auto pr-2">
+                {gruposConCursos.map((grupoData) => {
+                  const grupo = grupoData.grupo;
+                  const cursosDelGrupo = grupoData.cursos;
+                  // Convertimos a número para asegurar la comparación correcta
+                  const groupId = Number(cursosDelGrupo[0]?.grupo_id);
+                  const isExpanded = expandedGroupId === groupId;
+
+                  return (
+                    <div
+                      key={groupId}
+                      className="border border-white/20 rounded-lg overflow-hidden bg-white/5"
+                    >
+                      <div
+                        onClick={() => toggleGroup(groupId)}
+                        className="flex items-center justify-between p-4 cursor-pointer hover:bg-white/10 transition-colors"
+                      >
+                        <div className="flex items-center gap-2">
+                          <span className="bg-indigo-500/20 text-indigo-300 p-1.5 rounded-full text-xs font-bold border border-indigo-500/30">
+                            {cursosDelGrupo.length}
+                          </span>
+                          <h3 className="font-semibold text-gray-100">
+                            {grupo.nombre}
+                          </h3>
+                        </div>
+                        <svg
+                          className={`w-5 h-5 text-gray-400 transition-transform duration-300 ${
+                            isExpanded ? "rotate-180" : ""
+                          }`}
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
+                        >
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                        </svg>
+                      </div>
+
+                      {isExpanded && (
+                        <div className="border-t border-white/20 p-4 space-y-3">
+                          {cursosDelGrupo.map((a) => (
+                            <div
+                              key={a.id}
+                              className="border border-white/20 rounded-lg p-3 hover:shadow-md transition-all bg-white/10"
+                            >
+                              <div className="flex justify-between items-start">
+                                <div className="flex-1 min-w-0">
+                                  <h3 className="font-semibold text-gray-100 mb-1">
+                                    {a.cursos?.titulo || "Curso sin título"}
+                                  </h3>
+                                  <div className="flex flex-col gap-0.5 text-xs text-gray-400">
+                                    <div className="flex items-center gap-1.5">
+                                      <svg className="w-3.5 h-3.5 text-indigo-400 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                                        <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-6-3a2 2 0 11-4 0 2 2 0 014 0zm-2 4a5 5 0 00-4.546 2.916A5.986 5.986 0 005 10a6 6 0 0012 0c0-.35-.036-.687-.101-1.016A5 5 0 0010 11z" clipRule="evenodd" />
+                                      </svg>
+                                      <span className="truncate">{a.cursos?.duracion_minutos || 0} min</span>
+                                    </div>
+                                    <div className="flex items-center gap-1.5">
+                                      <svg className="w-3.5 h-3.5 text-purple-400 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                                        <path d="M5.5 16a3.5 3.5 0 01-.369-6.98 4 4 0 117.753-1.977A4.5 4.5 0 1113.5 16h-8z" />
+                                      </svg>
+                                      <span className="truncate">{a.campañas?.nombre || "Sin campaña"}</span>
+                                    </div>
+                                    <div className="flex items-center gap-1.5">
+                                      <svg className="w-3.5 h-3.5 text-green-400 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                                        <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                                      </svg>
+                                      <span className="font-medium text-green-400">
+                                        {a.asesores_count || 0} asesores asignados
+                                      </span>
+                                    </div>
+                                  </div>
+                                </div>
+                                <button
+                                  onClick={() => desactivarCurso(a.id)}
+                                  disabled={loading}
+                                  className="text-red-400 hover:text-red-300 hover:bg-red-500/10 p-1.5 rounded-lg transition-colors disabled:opacity-50 flex-shrink-0 ml-2"
+                                  title="Desactivar curso"
+                                >
+                                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                  </svg>
+                                </button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             )}
           </div>
-        )}
+        </div>
       </div>
     </div>
   );
