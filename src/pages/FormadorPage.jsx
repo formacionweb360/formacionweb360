@@ -55,10 +55,11 @@ export default function FormadorPage({ user, onLogout }) {
   };
 
   const cargarCampañas = async () => {
-    const { data, error } = await supabase.from("campañas").select("*");
-    if (!error) {
+    try {
+      const { data, error } = await supabase.from("campañas").select("*");
+      if (error) throw error;
       setCampañas(data || []);
-    } else {
+    } catch (error) {
       console.error("Error al cargar campañas:", error);
       setCampañas([]);
       mostrarMensaje("error", "Error al cargar campañas");
@@ -68,41 +69,43 @@ export default function FormadorPage({ user, onLogout }) {
   const cargarGrupos = async (campana_id) => {
     if (!campana_id) return;
     setLoading(true);
-
     try {
       const { data: gruposData, error: gruposError } = await supabase
         .from("grupos")
         .select("*")
         .eq("campana_id", campana_id);
-
-      if (gruposError) {
-        console.error("Error cargando grupos:", gruposError);
-        setGrupos([]);
-        return;
-      }
-
+      if (gruposError) throw gruposError;
       const gruposConConteo = await Promise.all(
-        gruposData.map(async (g) => {
-          const { count } = await supabase
-            .from("usuarios")
-            .select("*", { count: "exact", head: true })
-            .eq("grupo_nombre", g.nombre)
-            .eq("rol", "usuario")
-            .eq("estado", "Activo");
-
-          return {
-            ...g,
-            activos: count || 0,
-            id: Number(g.id),
-            nombre: String(g.nombre || "").trim(),
-          };
+        (gruposData || []).map(async (g) => {
+          try {
+            const { count } = await supabase
+              .from("usuarios")
+              .select("*", { count: "exact", head: true })
+              .eq("grupo_nombre", g.nombre)
+              .eq("rol", "usuario")
+              .eq("estado", "Activo");
+            return {
+              ...g,
+              activos: count || 0,
+              id: Number(g.id),
+              nombre: String(g.nombre || "").trim(),
+            };
+          } catch (err) {
+            console.error(`Error contando usuarios del grupo ${g.nombre}:`, err);
+            return {
+              ...g,
+              activos: 0,
+              id: Number(g.id),
+              nombre: String(g.nombre || "").trim(),
+            };
+          }
         })
       );
-
       setGrupos(gruposConConteo);
     } catch (err) {
-      console.error("Error *interno* en cargarGrupos:", err);
+      console.error("Error en cargarGrupos:", err);
       setGrupos([]);
+      mostrarMensaje("error", "Error al cargar grupos");
     } finally {
       setLoading(false);
     }
@@ -118,27 +121,19 @@ export default function FormadorPage({ user, onLogout }) {
         .eq("campana_id", campana_id)
         .eq("dia", dia)
         .eq("estado", "Activo");
-
       if (grupo_id) {
         const grupoIdNum = Number(grupo_id);
         if (!isNaN(grupoIdNum)) {
           query = query.or(`grupo_id.is.null,grupo_id.eq.${grupoIdNum}`);
-        } else {
-          query = query.or(`grupo_id.is.null,grupo_id.eq.${grupo_id}`);
         }
       }
-
       const { data, error } = await query;
-      if (error) {
-        console.error("Error al cargar cursos:", error);
-        setCursos([]);
-        mostrarMensaje("error", "Error al cargar cursos");
-        return;
-      }
+      if (error) throw error;
       setCursos(data || []);
     } catch (err) {
-      console.error("Error *interno* en cargarCursos:", err);
+      console.error("Error en cargarCursos:", err);
       setCursos([]);
+      mostrarMensaje("error", "Error al cargar cursos");
     } finally {
       setLoading(false);
     }
@@ -151,77 +146,73 @@ export default function FormadorPage({ user, onLogout }) {
       setGruposConCursos([]);
       return;
     }
-    const { data, error } = await supabase
-      .from("cursos_activados")
-      .select(`
-        id, 
-        curso_id, 
-        campana_id, 
-        grupo_id, 
-        fecha, 
-        activo,
-        cursos(titulo, duracion_minutos),
-        grupos(nombre),
-        campañas(nombre)
-      `)
-      .eq("fecha", fechaHoy)
-      .eq("formador_id", user.id);
-
-    if (error) {
-      console.error("Error al cargar cursos activos:", error);
-      setActivos([]);
-      setGruposConCursos([]);
-      return;
-    }
-
-    if (!data) {
-      setActivos([]);
-      setGruposConCursos([]);
-      return;
-    }
-
     try {
+      const { data, error } = await supabase
+        .from("cursos_activados")
+        .select(`
+          id, 
+          curso_id, 
+          campana_id, 
+          grupo_id, 
+          fecha, 
+          activo,
+          cursos(titulo, duracion_minutos),
+          grupos(nombre),
+          campañas(nombre)
+        `)
+        .eq("fecha", fechaHoy)
+        .eq("formador_id", user.id);
+      if (error) throw error;
+      if (!data || data.length === 0) {
+        setActivos([]);
+        setGruposConCursos([]);
+        return;
+      }
       const activosConConteo = await Promise.all(
         data.map(async (activado) => {
-          const { count } = await supabase
-            .from("cursos_asesores")
-            .select("*", { count: "exact", head: true })
-            .eq("curso_activado_id", activado.id);
-          return { ...activado, asesores_count: count || 0 };
+          try {
+            const { count } = await supabase
+              .from("cursos_asesores")
+              .select("*", { count: "exact", head: true })
+              .eq("curso_activado_id", activado.id);
+            return { ...activado, asesores_count: count || 0 };
+          } catch (err) {
+            console.error(`Error contando asesores para curso ${activado.id}:`, err);
+            return { ...activado, asesores_count: 0 };
+          }
         })
       );
       setActivos(activosConConteo);
-
+      // Agrupar cursos por grupo
       const gruposMap = {};
       activosConConteo.forEach((a) => {
         const grupoId = a.grupo_id;
-        if (!gruposMap[grupoId]) {
-          gruposMap[grupoId] = { grupo: a.grupos, cursos: [] };
+        if (grupoId) {
+          if (!gruposMap[grupoId]) {
+            gruposMap[grupoId] = { grupo: a.grupos, cursos: [] };
+          }
+          gruposMap[grupoId].cursos.push(a);
         }
-        gruposMap[grupoId].cursos.push(a);
       });
       setGruposConCursos(Object.values(gruposMap));
     } catch (err) {
-      console.error("Error contando asesores:", err);
-      setActivos(data.map(a => ({ ...a, asesores_count: 0 })));
+      console.error("Error al cargar cursos activos:", err);
+      setActivos([]);
+      setGruposConCursos([]);
+      mostrarMensaje("error", "Error al cargar cursos activos");
     }
   };
 
-  // === Cargar usuarios para dotación + grupos únicos ===
   const cargarUsuariosDotacion = async () => {
     setLoading(true);
     try {
-      // Cargamos usuarios con grupo_nombre
       const { data: usuarios, error: errUsuarios } = await supabase
         .from("usuarios")
         .select("id, usuario, rol, nombre, estado, grupo_nombre")
         .order("nombre", { ascending: true });
-
       if (errUsuarios) throw errUsuarios;
-
       setUsuariosDotacion(usuarios || []);
-
-      // Extraemos grupo_nombre únicos (sin duplicados, sin null/undefined)
+      // Extraer grupos únicos
       const gruposSet = new Set(
         (usuarios || [])
           .map(u => u.grupo_nombre)
@@ -246,9 +237,7 @@ export default function FormadorPage({ user, onLogout }) {
         .from("usuarios")
         .update({ estado: nuevoEstado })
         .eq("id", userId);
-
       if (error) throw error;
-
       setUsuariosDotacion(prev =>
         prev.map(u => (u.id === userId ? { ...u, estado: nuevoEstado } : u))
       );
@@ -267,9 +256,9 @@ export default function FormadorPage({ user, onLogout }) {
       mostrarMensaje("error", "⚠️ Debes seleccionar campaña, día, grupo y curso");
       return;
     }
-
     setLoading(true);
     try {
+      // Verificar si ya existe
       const { data: existe } = await supabase
         .from("cursos_activados")
         .select("*")
@@ -278,12 +267,11 @@ export default function FormadorPage({ user, onLogout }) {
         .eq("grupo_id", grupo_id)
         .eq("curso_id", curso_id)
         .maybeSingle();
-
       if (existe) {
         mostrarMensaje("error", "⚠️ Este curso ya está activado hoy para esa campaña y grupo");
         return;
       }
-
+      // Insertar curso activado
       const { data: activacion, error } = await supabase
         .from("cursos_activados")
         .insert([
@@ -298,38 +286,23 @@ export default function FormadorPage({ user, onLogout }) {
         ])
         .select()
         .single();
-
-      if (error) {
-        console.error("Error al insertar curso activado:", error);
-        mostrarMensaje("error", "❌ Error al activar el curso");
-        return;
-      }
-
+      if (error) throw error;
+      // Obtener nombre del grupo
       const { data: grupo, error: errGrupo } = await supabase
         .from("grupos")
         .select("nombre")
         .eq("id", grupo_id)
         .single();
-
-      if (errGrupo || !grupo) {
-        console.error("Error al obtener el grupo:", errGrupo);
-        mostrarMensaje("error", "❌ Error al obtener el grupo");
-        return;
-      }
-
+      if (errGrupo || !grupo) throw new Error("No se pudo obtener el grupo");
+      // Obtener asesores activos del grupo
       const { data: asesores, error: errAsesores } = await supabase
         .from("usuarios")
         .select("id")
         .eq("rol", "usuario")
         .eq("grupo_nombre", grupo.nombre)
         .eq("estado", "Activo");
-
-      if (errAsesores) {
-        console.error("Error al obtener asesores:", errAsesores);
-        mostrarMensaje("error", "❌ Error al obtener asesores del grupo");
-        return;
-      }
-
+      if (errAsesores) throw errAsesores;
+      // Asignar curso a asesores
       if (asesores && asesores.length > 0) {
         const { error: errorInsert } = await supabase.from("cursos_asesores").insert(
           asesores.map((u) => ({
@@ -337,58 +310,49 @@ export default function FormadorPage({ user, onLogout }) {
             asesor_id: u.id,
           }))
         );
-
         if (errorInsert) {
-          mostrarMensaje("error", "⚠️ Curso activado pero error al asignar asesores");
+          mostrarMensaje("success", "✅ Curso activado (pero hubo problemas al asignar algunos asesores)");
         } else {
           mostrarMensaje("success", `✅ Curso activado y asignado a ${asesores.length} asesores`);
         }
       } else {
-        mostrarMensaje("success", "✅ Curso activado (sin asesores en el grupo)");
+        mostrarMensaje("success", "✅ Curso activado (sin asesores activos en el grupo)");
       }
-
+      // Recargar datos
       await cargarActivos();
       await cargarGrupos(seleccion.campana_id);
       setSeleccion({ ...seleccion, curso_id: "" });
     } catch (err) {
-      console.error("Error *interno* en activarCurso:", err);
-      mostrarMensaje("error", "❌ Error inesperado al activar");
+      console.error("Error en activarCurso:", err);
+      mostrarMensaje("error", "❌ Error al activar el curso");
     } finally {
       setLoading(false);
     }
   };
 
   const desactivarCurso = async (id) => {
-    if (!confirm("¿Seguro que deseas desactivar este curso? Se eliminarán todas las asignaciones a asesores.")) {
+    if (!window.confirm("¿Seguro que deseas desactivar este curso? Se eliminarán todas las asignaciones a asesores.")) {
       return;
     }
-
     setLoading(true);
     try {
+      // Eliminar asignaciones primero
       const { error: errorAsesores } = await supabase
         .from("cursos_asesores")
         .delete()
         .eq("curso_activado_id", id);
-
-      if (errorAsesores) {
-        mostrarMensaje("error", "❌ Error al eliminar asignaciones");
-        return;
-      }
-
+      if (errorAsesores) throw errorAsesores;
+      // Eliminar curso activado
       const { error } = await supabase
         .from("cursos_activados")
         .delete()
         .eq("id", id);
-
-      if (error) {
-        mostrarMensaje("error", "❌ Error al desactivar el curso");
-        return;
-      }
-
+      if (error) throw error;
       mostrarMensaje("success", "🗑️ Curso desactivado correctamente");
       await cargarActivos();
     } catch (err) {
-      mostrarMensaje("error", "❌ Error inesperado al desactivar");
+      console.error("Error al desactivar:", err);
+      mostrarMensaje("error", "❌ Error al desactivar el curso");
     } finally {
       setLoading(false);
     }
@@ -405,13 +369,15 @@ export default function FormadorPage({ user, onLogout }) {
     setSeleccion({ ...seleccion, dia, grupo_id: "", curso_id: "" });
     setGrupos([]);
     setCursos([]);
-    if (dia) await cargarGrupos(seleccion.campana_id);
+    if (dia && seleccion.campana_id) await cargarGrupos(seleccion.campana_id);
   };
 
   const handleGrupoChange = async (grupo_id) => {
     setSeleccion({ ...seleccion, grupo_id, curso_id: "" });
     setCursos([]);
-    if (grupo_id) await cargarCursos(seleccion.campana_id, seleccion.dia, grupo_id);
+    if (grupo_id && seleccion.campana_id && seleccion.dia) {
+      await cargarCursos(seleccion.campana_id, seleccion.dia, grupo_id);
+    }
   };
 
   const toggleGroup = (groupId) => {
@@ -419,32 +385,48 @@ export default function FormadorPage({ user, onLogout }) {
     setExpandedGroupId(prev => prev === numericGroupId ? null : numericGroupId);
   };
 
-  // === Lógica de filtrado y paginación (con useMemo para optimización) ===
+  // === Lógica de filtrado y paginación ===
   const { usuariosPaginados, totalPaginas } = useMemo(() => {
     let usuariosFiltrados = [...usuariosDotacion];
-
-    // Aplicar filtro por grupo_nombre
     if (filtroGrupo !== "todos") {
       usuariosFiltrados = usuariosFiltrados.filter(u => u.grupo_nombre === filtroGrupo);
     }
-
-    // Paginación
     const total = usuariosFiltrados.length;
     const desde = (paginaActual - 1) * REGISTROS_POR_PAGINA;
     const hasta = desde + REGISTROS_POR_PAGINA;
     const pagina = usuariosFiltrados.slice(desde, hasta);
-
     const totalPag = Math.ceil(total / REGISTROS_POR_PAGINA) || 1;
+    return { usuariosPaginados: pagina, totalPaginas: totalPag };
+  }, [usuariosDotacion, filtroGrupo, paginaActual, REGISTROS_POR_PAGINA]);
 
-    return {
-      usuariosPaginados: pagina,
-      totalPaginas: totalPag,
-    };
-  }, [usuariosDotacion, filtroGrupo, paginaActual]);
+  // === DATOS DE LA MALLA DE CAPACITACIÓN ===
+  const mallaActividades = [
+    ["Espera Grupal", "00:30:00", "REPASO DÍA 1", "00:30:00", "REPASO DÍA 3", "00:30:00", "NEXUM Y CRM", "00:30:00"],
+    ["Charla Selección", "01:30:00", "DINAMICA 2", "00:30:00", "DINAMICA 3", "01:00:00", "TALLER DE TIPIFICACIONES", "01:00:00"],
+    ["Consulta RUC - Examen Psicológico", "00:30:00", "DIRECCIONES", "00:30:00", "ESTRUCTURA DE LLAMADA", "01:00:00", "REPASO GENERAL", "00:30:00"],
+    ["Presentación General", "00:20:00", "PROCESO DELIVERY", "01:00:00", "TALLER DE SPEECH DE VENTA", "01:00:00", "EXAMEN FINAL", "00:30:00"],
+    ["DÍNAMICA 1 - Rompe Hielo", "00:30:00", "Examen 2", "00:30:00", "TALLER DE ARGUMENTACIÓN", "00:30:00", "BREAK", "00:30:00"],
+    ["Charla ISO", "00:30:00", "CICLO DE FACTURACION", "01:00:00", "BREAK", "00:30:00", "CHARLA DE CALIDAD", "01:00:00"],
+    ["Examen ISO", "00:20:00", "BREAK", "00:30:00", "TALLER DE MANEJO DE OBJECIONES", "01:00:00", "CHARLA DE BACKOFFICE", "01:00:00"],
+    ["Break", "00:30:00", "EXAMEN PRÁCTICO CICLOS DE FACTURACIÓN", "01:00:00", "APLICATIVOS DE GESTIÓN", "01:00:00", "ROLL PLAY FINAL", "02:00:00"],
+    ["Producto Portabilidad", "01:50:00", "DITO - APP", "01:00:00", "EXAMEN 3 APLICATIVOS DE GESTIÓN", "00:30:00", "", ""],
+    ["Examen 1", "00:30:00", "Examen 4", "00:30:00", "", "", "", ""],
+  ];
+
+  const actividadesPorDia = useMemo(() => {
+    const dias = { 1: [], 2: [], 3: [], 4: [] };
+    mallaActividades.forEach(row => {
+      if (row[0] && row[1]) dias[1].push({ actividad: row[0], tiempo: row[1] });
+      if (row[2] && row[3]) dias[2].push({ actividad: row[2], tiempo: row[3] });
+      if (row[4] && row[5]) dias[3].push({ actividad: row[4], tiempo: row[5] });
+      if (row[6] && row[7]) dias[4].push({ actividad: row[6], tiempo: row[7] });
+    });
+    return dias;
+  }, []);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 overflow-hidden">
-      <style jsx>{`
+      <style>{`
         .bg-particles::before {
           content: "";
           position: fixed;
@@ -461,8 +443,16 @@ export default function FormadorPage({ user, onLogout }) {
           0% { opacity: 0.2; }
           100% { opacity: 0.4; }
         }
+        .hide-scrollbar::-webkit-scrollbar {
+          display: none;
+        }
+        .hide-scrollbar {
+          -ms-overflow-style: none;
+          scrollbar-width: none;
+        }
       `}</style>
 
+      {/* Header */}
       <div className="bg-black/30 backdrop-blur-md border-b border-white/10 sticky top-0 z-50 shadow-sm">
         <div className="max-w-[95vw] mx-auto px-4 md:px-8 py-6">
           <div className="flex items-center justify-between">
@@ -484,6 +474,7 @@ export default function FormadorPage({ user, onLogout }) {
         </div>
       </div>
 
+      {/* Mensajes */}
       {mensaje.texto && (
         <div className="max-w-[95vw] mx-auto px-4 md:px-8 pt-4">
           <div className={`p-4 rounded-lg shadow-sm border-l-4 animate-in slide-in-from-top duration-500 ${
@@ -496,6 +487,7 @@ export default function FormadorPage({ user, onLogout }) {
         </div>
       )}
 
+      {/* Contenido principal */}
       <div className="max-w-[95vw] mx-auto px-4 md:px-8 py-6">
         <div className="grid md:grid-cols-2 gap-6">
           {/* Sección izquierda: Activar Curso */}
@@ -513,7 +505,6 @@ export default function FormadorPage({ user, onLogout }) {
                 <div className="w-5 h-5 border-2 border-purple-400 border-t-transparent rounded-full animate-spin"></div>
               )}
             </div>
-
             <div>
               <label className="block text-sm font-medium text-gray-300 mb-2">
                 Campaña
@@ -532,7 +523,6 @@ export default function FormadorPage({ user, onLogout }) {
                 ))}
               </select>
             </div>
-
             <div>
               <label className="block text-sm font-medium text-gray-300 mb-2">
                 Día de capacitación
@@ -551,7 +541,6 @@ export default function FormadorPage({ user, onLogout }) {
                 <option value="5" className="bg-slate-800">Día 5</option>
               </select>
             </div>
-
             <div>
               <label className="block text-sm font-medium text-gray-300 mb-2">
                 Grupo
@@ -570,7 +559,6 @@ export default function FormadorPage({ user, onLogout }) {
                 ))}
               </select>
             </div>
-
             {cursos.length > 0 && (
               <div className="bg-gradient-to-r from-purple-500/10 to-pink-500/10 backdrop-blur-sm rounded-xl border border-purple-500/20 p-4">
                 <h3 className="font-semibold text-white mb-3 flex items-center gap-2">
@@ -600,7 +588,6 @@ export default function FormadorPage({ user, onLogout }) {
                 </div>
               </div>
             )}
-
             <div>
               <label className="block text-sm font-medium text-gray-300 mb-2">
                 Curso a activar
@@ -619,7 +606,6 @@ export default function FormadorPage({ user, onLogout }) {
                 ))}
               </select>
             </div>
-
             <button
               onClick={activarCurso}
               disabled={!seleccion.curso_id || loading}
@@ -639,7 +625,6 @@ export default function FormadorPage({ user, onLogout }) {
               </span>
               Grupos asignados hoy
             </h2>
-
             {gruposConCursos.length === 0 ? (
               <div className="text-center py-12">
                 <div className="text-6xl mb-4 text-gray-500">📭</div>
@@ -653,7 +638,6 @@ export default function FormadorPage({ user, onLogout }) {
                   const cursosDelGrupo = grupoData.cursos;
                   const groupId = Number(cursosDelGrupo[0]?.grupo_id);
                   const isExpanded = expandedGroupId === groupId;
-
                   return (
                     <div
                       key={groupId}
@@ -668,7 +652,7 @@ export default function FormadorPage({ user, onLogout }) {
                             {cursosDelGrupo.length}
                           </span>
                           <h3 className="font-semibold text-gray-100">
-                            {grupo.nombre}
+                            {grupo?.nombre || "Sin nombre"}
                           </h3>
                         </div>
                         <svg
@@ -682,7 +666,6 @@ export default function FormadorPage({ user, onLogout }) {
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                         </svg>
                       </div>
-
                       {isExpanded && (
                         <div className="border-t border-white/20 p-4 space-y-3">
                           {cursosDelGrupo.map((a) => (
@@ -742,7 +725,7 @@ export default function FormadorPage({ user, onLogout }) {
         </div>
       </div>
 
-      {/* === NUEVA SECCIÓN MEJORADA: TABLA DE DOTACIÓN CON FILTRO Y PAGINACIÓN === */}
+      {/* SECCIÓN: TABLA DE DOTACIÓN */}
       <div className="max-w-[95vw] mx-auto px-4 md:px-8 py-6">
         <div className="bg-white/10 backdrop-blur-md rounded-2xl border border-white/20 shadow-xl shadow-purple-500/5 p-6">
           <h2 className="font-semibold text-xl text-white mb-4 flex items-center gap-2">
@@ -753,8 +736,6 @@ export default function FormadorPage({ user, onLogout }) {
             </span>
             Tabla de Dotación (Usuarios)
           </h2>
-
-          {/* Filtros */}
           <div className="flex flex-wrap items-center gap-4 mb-6">
             <div>
               <label className="block text-sm font-medium text-gray-300 mb-1">Filtrar por Grupo</label>
@@ -762,7 +743,7 @@ export default function FormadorPage({ user, onLogout }) {
                 value={filtroGrupo}
                 onChange={(e) => {
                   setFiltroGrupo(e.target.value);
-                  setPaginaActual(1); // Reiniciar a página 1 al cambiar filtro
+                  setPaginaActual(1);
                 }}
                 className="bg-white/10 border border-white/20 text-white rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-purple-400 focus:border-transparent"
               >
@@ -778,7 +759,6 @@ export default function FormadorPage({ user, onLogout }) {
               ).length} usuarios
             </div>
           </div>
-
           {loading && !usuariosDotacion.length ? (
             <div className="text-center py-12">
               <div className="animate-spin w-8 h-8 border-2 border-purple-400 border-t-transparent rounded-full mx-auto mb-4"></div>
@@ -846,8 +826,6 @@ export default function FormadorPage({ user, onLogout }) {
                   </tbody>
                 </table>
               </div>
-
-              {/* Controles de paginación */}
               {totalPaginas > 1 && (
                 <div className="flex items-center justify-between mt-6">
                   <button
@@ -857,11 +835,7 @@ export default function FormadorPage({ user, onLogout }) {
                   >
                     ← Anterior
                   </button>
-
-                  <span className="text-gray-300 text-sm">
-                    Página {paginaActual} de {totalPaginas}
-                  </span>
-
+                  <span className="text-gray-300 text-sm">Página {paginaActual} de {totalPaginas}</span>
                   <button
                     onClick={() => setPaginaActual(p => Math.min(totalPaginas, p + 1))}
                     disabled={paginaActual === totalPaginas || loading}
@@ -876,7 +850,7 @@ export default function FormadorPage({ user, onLogout }) {
         </div>
       </div>
 
-      {/* === NUEVA SECCIÓN: MALLA DE CAPACITACIÓN === */}
+      {/* SECCIÓN: MALLA DE CAPACITACIÓN */}
       <div className="max-w-[95vw] mx-auto px-4 md:px-8 py-6">
         <div className="bg-white/10 backdrop-blur-md rounded-2xl border border-white/20 shadow-xl shadow-purple-500/5 p-6">
           <h2 className="font-semibold text-xl text-white mb-4 flex items-center gap-2">
@@ -887,129 +861,42 @@ export default function FormadorPage({ user, onLogout }) {
             </span>
             Malla de Capacitación
           </h2>
-
-          <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-white/10 text-sm">
-              <thead>
-                <tr className="bg-white/5">
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Actividades | Día 1</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Tiempo</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Actividades | Día 2</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Tiempo</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Actividades | Día 3</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Tiempo</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Actividades | Día 4</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Tiempo</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-white/5">
-                <tr>
-                  <td className="px-4 py-3 whitespace-nowrap text-gray-200">Espera Grupal</td>
-                  <td className="px-4 py-3 whitespace-nowrap text-gray-200">00:30:00</td>
-                  <td className="px-4 py-3 whitespace-nowrap text-gray-200">REPASO DÍA 1</td>
-                  <td className="px-4 py-3 whitespace-nowrap text-gray-200">00:30:00</td>
-                  <td className="px-4 py-3 whitespace-nowrap text-gray-200">REPASO DÍA 3</td>
-                  <td className="px-4 py-3 whitespace-nowrap text-gray-200">00:30:00</td>
-                  <td className="px-4 py-3 whitespace-nowrap text-gray-200">NEXUM Y CRM</td>
-                  <td className="px-4 py-3 whitespace-nowrap text-gray-200">00:30:00</td>
-                </tr>
-                <tr>
-                  <td className="px-4 py-3 whitespace-nowrap text-gray-200">Charla Selección</td>
-                  <td className="px-4 py-3 whitespace-nowrap text-gray-200">01:30:00</td>
-                  <td className="px-4 py-3 whitespace-nowrap text-gray-200">DINAMICA 2</td>
-                  <td className="px-4 py-3 whitespace-nowrap text-gray-200">00:30:00</td>
-                  <td className="px-4 py-3 whitespace-nowrap text-gray-200">DINAMICA 3</td>
-                  <td className="px-4 py-3 whitespace-nowrap text-gray-200">01:00:00</td>
-                  <td className="px-4 py-3 whitespace-nowrap text-gray-200">TALLER DE TIPIFICACIONES</td>
-                  <td className="px-4 py-3 whitespace-nowrap text-gray-200">01:00:00</td>
-                </tr>
-                <tr>
-                  <td className="px-4 py-3 whitespace-nowrap text-gray-200">Consulta RUC - Examen Psicológico</td>
-                  <td className="px-4 py-3 whitespace-nowrap text-gray-200">00:30:00</td>
-                  <td className="px-4 py-3 whitespace-nowrap text-gray-200">DIRECCIONES</td>
-                  <td className="px-4 py-3 whitespace-nowrap text-gray-200">00:30:00</td>
-                  <td className="px-4 py-3 whitespace-nowrap text-gray-200">ESTRUCTURA DE LLAMADA</td>
-                  <td className="px-4 py-3 whitespace-nowrap text-gray-200">01:00:00</td>
-                  <td className="px-4 py-3 whitespace-nowrap text-gray-200">REPASO GENERAL</td>
-                  <td className="px-4 py-3 whitespace-nowrap text-gray-200">00:30:00</td>
-                </tr>
-                <tr>
-                  <td className="px-4 py-3 whitespace-nowrap text-gray-200">Presentación General</td>
-                  <td className="px-4 py-3 whitespace-nowrap text-gray-200">00:20:00</td>
-                  <td className="px-4 py-3 whitespace-nowrap text-gray-200">PROCESO DELIVERY</td>
-                  <td className="px-4 py-3 whitespace-nowrap text-gray-200">01:00:00</td>
-                  <td className="px-4 py-3 whitespace-nowrap text-gray-200">TALLER DE SPEECH DE VENTA</td>
-                  <td className="px-4 py-3 whitespace-nowrap text-gray-200">01:00:00</td>
-                  <td className="px-4 py-3 whitespace-nowrap text-gray-200">EXAMEN FINAL</td>
-                  <td className="px-4 py-3 whitespace-nowrap text-gray-200">00:30:00</td>
-                </tr>
-                <tr>
-                  <td className="px-4 py-3 whitespace-nowrap text-gray-200">DÍNAMICA 1 - Rompe Hielo</td>
-                  <td className="px-4 py-3 whitespace-nowrap text-gray-200">00:30:00</td>
-                  <td className="px-4 py-3 whitespace-nowrap text-gray-200">Examen 2</td>
-                  <td className="px-4 py-3 whitespace-nowrap text-gray-200">00:30:00</td>
-                  <td className="px-4 py-3 whitespace-nowrap text-gray-200">TALLER DE ARGUMENTACIÓN</td>
-                  <td className="px-4 py-3 whitespace-nowrap text-gray-200">00:30:00</td>
-                  <td className="px-4 py-3 whitespace-nowrap text-gray-200">BREAK</td>
-                  <td className="px-4 py-3 whitespace-nowrap text-gray-200">00:30:00</td>
-                </tr>
-                <tr>
-                  <td className="px-4 py-3 whitespace-nowrap text-gray-200">Charla ISO</td>
-                  <td className="px-4 py-3 whitespace-nowrap text-gray-200">00:30:00</td>
-                  <td className="px-4 py-3 whitespace-nowrap text-gray-200">CICLO DE FACTURACION</td>
-                  <td className="px-4 py-3 whitespace-nowrap text-gray-200">01:00:00</td>
-                  <td className="px-4 py-3 whitespace-nowrap text-gray-200">BREAK</td>
-                  <td className="px-4 py-3 whitespace-nowrap text-gray-200">00:30:00</td>
-                  <td className="px-4 py-3 whitespace-nowrap text-gray-200">CHARLA DE CALIDAD</td>
-                  <td className="px-4 py-3 whitespace-nowrap text-gray-200">01:00:00</td>
-                </tr>
-                <tr>
-                  <td className="px-4 py-3 whitespace-nowrap text-gray-200">Examen ISO</td>
-                  <td className="px-4 py-3 whitespace-nowrap text-gray-200">00:20:00</td>
-                  <td className="px-4 py-3 whitespace-nowrap text-gray-200">BREAK</td>
-                  <td className="px-4 py-3 whitespace-nowrap text-gray-200">00:30:00</td>
-                  <td className="px-4 py-3 whitespace-nowrap text-gray-200">TALLER DE MANEJO DE OBJECIONES</td>
-                  <td className="px-4 py-3 whitespace-nowrap text-gray-200">01:00:00</td>
-                  <td className="px-4 py-3 whitespace-nowrap text-gray-200">CHARLA DE BACKOFFICE</td>
-                  <td className="px-4 py-3 whitespace-nowrap text-gray-200">01:00:00</td>
-                </tr>
-                <tr>
-                  <td className="px-4 py-3 whitespace-nowrap text-gray-200">Break</td>
-                  <td className="px-4 py-3 whitespace-nowrap text-gray-200">00:30:00</td>
-                  <td className="px-4 py-3 whitespace-nowrap text-gray-200">EXAMEN PRÁCTICO CICLOS DE FACTURACIÓN</td>
-                  <td className="px-4 py-3 whitespace-nowrap text-gray-200">01:00:00</td>
-                  <td className="px-4 py-3 whitespace-nowrap text-gray-200">APLICATIVOS DE GESTIÓN</td>
-                  <td className="px-4 py-3 whitespace-nowrap text-gray-200">01:00:00</td>
-                  <td className="px-4 py-3 whitespace-nowrap text-gray-200">ROLL PLAY FINAL</td>
-                  <td className="px-4 py-3 whitespace-nowrap text-gray-200">02:00:00</td>
-                </tr>
-                <tr>
-                  <td className="px-4 py-3 whitespace-nowrap text-gray-200">Producto Portabilidad</td>
-                  <td className="px-4 py-3 whitespace-nowrap text-gray-200">01:50:00</td>
-                  <td className="px-4 py-3 whitespace-nowrap text-gray-200">DITO - APP</td>
-                  <td className="px-4 py-3 whitespace-nowrap text-gray-200">01:00:00</td>
-                  <td className="px-4 py-3 whitespace-nowrap text-gray-200">EXAMEN 3 APLICATIVOS DE GESTIÓN</td>
-                  <td className="px-4 py-3 whitespace-nowrap text-gray-200">00:30:00</td>
-                  <td className="px-4 py-3 whitespace-nowrap text-gray-200">—</td>
-                  <td className="px-4 py-3 whitespace-nowrap text-gray-200">—</td>
-                </tr>
-                <tr>
-                  <td className="px-4 py-3 whitespace-nowrap text-gray-200">Examen 1</td>
-                  <td className="px-4 py-3 whitespace-nowrap text-gray-200">00:30:00</td>
-                  <td className="px-4 py-3 whitespace-nowrap text-gray-200">Examen 4</td>
-                  <td className="px-4 py-3 whitespace-nowrap text-gray-200">00:30:00</td>
-                  <td className="px-4 py-3 whitespace-nowrap text-gray-200">—</td>
-                  <td className="px-4 py-3 whitespace-nowrap text-gray-200">—</td>
-                  <td className="px-4 py-3 whitespace-nowrap text-gray-200">—</td>
-                  <td className="px-4 py-3 whitespace-nowrap text-gray-200">—</td>
-                </tr>
-              </tbody>
-            </table>
+          <div className="flex overflow-x-auto gap-6 pb-4 hide-scrollbar" style={{ scrollSnapType: 'x mandatory' }}>
+            {[1, 2, 3, 4].map(dia => (
+              <div
+                key={dia}
+                className="bg-white/5 rounded-xl border border-white/10 shadow-lg p-4 w-64 flex-shrink-0 snap-start"
+                style={{ minWidth: '16rem' }}
+              >
+                <div className="text-center mb-3">
+                  <h3 className="font-bold text-lg text-amber-300">Día {dia}</h3>
+                  <div className="w-12 h-0.5 bg-amber-500/30 mx-auto mt-1"></div>
+                </div>
+                <div className="space-y-2 max-h-96 overflow-y-auto pr-1">
+                  {actividadesPorDia[dia]?.length > 0 ? (
+                    actividadesPorDia[dia].map((item, idx) => (
+                      <div
+                        key={idx}
+                        className="flex justify-between items-start bg-white/5 rounded-lg p-2 hover:bg-white/10 transition"
+                      >
+                        <span className="text-gray-200 text-sm font-medium">{item.actividad}</span>
+                        <span className="text-gray-400 text-xs bg-black/20 px-2 py-0.5 rounded whitespace-nowrap">
+                          {item.tiempo}
+                        </span>
+                      </div>
+                    ))
+                  ) : (
+                    <div className="text-gray-500 text-center text-sm py-4">Sin actividades</div>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+          <div className="text-center mt-2">
+            <p className="text-xs text-gray-500">Desliza horizontalmente para ver más días</p>
           </div>
         </div>
       </div>
-
-      
     </div>
   );
 }
