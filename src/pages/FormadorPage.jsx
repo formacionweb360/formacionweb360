@@ -872,7 +872,9 @@ export default function FormadorPage({ user, onLogout }) {
                 </div>
               )}
             </>
-          )}
+          )} 
+        </div>
+      </div>
 
       {/* === NUEVA SECCIÓN: MALLA DE CAPACITACIÓN === */}
       <div className="max-w-[95vw] mx-auto px-4 md:px-8 py-6">
@@ -1008,9 +1010,7 @@ export default function FormadorPage({ user, onLogout }) {
       </div>
 
 
-          
-        </div>
-      </div>
+      
     </div>
   );
 }
