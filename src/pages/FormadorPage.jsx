@@ -873,6 +873,142 @@ export default function FormadorPage({ user, onLogout }) {
               )}
             </>
           )}
+
+      {/* === NUEVA SECCIÓN: MALLA DE CAPACITACIÓN === */}
+      <div className="max-w-[95vw] mx-auto px-4 md:px-8 py-6">
+        <div className="bg-white/10 backdrop-blur-md rounded-2xl border border-white/20 shadow-xl shadow-purple-500/5 p-6">
+          <h2 className="font-semibold text-xl text-white mb-4 flex items-center gap-2">
+            <span className="bg-amber-500/20 text-amber-300 p-2 rounded-lg border border-amber-500/30">
+              <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                <path fillRule="evenodd" d="M4 4a2 2 0 00-2 2v8a2 2 0 002 2h12a2 2 0 002-2V6a2 2 0 00-2-2H4zm2 6a2 2 0 114 0v2a2 2 0 11-4 0v-2zm8 0a2 2 0 114 0v2a2 2 0 11-4 0v-2z" clipRule="evenodd" />
+              </svg>
+            </span>
+            Malla de Capacitación
+          </h2>
+
+          <div className="overflow-x-auto">
+            <table className="min-w-full divide-y divide-white/10 text-sm">
+              <thead>
+                <tr className="bg-white/5">
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Actividades | Día 1</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Tiempo</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Actividades | Día 2</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Tiempo</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Actividades | Día 3</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Tiempo</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Actividades | Día 4</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Tiempo</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-white/5">
+                <tr>
+                  <td className="px-4 py-3 whitespace-nowrap text-gray-200">Espera Grupal</td>
+                  <td className="px-4 py-3 whitespace-nowrap text-gray-200">00:30:00</td>
+                  <td className="px-4 py-3 whitespace-nowrap text-gray-200">REPASO DÍA 1</td>
+                  <td className="px-4 py-3 whitespace-nowrap text-gray-200">00:30:00</td>
+                  <td className="px-4 py-3 whitespace-nowrap text-gray-200">REPASO DÍA 3</td>
+                  <td className="px-4 py-3 whitespace-nowrap text-gray-200">00:30:00</td>
+                  <td className="px-4 py-3 whitespace-nowrap text-gray-200">NEXUM Y CRM</td>
+                  <td className="px-4 py-3 whitespace-nowrap text-gray-200">00:30:00</td>
+                </tr>
+                <tr>
+                  <td className="px-4 py-3 whitespace-nowrap text-gray-200">Charla Selección</td>
+                  <td className="px-4 py-3 whitespace-nowrap text-gray-200">01:30:00</td>
+                  <td className="px-4 py-3 whitespace-nowrap text-gray-200">DINAMICA 2</td>
+                  <td className="px-4 py-3 whitespace-nowrap text-gray-200">00:30:00</td>
+                  <td className="px-4 py-3 whitespace-nowrap text-gray-200">DINAMICA 3</td>
+                  <td className="px-4 py-3 whitespace-nowrap text-gray-200">01:00:00</td>
+                  <td className="px-4 py-3 whitespace-nowrap text-gray-200">TALLER DE TIPIFICACIONES</td>
+                  <td className="px-4 py-3 whitespace-nowrap text-gray-200">01:00:00</td>
+                </tr>
+                <tr>
+                  <td className="px-4 py-3 whitespace-nowrap text-gray-200">Consulta RUC - Examen Psicológico</td>
+                  <td className="px-4 py-3 whitespace-nowrap text-gray-200">00:30:00</td>
+                  <td className="px-4 py-3 whitespace-nowrap text-gray-200">DIRECCIONES</td>
+                  <td className="px-4 py-3 whitespace-nowrap text-gray-200">00:30:00</td>
+                  <td className="px-4 py-3 whitespace-nowrap text-gray-200">ESTRUCTURA DE LLAMADA</td>
+                  <td className="px-4 py-3 whitespace-nowrap text-gray-200">01:00:00</td>
+                  <td className="px-4 py-3 whitespace-nowrap text-gray-200">REPASO GENERAL</td>
+                  <td className="px-4 py-3 whitespace-nowrap text-gray-200">00:30:00</td>
+                </tr>
+                <tr>
+                  <td className="px-4 py-3 whitespace-nowrap text-gray-200">Presentación General</td>
+                  <td className="px-4 py-3 whitespace-nowrap text-gray-200">00:20:00</td>
+                  <td className="px-4 py-3 whitespace-nowrap text-gray-200">PROCESO DELIVERY</td>
+                  <td className="px-4 py-3 whitespace-nowrap text-gray-200">01:00:00</td>
+                  <td className="px-4 py-3 whitespace-nowrap text-gray-200">TALLER DE SPEECH DE VENTA</td>
+                  <td className="px-4 py-3 whitespace-nowrap text-gray-200">01:00:00</td>
+                  <td className="px-4 py-3 whitespace-nowrap text-gray-200">EXAMEN FINAL</td>
+                  <td className="px-4 py-3 whitespace-nowrap text-gray-200">00:30:00</td>
+                </tr>
+                <tr>
+                  <td className="px-4 py-3 whitespace-nowrap text-gray-200">DÍNAMICA 1 - Rompe Hielo</td>
+                  <td className="px-4 py-3 whitespace-nowrap text-gray-200">00:30:00</td>
+                  <td className="px-4 py-3 whitespace-nowrap text-gray-200">Examen 2</td>
+                  <td className="px-4 py-3 whitespace-nowrap text-gray-200">00:30:00</td>
+                  <td className="px-4 py-3 whitespace-nowrap text-gray-200">TALLER DE ARGUMENTACIÓN</td>
+                  <td className="px-4 py-3 whitespace-nowrap text-gray-200">00:30:00</td>
+                  <td className="px-4 py-3 whitespace-nowrap text-gray-200">BREAK</td>
+                  <td className="px-4 py-3 whitespace-nowrap text-gray-200">00:30:00</td>
+                </tr>
+                <tr>
+                  <td className="px-4 py-3 whitespace-nowrap text-gray-200">Charla ISO</td>
+                  <td className="px-4 py-3 whitespace-nowrap text-gray-200">00:30:00</td>
+                  <td className="px-4 py-3 whitespace-nowrap text-gray-200">CICLO DE FACTURACION</td>
+                  <td className="px-4 py-3 whitespace-nowrap text-gray-200">01:00:00</td>
+                  <td className="px-4 py-3 whitespace-nowrap text-gray-200">BREAK</td>
+                  <td className="px-4 py-3 whitespace-nowrap text-gray-200">00:30:00</td>
+                  <td className="px-4 py-3 whitespace-nowrap text-gray-200">CHARLA DE CALIDAD</td>
+                  <td className="px-4 py-3 whitespace-nowrap text-gray-200">01:00:00</td>
+                </tr>
+                <tr>
+                  <td className="px-4 py-3 whitespace-nowrap text-gray-200">Examen ISO</td>
+                  <td className="px-4 py-3 whitespace-nowrap text-gray-200">00:20:00</td>
+                  <td className="px-4 py-3 whitespace-nowrap text-gray-200">BREAK</td>
+                  <td className="px-4 py-3 whitespace-nowrap text-gray-200">00:30:00</td>
+                  <td className="px-4 py-3 whitespace-nowrap text-gray-200">TALLER DE MANEJO DE OBJECIONES</td>
+                  <td className="px-4 py-3 whitespace-nowrap text-gray-200">01:00:00</td>
+                  <td className="px-4 py-3 whitespace-nowrap text-gray-200">CHARLA DE BACKOFFICE</td>
+                  <td className="px-4 py-3 whitespace-nowrap text-gray-200">01:00:00</td>
+                </tr>
+                <tr>
+                  <td className="px-4 py-3 whitespace-nowrap text-gray-200">Break</td>
+                  <td className="px-4 py-3 whitespace-nowrap text-gray-200">00:30:00</td>
+                  <td className="px-4 py-3 whitespace-nowrap text-gray-200">EXAMEN PRÁCTICO CICLOS DE FACTURACIÓN</td>
+                  <td className="px-4 py-3 whitespace-nowrap text-gray-200">01:00:00</td>
+                  <td className="px-4 py-3 whitespace-nowrap text-gray-200">APLICATIVOS DE GESTIÓN</td>
+                  <td className="px-4 py-3 whitespace-nowrap text-gray-200">01:00:00</td>
+                  <td className="px-4 py-3 whitespace-nowrap text-gray-200">ROLL PLAY FINAL</td>
+                  <td className="px-4 py-3 whitespace-nowrap text-gray-200">02:00:00</td>
+                </tr>
+                <tr>
+                  <td className="px-4 py-3 whitespace-nowrap text-gray-200">Producto Portabilidad</td>
+                  <td className="px-4 py-3 whitespace-nowrap text-gray-200">01:50:00</td>
+                  <td className="px-4 py-3 whitespace-nowrap text-gray-200">DITO - APP</td>
+                  <td className="px-4 py-3 whitespace-nowrap text-gray-200">01:00:00</td>
+                  <td className="px-4 py-3 whitespace-nowrap text-gray-200">EXAMEN 3 APLICATIVOS DE GESTIÓN</td>
+                  <td className="px-4 py-3 whitespace-nowrap text-gray-200">00:30:00</td>
+                  <td className="px-4 py-3 whitespace-nowrap text-gray-200">—</td>
+                  <td className="px-4 py-3 whitespace-nowrap text-gray-200">—</td>
+                </tr>
+                <tr>
+                  <td className="px-4 py-3 whitespace-nowrap text-gray-200">Examen 1</td>
+                  <td className="px-4 py-3 whitespace-nowrap text-gray-200">00:30:00</td>
+                  <td className="px-4 py-3 whitespace-nowrap text-gray-200">Examen 4</td>
+                  <td className="px-4 py-3 whitespace-nowrap text-gray-200">00:30:00</td>
+                  <td className="px-4 py-3 whitespace-nowrap text-gray-200">—</td>
+                  <td className="px-4 py-3 whitespace-nowrap text-gray-200">—</td>
+                  <td className="px-4 py-3 whitespace-nowrap text-gray-200">—</td>
+                  <td className="px-4 py-3 whitespace-nowrap text-gray-200">—</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+
+          
         </div>
       </div>
     </div>
