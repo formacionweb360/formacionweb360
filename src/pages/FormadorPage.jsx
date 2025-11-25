@@ -10,12 +10,15 @@ export default function FormadorPage({ user, onLogout }) {
     dia: "",
     grupo_id: "",
     curso_id: "",
-  });  
+  });
   const [activos, setActivos] = useState([]);
   const [gruposConCursos, setGruposConCursos] = useState([]);
   const [loading, setLoading] = useState(false);
   const [mensaje, setMensaje] = useState({ tipo: "", texto: "" });
   const [expandedGroupId, setExpandedGroupId] = useState(null);
+
+  // === NUEVO: Estado para la tabla de dotación ===
+  const [usuariosDotacion, setUsuariosDotacion] = useState([]);
 
   const fechaHoy = new Date().toISOString().split("T")[0];
   const fechaHoyFormateada = new Date().toLocaleDateString('es-PE', {
@@ -27,6 +30,7 @@ export default function FormadorPage({ user, onLogout }) {
 
   useEffect(() => {
     cargarDatos();
+    cargarUsuariosDotacion(); // === NUEVO ===
   }, []);
 
   const mostrarMensaje = (tipo, texto) => {
@@ -101,7 +105,7 @@ export default function FormadorPage({ user, onLogout }) {
       setLoading(false);
     }
   };
-  
+
   const cargarCursos = async (campana_id, dia, grupo_id) => {
     if (!campana_id || !dia || !grupo_id) {
       return;
@@ -134,7 +138,6 @@ export default function FormadorPage({ user, onLogout }) {
       }
 
       setCursos(data || []);
-
     } catch (err) {
       console.error("Error *interno* en cargarCursos:", err);
       setCursos([]);
@@ -145,10 +148,10 @@ export default function FormadorPage({ user, onLogout }) {
 
   const cargarActivos = async () => {
     if (!user?.id) {
-        console.error("User no está definido o no tiene ID. No se pueden cargar activos.");
-        setActivos([]);
-        setGruposConCursos([]);
-        return;
+      console.error("User no está definido o no tiene ID. No se pueden cargar activos.");
+      setActivos([]);
+      setGruposConCursos([]);
+      return;
     }
     const { data, error } = await supabase
       .from("cursos_activados")
@@ -167,16 +170,16 @@ export default function FormadorPage({ user, onLogout }) {
       .eq("formador_id", user.id);
 
     if (error) {
-        console.error("Error al cargar cursos activos:", error);
-        setActivos([]);
-        setGruposConCursos([]);
-        return;
+      console.error("Error al cargar cursos activos:", error);
+      setActivos([]);
+      setGruposConCursos([]);
+      return;
     }
 
     if (!data) {
-        setActivos([]);
-        setGruposConCursos([]);
-        return;
+      setActivos([]);
+      setGruposConCursos([]);
+      return;
     }
 
     try {
@@ -206,8 +209,62 @@ export default function FormadorPage({ user, onLogout }) {
 
       setGruposConCursos(Object.values(gruposMap));
     } catch (err) {
-        console.error("Error contando asesores:", err);
-        setActivos(data.map(a => ({...a, asesores_count: 0})));
+      console.error("Error contando asesores:", err);
+      setActivos(data.map(a => ({ ...a, asesores_count: 0 })));
+    }
+  };
+
+  // === NUEVO: cargar usuarios para dotación ===
+  const cargarUsuariosDotacion = async () => {
+    setLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from("usuarios")
+        .select("id, usuario, rol, nombre, estado, grupo_id")
+        .order("nombre", { ascending: true });
+
+      if (error) {
+        console.error("Error al cargar usuarios para dotación:", error);
+        mostrarMensaje("error", "Error al cargar la dotación");
+        return;
+      }
+
+      setUsuariosDotacion(data || []);
+    } catch (err) {
+      console.error("Error interno al cargar usuarios:", err);
+      mostrarMensaje("error", "Error inesperado al cargar dotación");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // === NUEVO: actualizar estado de usuario ===
+  const actualizarEstadoUsuario = async (userId, nuevoEstado) => {
+    setLoading(true);
+    try {
+      const { error } = await supabase
+        .from("usuarios")
+        .update({ estado: nuevoEstado })
+        .eq("id", userId);
+
+      if (error) {
+        console.error("Error al actualizar estado del usuario:", error);
+        mostrarMensaje("error", "Error al actualizar estado");
+        return;
+      }
+
+      setUsuariosDotacion(prev =>
+        prev.map(u =>
+          u.id === userId ? { ...u, estado: nuevoEstado } : u
+        )
+      );
+
+      mostrarMensaje("success", "✅ Estado actualizado correctamente");
+    } catch (err) {
+      console.error("Error interno al actualizar estado:", err);
+      mostrarMensaje("error", "Error inesperado al actualizar");
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -302,7 +359,6 @@ export default function FormadorPage({ user, onLogout }) {
       await cargarActivos();
       await cargarGrupos(seleccion.campana_id);
       setSeleccion({ ...seleccion, curso_id: "" });
-
     } catch (err) {
       console.error("Error *interno* en activarCurso:", err);
       mostrarMensaje("error", "❌ Error inesperado al activar");
@@ -341,7 +397,6 @@ export default function FormadorPage({ user, onLogout }) {
 
       mostrarMensaje("success", "🗑️ Curso desactivado correctamente");
       await cargarActivos();
-
     } catch (err) {
       mostrarMensaje("error", "❌ Error inesperado al desactivar");
     } finally {
@@ -376,7 +431,6 @@ export default function FormadorPage({ user, onLogout }) {
   };
 
   const toggleGroup = (groupId) => {
-    // Aseguramos que siempre se compare el mismo tipo de dato (número)
     const numericGroupId = Number(groupId);
     setExpandedGroupId(prev => prev === numericGroupId ? null : numericGroupId);
   };
@@ -437,6 +491,7 @@ export default function FormadorPage({ user, onLogout }) {
 
       <div className="max-w-[95vw] mx-auto px-4 md:px-8 py-6">
         <div className="grid md:grid-cols-2 gap-6">
+          {/* Sección izquierda: Activar Curso */}
           <div className="bg-white/10 backdrop-blur-md rounded-2xl border border-white/20 shadow-xl shadow-purple-500/5 p-6 space-y-4">
             <div className="flex items-center justify-between mb-4">
               <h2 className="font-semibold text-xl text-white flex items-center gap-2">
@@ -567,6 +622,7 @@ export default function FormadorPage({ user, onLogout }) {
             </button>
           </div>
 
+          {/* Sección derecha: Grupos asignados hoy */}
           <div className="bg-white/10 backdrop-blur-md rounded-2xl border border-white/20 shadow-xl shadow-purple-500/5 p-6">
             <h2 className="font-semibold text-xl text-white mb-4 flex items-center gap-2">
               <span className="bg-green-500/20 text-green-300 p-2 rounded-lg border border-green-500/30">
@@ -588,7 +644,6 @@ export default function FormadorPage({ user, onLogout }) {
                 {gruposConCursos.map((grupoData) => {
                   const grupo = grupoData.grupo;
                   const cursosDelGrupo = grupoData.cursos;
-                  // Convertimos a número para asegurar la comparación correcta
                   const groupId = Number(cursosDelGrupo[0]?.grupo_id);
                   const isExpanded = expandedGroupId === groupId;
 
@@ -677,6 +732,88 @@ export default function FormadorPage({ user, onLogout }) {
               </div>
             )}
           </div>
+        </div>
+      </div>
+
+      {/* === NUEVA SECCIÓN: TABLA DE DOTACIÓN === */}
+      <div className="max-w-[95vw] mx-auto px-4 md:px-8 py-6">
+        <div className="bg-white/10 backdrop-blur-md rounded-2xl border border-white/20 shadow-xl shadow-purple-500/5 p-6">
+          <h2 className="font-semibold text-xl text-white mb-4 flex items-center gap-2">
+            <span className="bg-blue-500/20 text-blue-300 p-2 rounded-lg border border-blue-500/30">
+              <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+              </svg>
+            </span>
+            Tabla de Dotación (Usuarios)
+          </h2>
+
+          {loading && !usuariosDotacion.length ? (
+            <div className="text-center py-12">
+              <div className="animate-spin w-8 h-8 border-2 border-purple-400 border-t-transparent rounded-full mx-auto mb-4"></div>
+              <p className="text-gray-400 text-sm">Cargando dotación...</p>
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="min-w-full divide-y divide-white/10">
+                <thead>
+                  <tr>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Nombre</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Usuario</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Rol</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Grupo ID</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Estado</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Acción</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-white/5">
+                  {usuariosDotacion.map((u) => (
+                    <tr key={u.id} className="hover:bg-white/5 transition-colors">
+                      <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-100">{u.nombre}</td>
+                      <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-200">{u.usuario}</td>
+                      <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-200">
+                        <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
+                          u.rol === 'Administrador' ? 'bg-purple-500/20 text-purple-300' :
+                          u.rol === 'Formador' ? 'bg-green-500/20 text-green-300' :
+                          'bg-blue-500/20 text-blue-300'
+                        }`}>
+                          {u.rol}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-200">{u.grupo_id || '-'}</td>
+                      <td className="px-4 py-3 whitespace-nowrap text-sm">
+                        <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
+                          u.estado === 'Activo' ? 'bg-green-500/20 text-green-300' : 'bg-red-500/20 text-red-300'
+                        }`}>
+                          {u.estado}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 whitespace-nowrap text-sm">
+                        <button
+                          onClick={() => actualizarEstadoUsuario(u.id, u.estado === 'Activo' ? 'Inactivo' : 'Activo')}
+                          disabled={loading}
+                          className={`px-3 py-1 rounded-md text-xs font-medium transition-colors ${
+                            u.estado === 'Activo'
+                              ? 'bg-red-500/20 text-red-300 hover:bg-red-500/30'
+                              : 'bg-green-500/20 text-green-300 hover:bg-green-500/30'
+                          } disabled:opacity-50`}
+                        >
+                          {u.estado === 'Activo' ? 'Marcar Inactivo' : 'Marcar Activo'}
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          {usuariosDotacion.length === 0 && !loading && (
+            <div className="text-center py-12">
+              <div className="text-6xl mb-4 text-gray-500">📭</div>
+              <p className="text-gray-400 text-sm mb-1">No hay usuarios registrados</p>
+              <p className="text-xs text-gray-500">Verifica la tabla en Supabase.</p>
+            </div>
+          )}
         </div>
       </div>
     </div>
