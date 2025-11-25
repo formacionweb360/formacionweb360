@@ -17,7 +17,7 @@ export default function FormadorPage({ user, onLogout }) {
   const [mensaje, setMensaje] = useState({ tipo: "", texto: "" });
   const [expandedGroupId, setExpandedGroupId] = useState(null);
 
-  // === Estados para Dotación ===
+  // === Estados para Dotación de Asesores ===
   const [usuariosDotacion, setUsuariosDotacion] = useState([]);
   const [gruposDisponibles, setGruposDisponibles] = useState([]);
   const [filtroGrupo, setFiltroGrupo] = useState("todos");
@@ -70,7 +70,7 @@ export default function FormadorPage({ user, onLogout }) {
     setLoading(true);
 
     try {
-      const { data: gruposData, error: gruposError } = await supabase
+      const {  gruposData, error: gruposError } = await supabase
         .from("grupos")
         .select("*")
         .eq("campana_id", campana_id);
@@ -207,21 +207,21 @@ export default function FormadorPage({ user, onLogout }) {
     }
   };
 
-  // === Cargar usuarios para dotación + grupos únicos ===
+  // === Cargar SOLO usuarios con rol = 'usuario' ===
   const cargarUsuariosDotacion = async () => {
     setLoading(true);
     try {
-      // Cargamos usuarios con grupo_nombre
-      const { data: usuarios, error: errUsuarios } = await supabase
+      const {  usuarios, error: errUsuarios } = await supabase
         .from("usuarios")
         .select("id, usuario, rol, nombre, estado, grupo_nombre")
+        .eq("rol", "usuario") // 👈 Solo asesores
         .order("nombre", { ascending: true });
 
       if (errUsuarios) throw errUsuarios;
 
       setUsuariosDotacion(usuarios || []);
 
-      // Extraemos grupo_nombre únicos (sin duplicados, sin null/undefined)
+      // Grupos únicos de los asesores
       const gruposSet = new Set(
         (usuarios || [])
           .map(u => u.grupo_nombre)
@@ -231,7 +231,7 @@ export default function FormadorPage({ user, onLogout }) {
       setGruposDisponibles(gruposArray);
     } catch (err) {
       console.error("Error al cargar dotación:", err);
-      mostrarMensaje("error", "Error al cargar usuarios");
+      mostrarMensaje("error", "Error al cargar asesores");
       setUsuariosDotacion([]);
       setGruposDisponibles([]);
     } finally {
@@ -284,7 +284,7 @@ export default function FormadorPage({ user, onLogout }) {
         return;
       }
 
-      const { data: activacion, error } = await supabase
+      const {  activacion, error } = await supabase
         .from("cursos_activados")
         .insert([
           {
@@ -317,7 +317,7 @@ export default function FormadorPage({ user, onLogout }) {
         return;
       }
 
-      const { data: asesores, error: errAsesores } = await supabase
+      const {  asesores, error: errAsesores } = await supabase
         .from("usuarios")
         .select("id")
         .eq("rol", "usuario")
@@ -419,16 +419,14 @@ export default function FormadorPage({ user, onLogout }) {
     setExpandedGroupId(prev => prev === numericGroupId ? null : numericGroupId);
   };
 
-  // === Lógica de filtrado y paginación (con useMemo para optimización) ===
+  // === Lógica de filtrado y paginación (solo asesores) ===
   const { usuariosPaginados, totalPaginas } = useMemo(() => {
     let usuariosFiltrados = [...usuariosDotacion];
 
-    // Aplicar filtro por grupo_nombre
     if (filtroGrupo !== "todos") {
       usuariosFiltrados = usuariosFiltrados.filter(u => u.grupo_nombre === filtroGrupo);
     }
 
-    // Paginación
     const total = usuariosFiltrados.length;
     const desde = (paginaActual - 1) * REGISTROS_POR_PAGINA;
     const hasta = desde + REGISTROS_POR_PAGINA;
@@ -742,7 +740,7 @@ export default function FormadorPage({ user, onLogout }) {
         </div>
       </div>
 
-      {/* === NUEVA SECCIÓN MEJORADA: TABLA DE DOTACIÓN CON FILTRO Y PAGINACIÓN === */}
+      {/* === SECCIÓN ACTUALIZADA: DOTACIÓN DE ASESORES === */}
       <div className="max-w-[95vw] mx-auto px-4 md:px-8 py-6">
         <div className="bg-white/10 backdrop-blur-md rounded-2xl border border-white/20 shadow-xl shadow-purple-500/5 p-6">
           <h2 className="font-semibold text-xl text-white mb-4 flex items-center gap-2">
@@ -751,7 +749,7 @@ export default function FormadorPage({ user, onLogout }) {
                 <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
               </svg>
             </span>
-            Tabla de Dotación (Usuarios)
+            Dotación de Asesores
           </h2>
 
           {/* Filtros */}
@@ -762,7 +760,7 @@ export default function FormadorPage({ user, onLogout }) {
                 value={filtroGrupo}
                 onChange={(e) => {
                   setFiltroGrupo(e.target.value);
-                  setPaginaActual(1); // Reiniciar a página 1 al cambiar filtro
+                  setPaginaActual(1);
                 }}
                 className="bg-white/10 border border-white/20 text-white rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-purple-400 focus:border-transparent"
               >
@@ -775,14 +773,14 @@ export default function FormadorPage({ user, onLogout }) {
             <div className="text-sm text-gray-400 mt-5">
               Mostrando {usuariosPaginados.length} de {usuariosDotacion.filter(u =>
                 filtroGrupo === "todos" ? true : u.grupo_nombre === filtroGrupo
-              ).length} usuarios
+              ).length} asesores
             </div>
           </div>
 
           {loading && !usuariosDotacion.length ? (
             <div className="text-center py-12">
               <div className="animate-spin w-8 h-8 border-2 border-purple-400 border-t-transparent rounded-full mx-auto mb-4"></div>
-              <p className="text-gray-400 text-sm">Cargando dotación...</p>
+              <p className="text-gray-400 text-sm">Cargando asesores...</p>
             </div>
           ) : (
             <>
@@ -792,7 +790,6 @@ export default function FormadorPage({ user, onLogout }) {
                     <tr>
                       <th className="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Nombre</th>
                       <th className="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Usuario</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Rol</th>
                       <th className="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Grupo</th>
                       <th className="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Estado</th>
                       <th className="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Acción</th>
@@ -804,15 +801,6 @@ export default function FormadorPage({ user, onLogout }) {
                         <tr key={u.id} className="hover:bg-white/5 transition-colors">
                           <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-100">{u.nombre}</td>
                           <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-200">{u.usuario}</td>
-                          <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-200">
-                            <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
-                              u.rol === 'Administrador' ? 'bg-purple-500/20 text-purple-300' :
-                              u.rol === 'Formador' ? 'bg-green-500/20 text-green-300' :
-                              'bg-blue-500/20 text-blue-300'
-                            }`}>
-                              {u.rol}
-                            </span>
-                          </td>
                           <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-200">{u.grupo_nombre || '-'}</td>
                           <td className="px-4 py-3 whitespace-nowrap text-sm">
                             <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
@@ -838,8 +826,8 @@ export default function FormadorPage({ user, onLogout }) {
                       ))
                     ) : (
                       <tr>
-                        <td colSpan="6" className="px-4 py-8 text-center text-gray-400">
-                          No se encontraron usuarios con ese filtro.
+                        <td colSpan="5" className="px-4 py-8 text-center text-gray-400">
+                          No se encontraron asesores con ese filtro.
                         </td>
                       </tr>
                     )}
