@@ -3,12 +3,12 @@ import { supabase } from "../services/supabaseClient";
 
 export default function AsesorDashboard({ user, onLogout }) {
   const [cursos, setCursos] = useState([]);
-  const [qrId, setQrId] = useState(null); // 🔑 Aquí guardaremos el qr_id del usuario
+  const [qrId, setQrId] = useState(null);
   const [loading, setLoading] = useState(false);
   const [loadingQr, setLoadingQr] = useState(false);
   const [mensaje, setMensaje] = useState({ tipo: "", texto: "" });
   const [isMenuOpen, setIsMenuOpen] = useState(false);
-  const [showQrModal, setShowQrModal] = useState(false); // 🔲 Control del modal
+  const [showQrModal, setShowQrModal] = useState(false);
 
   const fechaHoy = new Date().toLocaleDateString('es-PE', {
     weekday: 'long',
@@ -131,7 +131,6 @@ export default function AsesorDashboard({ user, onLogout }) {
     setIsMenuOpen(!isMenuOpen);
   };
 
-  // 👁️ Abrir modal del QR
   const abrirQr = () => {
     if (qrId) {
       setShowQrModal(true);
@@ -140,17 +139,16 @@ export default function AsesorDashboard({ user, onLogout }) {
     }
   };
 
-  // ❌ Cerrar modal (al hacer clic fuera o en X)
   const cerrarQrModal = (e) => {
     if (e.target === e.currentTarget) {
       setShowQrModal(false);
     }
   };
 
-  // 🔗 Generar URL de QR usando Google Charts (sin dependencias)
+  // 🔗 Generar QR usando QRServer (funciona en cualquier entorno)
   const generateQrUrl = (text, size = 250) => {
     const encoded = encodeURIComponent(text);
-    return `https://chart.googleapis.com/chart?cht=qr&chs=${size}x${size}&chl=${encoded}&choe=UTF-8`;
+    return `https://api.qrserver.com/v1/create-qr-code/?size=${size}x${size}&data=${encoded}`;
   };
 
   return (
@@ -466,6 +464,11 @@ export default function AsesorDashboard({ user, onLogout }) {
                   src={generateQrUrl(qrId, 220)}
                   alt="Tu código QR"
                   className="rounded-xl bg-white p-2"
+                  onError={(e) => {
+                    e.target.src = "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyNTAiIGhlaWdodD0iMjUwIiB2aWV3Qm94PSIwIDAgMjUwIDI1MCI+PHJlY3Qgd2lkdGg9IjI1MCIgaGVpZ2h0PSIyNTAiIGZpbGw9IiNmZmYiLz48dGV4dCB4PSIxMjUiIHk9IjEzNSIgZm9udC1mYW1pbHk9IkFyaWFsIiBmb250LXNpemU9IjE2IiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBmaWxsPSIjMDAwIj5RUiBmYWlsZWQ8L3RleHQ+PC9zdmc+";
+                    e.target.style.width = "220px";
+                    e.target.style.height = "220px";
+                  }}
                 />
               ) : (
                 <div className="text-gray-500">Cargando...</div>
