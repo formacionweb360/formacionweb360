@@ -3,9 +3,12 @@ import { supabase } from "../services/supabaseClient";
 
 export default function AsesorDashboard({ user, onLogout }) {
   const [cursos, setCursos] = useState([]);
+  const [qrId, setQrId] = useState(null); // 🔑 Aquí guardaremos el qr_id del usuario
   const [loading, setLoading] = useState(false);
+  const [loadingQr, setLoadingQr] = useState(false);
   const [mensaje, setMensaje] = useState({ tipo: "", texto: "" });
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [showQrModal, setShowQrModal] = useState(false); // 🔲 Control del modal
 
   const fechaHoy = new Date().toLocaleDateString('es-PE', {
     weekday: 'long',
@@ -14,7 +17,31 @@ export default function AsesorDashboard({ user, onLogout }) {
     day: 'numeric'
   });
 
+  // Cargar qr_id del usuario al inicio
   useEffect(() => {
+    const cargarQrId = async () => {
+      if (!user?.id) return;
+      setLoadingQr(true);
+      try {
+        const { data, error } = await supabase
+          .from("usuarios")
+          .select("qr_id")
+          .eq("id", user.id)
+          .single();
+
+        if (error) {
+          console.error("❌ Error al cargar qr_id:", error);
+        } else {
+          setQrId(data?.qr_id || null);
+        }
+      } catch (err) {
+        console.error("❌ Excepción al cargar qr_id:", err);
+      } finally {
+        setLoadingQr(false);
+      }
+    };
+
+    cargarQrId();
     cargarCursos();
   }, []);
 
@@ -57,9 +84,6 @@ export default function AsesorDashboard({ user, onLogout }) {
         const cursosData = data || [];
         const cursosValidos = cursosData.filter(c => c.cursos_activados);
 
-        // ============================================================
-        // 🔥 CORREGIDO: Cargar progreso REAL de cada curso
-        // ============================================================
         const cursosConProgreso = await Promise.all(
           cursosValidos.map(async (c) => {
             const cursoId = c.cursos_activados.curso_id;
@@ -107,9 +131,27 @@ export default function AsesorDashboard({ user, onLogout }) {
     setIsMenuOpen(!isMenuOpen);
   };
 
-  // ----------------------------------------
-  //       INTERFAZ COMPLETA SIN CAMBIOS
-  // ----------------------------------------
+  // 👁️ Abrir modal del QR
+  const abrirQr = () => {
+    if (qrId) {
+      setShowQrModal(true);
+    } else {
+      mostrarMensaje("error", "❌ No se encontró tu código QR");
+    }
+  };
+
+  // ❌ Cerrar modal (al hacer clic fuera o en X)
+  const cerrarQrModal = (e) => {
+    if (e.target === e.currentTarget) {
+      setShowQrModal(false);
+    }
+  };
+
+  // 🔗 Generar URL de QR usando Google Charts (sin dependencias)
+  const generateQrUrl = (text, size = 250) => {
+    const encoded = encodeURIComponent(text);
+    return `https://chart.googleapis.com/chart?cht=qr&chs=${size}x${size}&chl=${encoded}&choe=UTF-8`;
+  };
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 overflow-hidden">
@@ -148,6 +190,22 @@ export default function AsesorDashboard({ user, onLogout }) {
                 </p>
                 <p className="text-xs text-gray-400 hidden md:block">Panel del Asesor</p>
               </div>
+
+              {/* Ícono de QR (solo si ya se cargó) */}
+              {!loadingQr && qrId && (
+                <button
+                  onClick={abrirQr}
+                  className="ml-2 p-1.5 text-gray-400 hover:text-purple-400 transition-colors rounded-full hover:bg-white/10"
+                  title="Mostrar tu código QR"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 15h.01M16 8a4 4 0 11-8 0 4 4 0 018 0zm-4 7h.01" />
+                  </svg>
+                </button>
+              )}
+              {loadingQr && (
+                <div className="ml-2 w-4 h-4 border-2 border-purple-400 border-t-transparent rounded-full animate-spin"></div>
+              )}
             </div>
 
             {/* Menú móvil */}
@@ -379,9 +437,46 @@ export default function AsesorDashboard({ user, onLogout }) {
       {/* FOOTER */}
       <div className="fixed bottom-4 left-1/2 transform -translate-x-1/2 text-center">
         <p className="text-xs text-gray-500 bg-black/20 backdrop-blur-md px-4 py-2 rounded-full border border-white/10">
-          © 2025 | Panel del Asesor • Diseñado para ti
+          © 2025 | Panel del Asesor • Para uso exclusivo
         </p>
       </div>
+
+      {/* MODAL DEL CÓDIGO QR */}
+      {showQrModal && (
+        <div
+          className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in duration-300"
+          onClick={cerrarQrModal}
+        >
+          <div
+            className="bg-slate-800 rounded-2xl p-6 max-w-sm w-full shadow-2xl border border-white/20 animate-in zoom-in duration-300"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-white font-semibold text-sm">Tu código QR</h3>
+              <button
+                onClick={() => setShowQrModal(false)}
+                className="text-gray-400 hover:text-white"
+              >
+                ✕
+              </button>
+            </div>
+            <div className="flex justify-center mb-3">
+              {qrId ? (
+                <img
+                  src={generateQrUrl(qrId, 220)}
+                  alt="Tu código QR"
+                  className="rounded-xl bg-white p-2"
+                />
+              ) : (
+                <div className="text-gray-500">Cargando...</div>
+              )}
+            </div>
+            <p className="text-center text-xs text-gray-400 bg-black/30 py-1.5 px-2 rounded-lg">
+              {qrId}
+            </p>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
