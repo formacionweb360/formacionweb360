@@ -208,6 +208,8 @@ export default function CursoViewPage({ user, onLogout }) {
 
   const estaCompletado = progreso?.estado === "Completado";
   const porcentajeProgreso = calcularPorcentaje();
+  const duracionRequerida = curso.cursos.duracion_minutos || 30;
+  const puedeCompletar = tiempoVisto >= duracionRequerida;
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 overflow-hidden">
@@ -254,10 +256,18 @@ export default function CursoViewPage({ user, onLogout }) {
                   </div>
                   <button
                     onClick={marcarCompletado}
-                    disabled={guardando}
-                    className="bg-gradient-to-r from-green-500 to-emerald-600 text-white px-6 py-2 rounded-lg hover:shadow-lg hover:shadow-green-500/20 transition-all font-medium shadow-md disabled:bg-gray-500/30 disabled:cursor-not-allowed"
+                    disabled={guardando || !puedeCompletar}
+                    className={`text-white px-6 py-2 rounded-lg hover:shadow-lg transition-all font-medium shadow-md ${
+                      guardando || !puedeCompletar
+                        ? "bg-gray-500/30 cursor-not-allowed"
+                        : "bg-gradient-to-r from-green-500 to-emerald-600 hover:shadow-green-500/20"
+                    }`}
                   >
-                    {guardando ? "Guardando..." : "✓ Completar"}
+                    {guardando
+                      ? "Guardando..."
+                      : puedeCompletar
+                      ? "✓ Completar"
+                      : `Faltan ${duracionRequerida - tiempoVisto} min`}
                   </button>
                 </div>
               )}
