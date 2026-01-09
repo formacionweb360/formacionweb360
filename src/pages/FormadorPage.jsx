@@ -17,6 +17,9 @@ export default function FormadorPage({ user, onLogout }) {
   const [mensaje, setMensaje] = useState({ tipo: "", texto: "" });
   const [expandedGroupId, setExpandedGroupId] = useState(null);
 
+  // === Estados para filtro por grupo en cursos activos ===
+  const [filtroGrupoActivo, setFiltroGrupoActivo] = useState("todos");
+
   // === Estados para Dotación ===
   const [usuariosDotacion, setUsuariosDotacion] = useState([]);
   const [gruposDisponibles, setGruposDisponibles] = useState([]);
@@ -139,6 +142,7 @@ export default function FormadorPage({ user, onLogout }) {
     }
   };
 
+  // === FUNCIÓN CORREGIDA: CARGA TODOS LOS CURSOS ACTIVOS DEL FORMADOR ===
   const cargarActivos = async () => {
     if (!user?.id) {
       console.error("User no está definido o no tiene ID.");
@@ -146,28 +150,32 @@ export default function FormadorPage({ user, onLogout }) {
       setGruposConCursos([]);
       return;
     }
+
     try {
+      // ✅ ELIMINADO: .eq("fecha", fechaHoy)
       const { data, error } = await supabase
         .from("cursos_activados")
         .select(`
-          id, 
-          curso_id, 
-          campana_id, 
-          grupo_id, 
-          fecha, 
+          id,
+          curso_id,
+          campana_id,
+          grupo_id,
+          fecha,
           activo,
           cursos(titulo, duracion_minutos),
           grupos(nombre),
           campañas(nombre)
         `)
-        .eq("fecha", fechaHoy)
-        .eq("formador_id", user.id);
+        .eq("formador_id", user.id) // Solo los del formador actual
+        .order("fecha", { ascending: false }); // Más recientes primero
+
       if (error) throw error;
       if (!data || data.length === 0) {
         setActivos([]);
         setGruposConCursos([]);
         return;
       }
+
       const activosConConteo = await Promise.all(
         data.map(async (activado) => {
           try {
@@ -182,7 +190,9 @@ export default function FormadorPage({ user, onLogout }) {
           }
         })
       );
+
       setActivos(activosConConteo);
+
       // Agrupar cursos por grupo
       const gruposMap = {};
       activosConConteo.forEach((a) => {
@@ -258,7 +268,7 @@ export default function FormadorPage({ user, onLogout }) {
     }
     setLoading(true);
     try {
-      // Verificar si ya existe
+      // Verificar si ya existe HOY
       const { data: existe } = await supabase
         .from("cursos_activados")
         .select("*")
@@ -385,7 +395,7 @@ export default function FormadorPage({ user, onLogout }) {
     setExpandedGroupId(prev => prev === numericGroupId ? null : numericGroupId);
   };
 
-  // === Lógica de filtrado y paginación ===
+  // === Lógica de filtrado y paginación para Dotación ===
   const { usuariosPaginados, totalPaginas } = useMemo(() => {
     let usuariosFiltrados = [...usuariosDotacion];
     if (filtroGrupo !== "todos") {
@@ -398,6 +408,32 @@ export default function FormadorPage({ user, onLogout }) {
     const totalPag = Math.ceil(total / REGISTROS_POR_PAGINA) || 1;
     return { usuariosPaginados: pagina, totalPaginas: totalPag };
   }, [usuariosDotacion, filtroGrupo, paginaActual, REGISTROS_POR_PAGINA]);
+
+  // === Lógica de filtrado para Cursos Activos ===
+  const gruposUnicosActivos = useMemo(() => {
+    const ids = [...new Set(activos.map(a => a.grupo_id).filter(id => id !== null))];
+    return ids.map(id => {
+      const grupo = activos.find(a => a.grupo_id === id)?.grupos;
+      return { id, nombre: grupo?.nombre || `Grupo ${id}` };
+    });
+  }, [activos]);
+
+  const activosFiltrados = useMemo(() => {
+    if (filtroGrupoActivo === "todos") return activos;
+    return activos.filter(a => a.grupo_id == filtroGrupoActivo);
+  }, [activos, filtroGrupoActivo]);
+
+  const gruposConCursosFiltrados = useMemo(() => {
+    const map = {};
+    activosFiltrados.forEach(a => {
+      const gid = a.grupo_id;
+      if (gid) {
+        if (!map[gid]) map[gid] = { grupo: a.grupos, cursos: [] };
+        map[gid].cursos.push(a);
+      }
+    });
+    return Object.values(map);
+  }, [activosFiltrados]);
 
   // === DATOS DE LA MALLA DE CAPACITACIÓN ===
   const mallaActividades = [
@@ -615,25 +651,38 @@ export default function FormadorPage({ user, onLogout }) {
             </button>
           </div>
 
-          {/* Sección derecha: Grupos asignados hoy */}
+          {/* Sección derecha: Grupos asignados (con filtro por grupo) */}
           <div className="bg-white/10 backdrop-blur-md rounded-2xl border border-white/20 shadow-xl shadow-purple-500/5 p-6">
-            <h2 className="font-semibold text-xl text-white mb-4 flex items-center gap-2">
-              <span className="bg-green-500/20 text-green-300 p-2 rounded-lg border border-green-500/30">
-                <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
-                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                </svg>
-              </span>
-              Grupos asignados hoy
-            </h2>
-            {gruposConCursos.length === 0 ? (
+            <div className="flex flex-wrap items-center gap-2 mb-4">
+              <h2 className="font-semibold text-xl text-white flex items-center gap-2">
+                <span className="bg-green-500/20 text-green-300 p-2 rounded-lg border border-green-500/30">
+                  <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                  </svg>
+                </span>
+                Cursos Activos (Todos los días)
+              </h2>
+              <select
+                value={filtroGrupoActivo}
+                onChange={(e) => setFiltroGrupoActivo(e.target.value)}
+                className="bg-white/10 border border-white/20 text-white rounded-lg px-2 py-1 text-xs focus:ring-2 focus:ring-purple-400 focus:border-transparent"
+              >
+                <option value="todos" className="bg-slate-800">Todos los grupos</option>
+                {gruposUnicosActivos.map(g => (
+                  <option key={g.id} value={g.id} className="bg-slate-800">{g.nombre}</option>
+                ))}
+              </select>
+            </div>
+
+            {gruposConCursosFiltrados.length === 0 ? (
               <div className="text-center py-12">
                 <div className="text-6xl mb-4 text-gray-500">📭</div>
-                <p className="text-gray-400 text-sm mb-1">No hay grupos con cursos activos</p>
+                <p className="text-gray-400 text-sm mb-1">No hay cursos activos</p>
                 <p className="text-xs text-gray-500">Activa un curso para asignarlo a un grupo</p>
               </div>
             ) : (
               <div className="space-y-3 max-h-[calc(100vh-250px)] overflow-y-auto pr-2">
-                {gruposConCursos.map((grupoData) => {
+                {gruposConCursosFiltrados.map((grupoData) => {
                   const grupo = grupoData.grupo;
                   const cursosDelGrupo = grupoData.cursos;
                   const groupId = Number(cursosDelGrupo[0]?.grupo_id);
@@ -652,7 +701,7 @@ export default function FormadorPage({ user, onLogout }) {
                             {cursosDelGrupo.length}
                           </span>
                           <h3 className="font-semibold text-gray-100">
-                            {grupo?.nombre || "Sin nombre"}
+                            {grupo?.nombre || "Sin nombre"} ({cursosDelGrupo[0]?.fecha?.split('T')[0]})
                           </h3>
                         </div>
                         <svg
