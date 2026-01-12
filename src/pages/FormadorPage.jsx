@@ -48,7 +48,6 @@ export default function FormadorPage({ user, onLogout }) {
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
   const animationRef = useRef(null);
-  const [selectedDia, setSelectedDia] = useState(null); // Día seleccionado para QR
 
   const fechaHoy = new Date().toISOString().split("T")[0];
   const fechaHoyFormateada = new Date().toLocaleDateString('es-PE', {
@@ -96,7 +95,7 @@ export default function FormadorPage({ user, onLogout }) {
     if (!campana_id) return;
     setLoading(true);
     try {
-      const {  gruposData, error: gruposError } = await supabase
+      const { data: gruposData, error: gruposError } = await supabase
         .from("grupos")
         .select("*")
         .eq("campana_id", campana_id);
@@ -232,7 +231,7 @@ export default function FormadorPage({ user, onLogout }) {
   const cargarUsuariosDotacion = async () => {
     setLoading(true);
     try {
-      const {  usuarios, error: errUsuarios } = await supabase
+      const { data: usuarios, error: errUsuarios } = await supabase
         .from("usuarios")
         .select(`
           id,
@@ -391,22 +390,10 @@ export default function FormadorPage({ user, onLogout }) {
           inversionAttempts: "dontInvert",
         });
 
-        if (qrCode && qrCode.data) {
-          // Validar formato del QR (opcional, pero recomendado)
-          const isValid = (() => {
-            const parts = qrCode.data.split('_');
-            if (parts.length !== 2) return false;
-            const [prefix, dni] = parts;
-            if (!prefix || !/^[a-zA-Z0-9]+$/.test(prefix)) return false;
-            if (!dni || !/^\d{6,10}$/.test(dni)) return false;
-            return true;
-          })();
-
-          if (isValid) {
-            detenerLecturaQR();
-            procesarAsistenciaQR(qrCode.data);
-            return;
-          }
+        if (qrCode) {
+          detenerLecturaQR();
+          procesarAsistenciaQR(qrCode.data);
+          return;
         }
       }
     }
@@ -421,9 +408,9 @@ export default function FormadorPage({ user, onLogout }) {
       setMensajeQR({ tipo: "error", texto: "⚠️ Primero selecciona un día." });
       return;
     }
+
     setEscaneandoQR(true);
     setMensajeQR(null);
-    setSelectedDia(seleccion.dia); // Guardar el día seleccionado
 
     navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } })
       .then(stream => {
@@ -448,7 +435,6 @@ export default function FormadorPage({ user, onLogout }) {
     if (videoRef.current?.srcObject) {
       videoRef.current.srcObject.getTracks().forEach(track => track.stop());
     }
-    setSelectedDia(null);
   };
 
   const procesarAsistenciaQR = async (qrContent) => {
@@ -459,7 +445,7 @@ export default function FormadorPage({ user, onLogout }) {
       const qr_id = qrContent.trim();
       if (!qr_id) throw new Error("Código QR vacío");
 
-      const {  usuario, error } = await supabase
+      const { data: usuario, error } = await supabase
         .from("usuarios")
         .select("id, nombre, usuario")
         .eq("qr_id", qr_id)
@@ -469,7 +455,7 @@ export default function FormadorPage({ user, onLogout }) {
         throw new Error("Usuario no encontrado con ese QR.");
       }
 
-      const campoDia = `dia_${selectedDia || seleccion.dia}`;
+      const campoDia = `dia_${seleccion.dia}`;
       const { error: updateError } = await supabase
         .from("usuarios")
         .update({ [campoDia]: "ASISTIÓ" })
@@ -483,10 +469,10 @@ export default function FormadorPage({ user, onLogout }) {
 
       setMensajeQR({
         tipo: "success",
-        texto: `✅ ¡Asistencia registrada! ${usuario.nombre} - Día ${selectedDia || seleccion.dia}`
+        texto: `✅ ¡Asistencia registrada! ${usuario.nombre} - Día ${seleccion.dia}`
       });
 
-      mostrarMensaje("success", `✅ Asistencia registrada para ${usuario.nombre} (Día ${selectedDia || seleccion.dia})`);
+      mostrarMensaje("success", `✅ Asistencia registrada para ${usuario.nombre} (Día ${seleccion.dia})`);
 
     } catch (err) {
       console.error("Error al procesar QR:", err);
@@ -507,7 +493,7 @@ export default function FormadorPage({ user, onLogout }) {
     }
     setLoading(true);
     try {
-      const {  existe } = await supabase
+      const { data: existe } = await supabase
         .from("cursos_activados")
         .select("*")
         .eq("fecha", fechaHoy)
@@ -520,7 +506,7 @@ export default function FormadorPage({ user, onLogout }) {
         return;
       }
 
-      const {  activacion, error } = await supabase
+      const { data: activacion, error } = await supabase
         .from("cursos_activados")
         .insert([
           {
@@ -536,14 +522,14 @@ export default function FormadorPage({ user, onLogout }) {
         .single();
       if (error) throw error;
 
-      const {  grupo, error: errGrupo } = await supabase
+      const { data: grupo, error: errGrupo } = await supabase
         .from("grupos")
         .select("nombre")
         .eq("id", grupo_id)
         .single();
       if (errGrupo || !grupo) throw new Error("No se pudo obtener el grupo");
 
-      const {  asesores, error: errAsesores } = await supabase
+      const { data: asesores, error: errAsesores } = await supabase
         .from("usuarios")
         .select("id")
         .eq("rol", "usuario")
@@ -1064,35 +1050,24 @@ export default function FormadorPage({ user, onLogout }) {
           {/* Contenedor del lector QR (solo visible al escanear) */}
           {escaneandoQR && (
             <div className="mt-4 p-4 bg-black/30 rounded-lg relative">
-              {/* Video en vivo */}
-              <video
-                ref={videoRef}
-                autoPlay
-                playsInline
-                muted
-                className="w-full max-w-md mx-auto aspect-video bg-black rounded"
-              ></video>
-
-              {/* Overlay con línea de escaneo */}
-              <div className="absolute inset-0 pointer-events-none">
-                <div className="absolute inset-0 border-2 border-green-500/50 rounded-lg"></div>
-                <div className="absolute top-0 left-0 right-0 h-0.5 bg-gradient-to-r from-transparent via-green-500 to-transparent animate-pulse"></div>
+              <video ref={videoRef} style={{ display: 'none' }} />
+              <canvas ref={canvasRef} style={{ display: 'none' }} />
+              <div className="w-full max-w-md mx-auto aspect-video bg-black rounded flex items-center justify-center">
+                <div className="text-white text-sm">Apunta la cámara al código QR</div>
               </div>
-
-              {/* Mensaje de estado */}
-              {mensajeQR && (
-                <div className={`mt-3 p-2 rounded text-xs ${mensajeQR.tipo === 'success' ? 'bg-green-500/20 text-green-200' : 'bg-red-500/20 text-red-200'}`}>
-                  {mensajeQR.texto}
-                </div>
-              )}
-
-              {/* Botón Cancelar */}
               <button
                 onClick={detenerLecturaQR}
                 className="mt-3 px-3 py-1 bg-gray-600 text-white rounded text-xs"
               >
                 Cancelar
               </button>
+            </div>
+          )}
+
+          {/* Mensaje de estado */}
+          {mensajeQR && (
+            <div className={`mt-3 p-2 rounded text-xs ${mensajeQR.tipo === 'success' ? 'bg-green-500/20 text-green-200' : 'bg-red-500/20 text-red-200'}`}>
+              {mensajeQR.texto}
             </div>
           )}
         </div>
