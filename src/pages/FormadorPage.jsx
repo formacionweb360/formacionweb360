@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "../services/supabaseClient";
 
-// === OPCIONES DE ASISTENCIA ===
 const OPCIONES_ASISTENCIA = [
   "ASISTIÓ",
   "FALTA",
@@ -35,9 +34,13 @@ export default function FormadorPage({ user, onLogout }) {
   const [usuariosDotacion, setUsuariosDotacion] = useState([]);
   const [gruposDisponibles, setGruposDisponibles] = useState([]);
   const [filtroGrupo, setFiltroGrupo] = useState("todos");
-  const [busqueda, setBusqueda] = useState(""); // ✅ Búsqueda por nombre/usuario
+  const [busqueda, setBusqueda] = useState("");
   const [paginaActual, setPaginaActual] = useState(1);
   const REGISTROS_POR_PAGINA = 10;
+
+  // === Estado para edición por fila ===
+  const [filaEditando, setFilaEditando] = useState(null); // id del usuario
+  const [valoresEditables, setValoresEditables] = useState({});
 
   const fechaHoy = new Date().toISOString().split("T")[0];
   const fechaHoyFormateada = new Date().toLocaleDateString('es-PE', {
@@ -218,7 +221,6 @@ export default function FormadorPage({ user, onLogout }) {
     }
   };
 
-  // ✅ MODIFICADO: ahora trae las nuevas columnas
   const cargarUsuariosDotacion = async () => {
     setLoading(true);
     try {
@@ -280,27 +282,63 @@ export default function FormadorPage({ user, onLogout }) {
     }
   };
 
-  // ✅ NUEVA FUNCIÓN: guardar cualquier campo de asistencia o baja
-  const guardarAsistencia = async (userId, campo, valor) => {
+  // === NUEVO: Guardar cambios de una fila completa ===
+  const guardarCambiosFila = async (userId) => {
     setLoading(true);
     try {
-      const valorGuardar = valor === "" ? null : valor;
+      const cambios = {};
+      for (let i = 1; i <= 6; i++) {
+        const key = `dia_${i}`;
+        if (valoresEditables[key] !== undefined) {
+          cambios[key] = valoresEditables[key] === "" ? null : valoresEditables[key];
+        }
+      }
+      if (valoresEditables.fecha_baja !== undefined) {
+        cambios.fecha_baja = valoresEditables.fecha_baja || null;
+      }
+      if (valoresEditables.motivo_baja !== undefined) {
+        cambios.motivo_baja = valoresEditables.motivo_baja || null;
+      }
+
       const { error } = await supabase
         .from("usuarios")
-        .update({ [campo]: valorGuardar })
+        .update(cambios)
         .eq("id", userId);
+
       if (error) throw error;
 
       setUsuariosDotacion(prev =>
-        prev.map(u => u.id === userId ? { ...u, [campo]: valorGuardar } : u)
+        prev.map(u => u.id === userId ? { ...u, ...cambios } : u)
       );
-      mostrarMensaje("success", "✅ Cambio guardado");
+      setFilaEditando(null);
+      setValoresEditables({});
+      mostrarMensaje("success", "✅ Cambios guardados");
     } catch (err) {
-      console.error("Error al guardar:", err);
-      mostrarMensaje("error", "❌ Error al guardar el cambio");
+      console.error("Error al guardar cambios:", err);
+      mostrarMensaje("error", "❌ Error al guardar los cambios");
     } finally {
       setLoading(false);
     }
+  };
+
+  const iniciarEdicion = (usuario) => {
+    const campos = {};
+    for (let i = 1; i <= 6; i++) {
+      campos[`dia_${i}`] = usuario[`dia_${i}`] || "";
+    }
+    campos.fecha_baja = usuario.fecha_baja || "";
+    campos.motivo_baja = usuario.motivo_baja || "";
+    setValoresEditables(campos);
+    setFilaEditando(usuario.id);
+  };
+
+  const cancelarEdicion = () => {
+    setFilaEditando(null);
+    setValoresEditables({});
+  };
+
+  const handleInputChange = (campo, valor) => {
+    setValoresEditables(prev => ({ ...prev, [campo]: valor }));
   };
 
   const activarCurso = async () => {
@@ -437,7 +475,6 @@ export default function FormadorPage({ user, onLogout }) {
     setExpandedGroupId(prev => prev === numericGroupId ? null : numericGroupId);
   };
 
-  // ✅ ACTUALIZADO: incluye búsqueda por nombre/usuario
   const { usuariosPaginados, totalPaginas, totalFiltrados } = useMemo(() => {
     let usuariosFiltrados = [...usuariosDotacion];
 
@@ -703,7 +740,7 @@ export default function FormadorPage({ user, onLogout }) {
             </button>
           </div>
 
-          {/* Sección derecha: Grupos asignados (con filtro por grupo) */}
+          {/* Sección derecha: Grupos asignados */}
           <div className="bg-white/10 backdrop-blur-md rounded-2xl border border-white/20 shadow-xl shadow-purple-500/5 p-6">
             <div className="flex flex-wrap items-center gap-2 mb-4">
               <h2 className="font-semibold text-xl text-white flex items-center gap-2">
@@ -886,14 +923,11 @@ export default function FormadorPage({ user, onLogout }) {
                       <th className="px-2 py-2 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Rol</th>
                       <th className="px-2 py-2 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Grupo</th>
                       <th className="px-2 py-2 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Estado</th>
-                      
-                      {/* Nuevas columnas */}
                       {[1,2,3,4,5,6].map(d => (
                         <th key={d} className="px-2 py-2 text-center text-xs font-medium text-gray-300 uppercase tracking-wider">Día {d}</th>
                       ))}
                       <th className="px-2 py-2 text-center text-xs font-medium text-gray-300 uppercase tracking-wider">Fecha Baja</th>
                       <th className="px-2 py-2 text-center text-xs font-medium text-gray-300 uppercase tracking-wider">Motivo Baja</th>
-                      
                       <th className="px-2 py-2 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Acción</th>
                     </tr>
                   </thead>
@@ -921,59 +955,98 @@ export default function FormadorPage({ user, onLogout }) {
                             </span>
                           </td>
 
-                          {/* Selects para Día 1 a Día 6 */}
+                          {/* Días 1-6 */}
                           {[1,2,3,4,5,6].map(d => {
                             const key = `dia_${d}`;
+                            const esEditable = filaEditando === u.id;
                             return (
                               <td key={key} className="px-2 py-2 whitespace-nowrap text-sm">
-                                <select
-                                  value={u[key] || ""}
-                                  onChange={(e) => guardarAsistencia(u.id, key, e.target.value)}
-                                  className="w-full bg-white/10 border border-white/20 text-white text-xs rounded px-1 py-0.5 focus:ring-1 focus:ring-purple-400 focus:border-transparent"
-                                >
-                                  <option value="">—</option>
-                                  {OPCIONES_ASISTENCIA.map(op => (
-                                    <option key={op} value={op} className="bg-slate-800">{op}</option>
-                                  ))}
-                                </select>
+                                {esEditable ? (
+                                  <select
+                                    value={valoresEditables[key] || ""}
+                                    onChange={(e) => handleInputChange(key, e.target.value)}
+                                    className="w-full bg-white/10 border border-white/20 text-white text-xs rounded px-1 py-0.5 focus:ring-1 focus:ring-purple-400 focus:border-transparent"
+                                  >
+                                    <option value="">—</option>
+                                    {OPCIONES_ASISTENCIA.map(op => (
+                                      <option key={op} value={op} className="bg-slate-800">{op}</option>
+                                    ))}
+                                  </select>
+                                ) : (
+                                  <span className="text-gray-300">{u[key] || "—"}</span>
+                                )}
                               </td>
                             );
                           })}
 
                           {/* Fecha de baja */}
                           <td className="px-2 py-2 whitespace-nowrap text-sm">
-                            <input
-                              type="date"
-                              value={u.fecha_baja || ""}
-                              onChange={(e) => guardarAsistencia(u.id, "fecha_baja", e.target.value || null)}
-                              className="w-full bg-white/10 border border-white/20 text-white text-xs rounded px-1 py-0.5 focus:ring-1 focus:ring-purple-400"
-                            />
+                            {filaEditando === u.id ? (
+                              <input
+                                type="date"
+                                value={valoresEditables.fecha_baja || ""}
+                                onChange={(e) => handleInputChange("fecha_baja", e.target.value)}
+                                className="w-full bg-white/10 border border-white/20 text-white text-xs rounded px-1 py-0.5 focus:ring-1 focus:ring-purple-400"
+                              />
+                            ) : (
+                              <span className="text-gray-300">{u.fecha_baja || "—"}</span>
+                            )}
                           </td>
 
                           {/* Motivo de baja */}
                           <td className="px-2 py-2 whitespace-nowrap text-sm">
-                            <input
-                              type="text"
-                              value={u.motivo_baja || ""}
-                              onChange={(e) => guardarAsistencia(u.id, "motivo_baja", e.target.value)}
-                              placeholder="Motivo..."
-                              className="w-full bg-white/10 border border-white/20 text-white text-xs rounded px-1 py-0.5 focus:ring-1 focus:ring-purple-400 placeholder-gray-500"
-                            />
+                            {filaEditando === u.id ? (
+                              <input
+                                type="text"
+                                value={valoresEditables.motivo_baja || ""}
+                                onChange={(e) => handleInputChange("motivo_baja", e.target.value)}
+                                placeholder="Motivo..."
+                                className="w-full bg-white/10 border border-white/20 text-white text-xs rounded px-1 py-0.5 focus:ring-1 focus:ring-purple-400 placeholder-gray-500"
+                              />
+                            ) : (
+                              <span className="text-gray-300">{u.motivo_baja || "—"}</span>
+                            )}
                           </td>
 
                           {/* Acción */}
                           <td className="px-2 py-2 whitespace-nowrap text-sm">
-                            <button
-                              onClick={() => actualizarEstadoUsuario(u.id, u.estado === 'Activo' ? 'Inactivo' : 'Activo')}
-                              disabled={loading}
-                              className={`px-2 py-1 rounded text-xs font-medium transition-colors ${
-                                u.estado === 'Activo'
-                                  ? 'bg-red-500/20 text-red-300 hover:bg-red-500/30'
-                                  : 'bg-green-500/20 text-green-300 hover:bg-green-500/30'
-                              } disabled:opacity-50`}
-                            >
-                              {u.estado === 'Activo' ? 'Inactivo' : 'Activo'}
-                            </button>
+                            {filaEditando === u.id ? (
+                              <div className="flex gap-1">
+                                <button
+                                  onClick={() => guardarCambiosFila(u.id)}
+                                  disabled={loading}
+                                  className="px-2 py-1 bg-green-500/20 text-green-300 rounded text-xs hover:bg-green-500/30 disabled:opacity-50"
+                                >
+                                  Guardar
+                                </button>
+                                <button
+                                  onClick={cancelarEdicion}
+                                  className="px-2 py-1 bg-gray-500/20 text-gray-300 rounded text-xs hover:bg-gray-500/30"
+                                >
+                                  Cancelar
+                                </button>
+                              </div>
+                            ) : (
+                              <div className="flex gap-1">
+                                <button
+                                  onClick={() => iniciarEdicion(u)}
+                                  className="px-2 py-1 bg-blue-500/20 text-blue-300 rounded text-xs hover:bg-blue-500/30"
+                                >
+                                  Editar
+                                </button>
+                                <button
+                                  onClick={() => actualizarEstadoUsuario(u.id, u.estado === 'Activo' ? 'Inactivo' : 'Activo')}
+                                  disabled={loading}
+                                  className={`px-2 py-1 rounded text-xs font-medium transition-colors ${
+                                    u.estado === 'Activo'
+                                      ? 'bg-red-500/20 text-red-300 hover:bg-red-500/30'
+                                      : 'bg-green-500/20 text-green-300 hover:bg-green-500/30'
+                                  } disabled:opacity-50`}
+                                >
+                                  {u.estado === 'Activo' ? 'Inactivo' : 'Activo'}
+                                </button>
+                              </div>
+                            )}
                           </td>
                         </tr>
                       ))
