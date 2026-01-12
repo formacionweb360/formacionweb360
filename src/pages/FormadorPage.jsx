@@ -24,6 +24,7 @@ export default function FormadorPage({ user, onLogout }) {
   const [usuariosDotacion, setUsuariosDotacion] = useState([]);
   const [gruposDisponibles, setGruposDisponibles] = useState([]);
   const [filtroGrupo, setFiltroGrupo] = useState("todos");
+  const [busqueda, setBusqueda] = useState(""); // ✅ NUEVO: estado de búsqueda
   const [paginaActual, setPaginaActual] = useState(1);
   const REGISTROS_POR_PAGINA = 10;
 
@@ -142,7 +143,6 @@ export default function FormadorPage({ user, onLogout }) {
     }
   };
 
-  // === FUNCIÓN CORREGIDA: CARGA TODOS LOS CURSOS ACTIVOS DEL FORMADOR ===
   const cargarActivos = async () => {
     if (!user?.id) {
       console.error("User no está definido o no tiene ID.");
@@ -150,9 +150,7 @@ export default function FormadorPage({ user, onLogout }) {
       setGruposConCursos([]);
       return;
     }
-
     try {
-      // ✅ ELIMINADO: .eq("fecha", fechaHoy)
       const { data, error } = await supabase
         .from("cursos_activados")
         .select(`
@@ -166,16 +164,14 @@ export default function FormadorPage({ user, onLogout }) {
           grupos(nombre),
           campañas(nombre)
         `)
-        .eq("formador_id", user.id) // Solo los del formador actual
-        .order("fecha", { ascending: false }); // Más recientes primero
-
+        .eq("formador_id", user.id)
+        .order("fecha", { ascending: false });
       if (error) throw error;
       if (!data || data.length === 0) {
         setActivos([]);
         setGruposConCursos([]);
         return;
       }
-
       const activosConConteo = await Promise.all(
         data.map(async (activado) => {
           try {
@@ -190,10 +186,8 @@ export default function FormadorPage({ user, onLogout }) {
           }
         })
       );
-
       setActivos(activosConConteo);
 
-      // Agrupar cursos por grupo
       const gruposMap = {};
       activosConConteo.forEach((a) => {
         const grupoId = a.grupo_id;
@@ -222,7 +216,6 @@ export default function FormadorPage({ user, onLogout }) {
         .order("nombre", { ascending: true });
       if (errUsuarios) throw errUsuarios;
       setUsuariosDotacion(usuarios || []);
-      // Extraer grupos únicos
       const gruposSet = new Set(
         (usuarios || [])
           .map(u => u.grupo_nombre)
@@ -268,7 +261,6 @@ export default function FormadorPage({ user, onLogout }) {
     }
     setLoading(true);
     try {
-      // Verificar si ya existe HOY
       const { data: existe } = await supabase
         .from("cursos_activados")
         .select("*")
@@ -281,7 +273,7 @@ export default function FormadorPage({ user, onLogout }) {
         mostrarMensaje("error", "⚠️ Este curso ya está activado hoy para esa campaña y grupo");
         return;
       }
-      // Insertar curso activado
+
       const { data: activacion, error } = await supabase
         .from("cursos_activados")
         .insert([
@@ -297,14 +289,14 @@ export default function FormadorPage({ user, onLogout }) {
         .select()
         .single();
       if (error) throw error;
-      // Obtener nombre del grupo
+
       const { data: grupo, error: errGrupo } = await supabase
         .from("grupos")
         .select("nombre")
         .eq("id", grupo_id)
         .single();
       if (errGrupo || !grupo) throw new Error("No se pudo obtener el grupo");
-      // Obtener asesores activos del grupo
+
       const { data: asesores, error: errAsesores } = await supabase
         .from("usuarios")
         .select("id")
@@ -312,7 +304,7 @@ export default function FormadorPage({ user, onLogout }) {
         .eq("grupo_nombre", grupo.nombre)
         .eq("estado", "Activo");
       if (errAsesores) throw errAsesores;
-      // Asignar curso a asesores
+
       if (asesores && asesores.length > 0) {
         const { error: errorInsert } = await supabase.from("cursos_asesores").insert(
           asesores.map((u) => ({
@@ -328,7 +320,7 @@ export default function FormadorPage({ user, onLogout }) {
       } else {
         mostrarMensaje("success", "✅ Curso activado (sin asesores activos en el grupo)");
       }
-      // Recargar datos
+
       await cargarActivos();
       await cargarGrupos(seleccion.campana_id);
       setSeleccion({ ...seleccion, curso_id: "" });
@@ -346,18 +338,18 @@ export default function FormadorPage({ user, onLogout }) {
     }
     setLoading(true);
     try {
-      // Eliminar asignaciones primero
       const { error: errorAsesores } = await supabase
         .from("cursos_asesores")
         .delete()
         .eq("curso_activado_id", id);
       if (errorAsesores) throw errorAsesores;
-      // Eliminar curso activado
+
       const { error } = await supabase
         .from("cursos_activados")
         .delete()
         .eq("id", id);
       if (error) throw error;
+
       mostrarMensaje("success", "🗑️ Curso desactivado correctamente");
       await cargarActivos();
     } catch (err) {
@@ -395,19 +387,33 @@ export default function FormadorPage({ user, onLogout }) {
     setExpandedGroupId(prev => prev === numericGroupId ? null : numericGroupId);
   };
 
-  // === Lógica de filtrado y paginación para Dotación ===
-  const { usuariosPaginados, totalPaginas } = useMemo(() => {
+  // === Lógica de filtrado y paginación para Dotación (con búsqueda) ===
+  const { usuariosPaginados, totalPaginas, totalFiltrados } = useMemo(() => {
     let usuariosFiltrados = [...usuariosDotacion];
+
+    // Filtro por grupo
     if (filtroGrupo !== "todos") {
       usuariosFiltrados = usuariosFiltrados.filter(u => u.grupo_nombre === filtroGrupo);
     }
+
+    // Filtro por búsqueda (nombre o usuario)
+    if (busqueda.trim() !== "") {
+      const termino = busqueda.toLowerCase().trim();
+      usuariosFiltrados = usuariosFiltrados.filter(
+        u =>
+          (u.nombre && u.nombre.toLowerCase().includes(termino)) ||
+          (u.usuario && u.usuario.toLowerCase().includes(termino))
+      );
+    }
+
     const total = usuariosFiltrados.length;
     const desde = (paginaActual - 1) * REGISTROS_POR_PAGINA;
     const hasta = desde + REGISTROS_POR_PAGINA;
     const pagina = usuariosFiltrados.slice(desde, hasta);
     const totalPag = Math.ceil(total / REGISTROS_POR_PAGINA) || 1;
-    return { usuariosPaginados: pagina, totalPaginas: totalPag };
-  }, [usuariosDotacion, filtroGrupo, paginaActual, REGISTROS_POR_PAGINA]);
+
+    return { usuariosPaginados: pagina, totalPaginas: totalPag, totalFiltrados: total };
+  }, [usuariosDotacion, filtroGrupo, busqueda, paginaActual, REGISTROS_POR_PAGINA]);
 
   // === Lógica de filtrado para Cursos Activos ===
   const gruposUnicosActivos = useMemo(() => {
@@ -673,7 +679,6 @@ export default function FormadorPage({ user, onLogout }) {
                 ))}
               </select>
             </div>
-
             {gruposConCursosFiltrados.length === 0 ? (
               <div className="text-center py-12">
                 <div className="text-6xl mb-4 text-gray-500">📭</div>
@@ -802,10 +807,21 @@ export default function FormadorPage({ user, onLogout }) {
                 ))}
               </select>
             </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-300 mb-1">Buscar por nombre o usuario</label>
+              <input
+                type="text"
+                value={busqueda}
+                onChange={(e) => {
+                  setBusqueda(e.target.value);
+                  setPaginaActual(1);
+                }}
+                placeholder="Ej: Juan Pérez o jperz123"
+                className="w-full bg-white/10 border border-white/20 text-white rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-purple-400 focus:border-transparent placeholder-gray-400"
+              />
+            </div>
             <div className="text-sm text-gray-400 mt-5">
-              Mostrando {usuariosPaginados.length} de {usuariosDotacion.filter(u =>
-                filtroGrupo === "todos" ? true : u.grupo_nombre === filtroGrupo
-              ).length} usuarios
+              Mostrando {usuariosPaginados.length} de {totalFiltrados} usuarios
             </div>
           </div>
           {loading && !usuariosDotacion.length ? (
