@@ -1,17 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "../services/supabaseClient";
 
-// === OPCIONES DE ASISTENCIA ===
-const OPCIONES_ASISTENCIA = [
-  "ASISTIÓ",
-  "FALTA",
-  "DESERTÓ",
-  "TARDANZA",
-  "NO SE PRESENTÓ",
-  "RETIRADO",
-  "NO APROBO ROLE PLAY"
-];
-
 export default function FormadorPage({ user, onLogout }) {
   const [campañas, setCampañas] = useState([]);
   const [grupos, setGrupos] = useState([]);
@@ -35,7 +24,7 @@ export default function FormadorPage({ user, onLogout }) {
   const [usuariosDotacion, setUsuariosDotacion] = useState([]);
   const [gruposDisponibles, setGruposDisponibles] = useState([]);
   const [filtroGrupo, setFiltroGrupo] = useState("todos");
-  const [busqueda, setBusqueda] = useState(""); // ✅ Búsqueda por nombre/usuario
+  const [busqueda, setBusqueda] = useState(""); // ✅ NUEVO: estado de búsqueda
   const [paginaActual, setPaginaActual] = useState(1);
   const REGISTROS_POR_PAGINA = 10;
 
@@ -218,28 +207,12 @@ export default function FormadorPage({ user, onLogout }) {
     }
   };
 
-  // ✅ MODIFICADO: ahora trae las nuevas columnas
   const cargarUsuariosDotacion = async () => {
     setLoading(true);
     try {
       const { data: usuarios, error: errUsuarios } = await supabase
         .from("usuarios")
-        .select(`
-          id,
-          usuario,
-          rol,
-          nombre,
-          estado,
-          grupo_nombre,
-          dia_1,
-          dia_2,
-          dia_3,
-          dia_4,
-          dia_5,
-          dia_6,
-          fecha_baja,
-          motivo_baja
-        `)
+        .select("id, usuario, rol, nombre, estado, grupo_nombre")
         .order("nombre", { ascending: true });
       if (errUsuarios) throw errUsuarios;
       setUsuariosDotacion(usuarios || []);
@@ -275,29 +248,6 @@ export default function FormadorPage({ user, onLogout }) {
     } catch (err) {
       console.error("Error al actualizar estado:", err);
       mostrarMensaje("error", "Error al actualizar el estado");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // ✅ NUEVA FUNCIÓN: guardar cualquier campo de asistencia o baja
-  const guardarAsistencia = async (userId, campo, valor) => {
-    setLoading(true);
-    try {
-      const valorGuardar = valor === "" ? null : valor;
-      const { error } = await supabase
-        .from("usuarios")
-        .update({ [campo]: valorGuardar })
-        .eq("id", userId);
-      if (error) throw error;
-
-      setUsuariosDotacion(prev =>
-        prev.map(u => u.id === userId ? { ...u, [campo]: valorGuardar } : u)
-      );
-      mostrarMensaje("success", "✅ Cambio guardado");
-    } catch (err) {
-      console.error("Error al guardar:", err);
-      mostrarMensaje("error", "❌ Error al guardar el cambio");
     } finally {
       setLoading(false);
     }
@@ -437,14 +387,16 @@ export default function FormadorPage({ user, onLogout }) {
     setExpandedGroupId(prev => prev === numericGroupId ? null : numericGroupId);
   };
 
-  // ✅ ACTUALIZADO: incluye búsqueda por nombre/usuario
+  // === Lógica de filtrado y paginación para Dotación (con búsqueda) ===
   const { usuariosPaginados, totalPaginas, totalFiltrados } = useMemo(() => {
     let usuariosFiltrados = [...usuariosDotacion];
 
+    // Filtro por grupo
     if (filtroGrupo !== "todos") {
       usuariosFiltrados = usuariosFiltrados.filter(u => u.grupo_nombre === filtroGrupo);
     }
 
+    // Filtro por búsqueda (nombre o usuario)
     if (busqueda.trim() !== "") {
       const termino = busqueda.toLowerCase().trim();
       usuariosFiltrados = usuariosFiltrados.filter(
@@ -463,6 +415,7 @@ export default function FormadorPage({ user, onLogout }) {
     return { usuariosPaginados: pagina, totalPaginas: totalPag, totalFiltrados: total };
   }, [usuariosDotacion, filtroGrupo, busqueda, paginaActual, REGISTROS_POR_PAGINA]);
 
+  // === Lógica de filtrado para Cursos Activos ===
   const gruposUnicosActivos = useMemo(() => {
     const ids = [...new Set(activos.map(a => a.grupo_id).filter(id => id !== null))];
     return ids.map(id => {
@@ -488,6 +441,7 @@ export default function FormadorPage({ user, onLogout }) {
     return Object.values(map);
   }, [activosFiltrados]);
 
+  // === DATOS DE LA MALLA DE CAPACITACIÓN ===
   const mallaActividades = [
     ["Espera Grupal", "00:30:00", "REPASO DÍA 1", "00:30:00", "REPASO DÍA 3", "00:30:00", "NEXUM Y CRM", "00:30:00"],
     ["Charla Selección", "01:30:00", "DINAMICA 2", "00:30:00", "DINAMICA 3", "01:00:00", "TALLER DE TIPIFICACIONES", "01:00:00"],
@@ -514,7 +468,6 @@ export default function FormadorPage({ user, onLogout }) {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 overflow-hidden">
-      {/* ... (estilos y header igual que antes) ... */}
       <style>{`
         .bg-particles::before {
           content: "";
@@ -576,16 +529,257 @@ export default function FormadorPage({ user, onLogout }) {
         </div>
       )}
 
-      {/* Contenido principal (izquierda y derecha) — SIN CAMBIOS */}
+      {/* Contenido principal */}
       <div className="max-w-[95vw] mx-auto px-4 md:px-8 py-6">
         <div className="grid md:grid-cols-2 gap-6">
-          {/* ... (sección izquierda: Activar Curso) ... */}
-          {/* ... (sección derecha: Cursos Activos) ... */}
-          {/* (mantén exactamente como está, no se modifican) */}
+          {/* Sección izquierda: Activar Curso */}
+          <div className="bg-white/10 backdrop-blur-md rounded-2xl border border-white/20 shadow-xl shadow-purple-500/5 p-6 space-y-4">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="font-semibold text-xl text-white flex items-center gap-2">
+                <span className="bg-indigo-500/20 text-indigo-300 p-2 rounded-lg border border-indigo-500/30">
+                  <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                  </svg>
+                </span>
+                Activar Curso
+              </h2>
+              {loading && (
+                <div className="w-5 h-5 border-2 border-purple-400 border-t-transparent rounded-full animate-spin"></div>
+              )}
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-300 mb-2">
+                Campaña
+              </label>
+              <select
+                className="w-full bg-white/10 border border-white/20 rounded-lg p-3 focus:ring-2 focus:ring-purple-400 focus:border-transparent transition text-sm text-white placeholder-gray-400"
+                value={seleccion.campana_id}
+                onChange={(e) => handleCampanaChange(e.target.value)}
+                disabled={loading}
+              >
+                <option value="" className="bg-slate-800">Selecciona una campaña</option>
+                {campañas.map((c) => (
+                  <option key={c.id} value={c.id} className="bg-slate-800">
+                    {c.nombre}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-300 mb-2">
+                Día de capacitación
+              </label>
+              <select
+                className="w-full bg-white/10 border border-white/20 rounded-lg p-3 focus:ring-2 focus:ring-purple-400 focus:border-transparent transition text-sm text-white placeholder-gray-400 disabled:bg-gray-700"
+                value={seleccion.dia}
+                onChange={(e) => handleDiaChange(e.target.value)}
+                disabled={!seleccion.campana_id || loading}
+              >
+                <option value="" className="bg-slate-800">Selecciona un día</option>
+                <option value="1" className="bg-slate-800">Día 1</option>
+                <option value="2" className="bg-slate-800">Día 2</option>
+                <option value="3" className="bg-slate-800">Día 3</option>
+                <option value="4" className="bg-slate-800">Día 4</option>
+                <option value="5" className="bg-slate-800">Día 5</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-300 mb-2">
+                Grupo
+              </label>
+              <select
+                className="w-full bg-white/10 border border-white/20 rounded-lg p-3 focus:ring-2 focus:ring-purple-400 focus:border-transparent transition text-sm text-white placeholder-gray-400 disabled:bg-gray-700"
+                value={seleccion.grupo_id}
+                onChange={(e) => handleGrupoChange(e.target.value)}
+                disabled={!seleccion.dia || loading}
+              >
+                <option value="" className="bg-slate-800">Selecciona un grupo</option>
+                {grupos.map((g) => (
+                  <option key={g.id} value={g.id} className="bg-slate-800">
+                    {g.nombre} ({g.activos || 0} asesores activos)
+                  </option>
+                ))}
+              </select>
+            </div>
+            {cursos.length > 0 && (
+              <div className="bg-gradient-to-r from-purple-500/10 to-pink-500/10 backdrop-blur-sm rounded-xl border border-purple-500/20 p-4">
+                <h3 className="font-semibold text-white mb-3 flex items-center gap-2">
+                  <span className="bg-indigo-500/20 text-indigo-300 p-1 rounded border border-indigo-500/30">
+                    <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-6-3a2 2 0 11-4 0 2 2 0 014 0zm-2 4a5 5 0 00-4.546 2.916A5.986 5.986 0 005 10a6 6 0 0012 0c0-.35-.036-.687-.101-1.016A5 5 0 0010 11z" clipRule="evenodd" />
+                    </svg>
+                  </span>
+                  Malla de cursos (Día {seleccion.dia})
+                  <span className="text-sm font-normal text-gray-400">({cursos.length} cursos)</span>
+                </h3>
+                <div className="space-y-2 max-h-40 overflow-y-auto">
+                  {cursos.map((c, index) => (
+                    <div
+                      key={c.id}
+                      className="flex items-center justify-between bg-white/10 p-2 rounded-md shadow-sm text-sm"
+                    >
+                      <div className="flex items-center gap-2">
+                        <span className="flex items-center justify-center w-6 h-6 bg-indigo-500/20 text-indigo-300 rounded-full text-[0.6rem] font-bold border border-indigo-500/30">
+                          {index + 1}
+                        </span>
+                        <span className="font-medium text-gray-200 truncate max-w-[120px] md:max-w-[180px]">{c.titulo}</span>
+                      </div>
+                      <span className="text-xs text-gray-400">{c.duracion_minutos} min</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+            <div>
+              <label className="block text-sm font-medium text-gray-300 mb-2">
+                Curso a activar
+              </label>
+              <select
+                className="w-full bg-white/10 border border-white/20 rounded-lg p-3 focus:ring-2 focus:ring-purple-400 focus:border-transparent transition text-sm text-white placeholder-gray-400 disabled:bg-gray-700"
+                value={seleccion.curso_id}
+                onChange={(e) => setSeleccion({ ...seleccion, curso_id: e.target.value })}
+                disabled={!cursos.length || loading}
+              >
+                <option value="" className="bg-slate-800">Selecciona el curso a activar</option>
+                {cursos.map((c) => (
+                  <option key={c.id} value={c.id} className="bg-slate-800">
+                    {c.titulo} - {c.duracion_minutos} min
+                  </option>
+                ))}
+              </select>
+            </div>
+            <button
+              onClick={activarCurso}
+              disabled={!seleccion.curso_id || loading}
+              className="w-full bg-gradient-to-r from-indigo-500 to-purple-600 text-white py-3 px-4 rounded-lg hover:shadow-lg hover:shadow-indigo-500/20 transition-all font-medium shadow-md disabled:opacity-50 disabled:cursor-not-allowed text-sm"
+            >
+              {loading ? "Activando..." : "✨ Activar curso de hoy"}
+            </button>
+          </div>
+
+          {/* Sección derecha: Grupos asignados (con filtro por grupo) */}
+          <div className="bg-white/10 backdrop-blur-md rounded-2xl border border-white/20 shadow-xl shadow-purple-500/5 p-6">
+            <div className="flex flex-wrap items-center gap-2 mb-4">
+              <h2 className="font-semibold text-xl text-white flex items-center gap-2">
+                <span className="bg-green-500/20 text-green-300 p-2 rounded-lg border border-green-500/30">
+                  <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                  </svg>
+                </span>
+                Cursos Activos (Todos los días)
+              </h2>
+              <select
+                value={filtroGrupoActivo}
+                onChange={(e) => setFiltroGrupoActivo(e.target.value)}
+                className="bg-white/10 border border-white/20 text-white rounded-lg px-2 py-1 text-xs focus:ring-2 focus:ring-purple-400 focus:border-transparent"
+              >
+                <option value="todos" className="bg-slate-800">Todos los grupos</option>
+                {gruposUnicosActivos.map(g => (
+                  <option key={g.id} value={g.id} className="bg-slate-800">{g.nombre}</option>
+                ))}
+              </select>
+            </div>
+            {gruposConCursosFiltrados.length === 0 ? (
+              <div className="text-center py-12">
+                <div className="text-6xl mb-4 text-gray-500">📭</div>
+                <p className="text-gray-400 text-sm mb-1">No hay cursos activos</p>
+                <p className="text-xs text-gray-500">Activa un curso para asignarlo a un grupo</p>
+              </div>
+            ) : (
+              <div className="space-y-3 max-h-[calc(100vh-250px)] overflow-y-auto pr-2">
+                {gruposConCursosFiltrados.map((grupoData) => {
+                  const grupo = grupoData.grupo;
+                  const cursosDelGrupo = grupoData.cursos;
+                  const groupId = Number(cursosDelGrupo[0]?.grupo_id);
+                  const isExpanded = expandedGroupId === groupId;
+                  return (
+                    <div
+                      key={groupId}
+                      className="border border-white/20 rounded-lg overflow-hidden bg-white/5"
+                    >
+                      <div
+                        onClick={() => toggleGroup(groupId)}
+                        className="flex items-center justify-between p-4 cursor-pointer hover:bg-white/10 transition-colors"
+                      >
+                        <div className="flex items-center gap-2">
+                          <span className="bg-indigo-500/20 text-indigo-300 p-1.5 rounded-full text-xs font-bold border border-indigo-500/30">
+                            {cursosDelGrupo.length}
+                          </span>
+                          <h3 className="font-semibold text-gray-100">
+                            {grupo?.nombre || "Sin nombre"} ({cursosDelGrupo[0]?.fecha?.split('T')[0]})
+                          </h3>
+                        </div>
+                        <svg
+                          className={`w-5 h-5 text-gray-400 transition-transform duration-300 ${
+                            isExpanded ? "rotate-180" : ""
+                          }`}
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
+                        >
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                        </svg>
+                      </div>
+                      {isExpanded && (
+                        <div className="border-t border-white/20 p-4 space-y-3">
+                          {cursosDelGrupo.map((a) => (
+                            <div
+                              key={a.id}
+                              className="border border-white/20 rounded-lg p-3 hover:shadow-md transition-all bg-white/10"
+                            >
+                              <div className="flex justify-between items-start">
+                                <div className="flex-1 min-w-0">
+                                  <h3 className="font-semibold text-gray-100 mb-1">
+                                    {a.cursos?.titulo || "Curso sin título"}
+                                  </h3>
+                                  <div className="flex flex-col gap-0.5 text-xs text-gray-400">
+                                    <div className="flex items-center gap-1.5">
+                                      <svg className="w-3.5 h-3.5 text-indigo-400 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                                        <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-6-3a2 2 0 11-4 0 2 2 0 014 0zm-2 4a5 5 0 00-4.546 2.916A5.986 5.986 0 005 10a6 6 0 0012 0c0-.35-.036-.687-.101-1.016A5 5 0 0010 11z" clipRule="evenodd" />
+                                      </svg>
+                                      <span className="truncate">{a.cursos?.duracion_minutos || 0} min</span>
+                                    </div>
+                                    <div className="flex items-center gap-1.5">
+                                      <svg className="w-3.5 h-3.5 text-purple-400 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                                        <path d="M5.5 16a3.5 3.5 0 01-.369-6.98 4 4 0 117.753-1.977A4.5 4.5 0 1113.5 16h-8z" />
+                                      </svg>
+                                      <span className="truncate">{a.campañas?.nombre || "Sin campaña"}</span>
+                                    </div>
+                                    <div className="flex items-center gap-1.5">
+                                      <svg className="w-3.5 h-3.5 text-green-400 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                                        <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                                      </svg>
+                                      <span className="font-medium text-green-400">
+                                        {a.asesores_count || 0} asesores asignados
+                                      </span>
+                                    </div>
+                                  </div>
+                                </div>
+                                <button
+                                  onClick={() => desactivarCurso(a.id)}
+                                  disabled={loading}
+                                  className="text-red-400 hover:text-red-300 hover:bg-red-500/10 p-1.5 rounded-lg transition-colors disabled:opacity-50 flex-shrink-0 ml-2"
+                                  title="Desactivar curso"
+                                >
+                                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                  </svg>
+                                </button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
-      {/* SECCIÓN: TABLA DE DOTACIÓN — ✅ MODIFICADA */}
+      {/* SECCIÓN: TABLA DE DOTACIÓN */}
       <div className="max-w-[95vw] mx-auto px-4 md:px-8 py-6">
         <div className="bg-white/10 backdrop-blur-md rounded-2xl border border-white/20 shadow-xl shadow-purple-500/5 p-6">
           <h2 className="font-semibold text-xl text-white mb-4 flex items-center gap-2">
@@ -641,31 +835,21 @@ export default function FormadorPage({ user, onLogout }) {
                 <table className="min-w-full divide-y divide-white/10">
                   <thead>
                     <tr>
-                      <th className="px-2 py-2 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Nombre</th>
-                      <th className="px-2 py-2 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Usuario</th>
-                      <th className="px-2 py-2 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Rol</th>
-                      <th className="px-2 py-2 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Grupo</th>
-                      <th className="px-2 py-2 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Estado</th>
-                      
-                      {/* ✅ Nuevas columnas: Día 1 a Día 6 */}
-                      {[1,2,3,4,5,6].map(d => (
-                        <th key={d} className="px-2 py-2 text-center text-xs font-medium text-gray-300 uppercase tracking-wider">Día {d}</th>
-                      ))}
-                      
-                      {/* ✅ Columnas de baja */}
-                      <th className="px-2 py-2 text-center text-xs font-medium text-gray-300 uppercase tracking-wider">Fecha Baja</th>
-                      <th className="px-2 py-2 text-center text-xs font-medium text-gray-300 uppercase tracking-wider">Motivo Baja</th>
-                      
-                      <th className="px-2 py-2 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Acción</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Nombre</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Usuario</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Rol</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Grupo</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Estado</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Acción</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-white/5">
                     {usuariosPaginados.length > 0 ? (
                       usuariosPaginados.map((u) => (
                         <tr key={u.id} className="hover:bg-white/5 transition-colors">
-                          <td className="px-2 py-2 whitespace-nowrap text-sm text-gray-100">{u.nombre}</td>
-                          <td className="px-2 py-2 whitespace-nowrap text-sm text-gray-200">{u.usuario}</td>
-                          <td className="px-2 py-2 whitespace-nowrap text-sm">
+                          <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-100">{u.nombre}</td>
+                          <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-200">{u.usuario}</td>
+                          <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-200">
                             <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
                               u.rol === 'Administrador' ? 'bg-purple-500/20 text-purple-300' :
                               u.rol === 'Formador' ? 'bg-green-500/20 text-green-300' :
@@ -674,74 +858,32 @@ export default function FormadorPage({ user, onLogout }) {
                               {u.rol}
                             </span>
                           </td>
-                          <td className="px-2 py-2 whitespace-nowrap text-sm text-gray-200">{u.grupo_nombre || '-'}</td>
-                          <td className="px-2 py-2 whitespace-nowrap text-sm">
+                          <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-200">{u.grupo_nombre || '-'}</td>
+                          <td className="px-4 py-3 whitespace-nowrap text-sm">
                             <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
                               u.estado === 'Activo' ? 'bg-green-500/20 text-green-300' : 'bg-red-500/20 text-red-300'
                             }`}>
                               {u.estado}
                             </span>
                           </td>
-
-                          {/* ✅ Selects para Día 1 a Día 6 */}
-                          {[1,2,3,4,5,6].map(d => {
-                            const key = `dia_${d}`;
-                            return (
-                              <td key={key} className="px-2 py-2 whitespace-nowrap text-sm">
-                                <select
-                                  value={u[key] || ""}
-                                  onChange={(e) => guardarAsistencia(u.id, key, e.target.value)}
-                                  className="w-full bg-white/10 border border-white/20 text-white text-xs rounded px-1 py-0.5 focus:ring-1 focus:ring-purple-400 focus:border-transparent"
-                                >
-                                  <option value="">—</option>
-                                  {OPCIONES_ASISTENCIA.map(op => (
-                                    <option key={op} value={op} className="bg-slate-800">{op}</option>
-                                  ))}
-                                </select>
-                              </td>
-                            );
-                          })}
-
-                          {/* ✅ Fecha de baja */}
-                          <td className="px-2 py-2 whitespace-nowrap text-sm">
-                            <input
-                              type="date"
-                              value={u.fecha_baja || ""}
-                              onChange={(e) => guardarAsistencia(u.id, "fecha_baja", e.target.value || null)}
-                              className="w-full bg-white/10 border border-white/20 text-white text-xs rounded px-1 py-0.5 focus:ring-1 focus:ring-purple-400"
-                            />
-                          </td>
-
-                          {/* ✅ Motivo de baja */}
-                          <td className="px-2 py-2 whitespace-nowrap text-sm">
-                            <input
-                              type="text"
-                              value={u.motivo_baja || ""}
-                              onChange={(e) => guardarAsistencia(u.id, "motivo_baja", e.target.value)}
-                              placeholder="Motivo..."
-                              className="w-full bg-white/10 border border-white/20 text-white text-xs rounded px-1 py-0.5 focus:ring-1 focus:ring-purple-400 placeholder-gray-500"
-                            />
-                          </td>
-
-                          {/* Acción (mantener) */}
-                          <td className="px-2 py-2 whitespace-nowrap text-sm">
+                          <td className="px-4 py-3 whitespace-nowrap text-sm">
                             <button
                               onClick={() => actualizarEstadoUsuario(u.id, u.estado === 'Activo' ? 'Inactivo' : 'Activo')}
                               disabled={loading}
-                              className={`px-2 py-1 rounded text-xs font-medium transition-colors ${
+                              className={`px-3 py-1 rounded-md text-xs font-medium transition-colors ${
                                 u.estado === 'Activo'
                                   ? 'bg-red-500/20 text-red-300 hover:bg-red-500/30'
                                   : 'bg-green-500/20 text-green-300 hover:bg-green-500/30'
                               } disabled:opacity-50`}
                             >
-                              {u.estado === 'Activo' ? 'Inactivo' : 'Activo'}
+                              {u.estado === 'Activo' ? 'Marcar Inactivo' : 'Marcar Activo'}
                             </button>
                           </td>
                         </tr>
                       ))
                     ) : (
                       <tr>
-                        <td colSpan="13" className="px-4 py-8 text-center text-gray-400">
+                        <td colSpan="6" className="px-4 py-8 text-center text-gray-400">
                           No se encontraron usuarios con ese filtro.
                         </td>
                       </tr>
@@ -773,7 +915,7 @@ export default function FormadorPage({ user, onLogout }) {
         </div>
       </div>
 
-      {/* SECCIÓN: MALLA DE CAPACITACIÓN — SIN CAMBIOS */}
+      {/* SECCIÓN: MALLA DE CAPACITACIÓN */}
       <div className="max-w-[95vw] mx-auto px-4 md:px-8 py-6">
         <div className="bg-white/10 backdrop-blur-md rounded-2xl border border-white/20 shadow-xl shadow-purple-500/5 p-6">
           <h2 className="font-semibold text-xl text-white mb-4 flex items-center gap-2">
