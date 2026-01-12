@@ -39,7 +39,7 @@ export default function FormadorPage({ user, onLogout }) {
   const REGISTROS_POR_PAGINA = 10;
 
   // === Estado para edición por fila ===
-  const [filaEditando, setFilaEditando] = useState(null);
+  const [filaEditando, setFilaEditando] = useState(null); // id del usuario
   const [valoresEditables, setValoresEditables] = useState({});
 
   const fechaHoy = new Date().toISOString().split("T")[0];
@@ -88,7 +88,7 @@ export default function FormadorPage({ user, onLogout }) {
     if (!campana_id) return;
     setLoading(true);
     try {
-      const {  gruposData, error: gruposError } = await supabase
+      const { data: gruposData, error: gruposError } = await supabase
         .from("grupos")
         .select("*")
         .eq("campana_id", campana_id);
@@ -224,7 +224,7 @@ export default function FormadorPage({ user, onLogout }) {
   const cargarUsuariosDotacion = async () => {
     setLoading(true);
     try {
-      const {  usuarios, error: errUsuarios } = await supabase
+      const { data: usuarios, error: errUsuarios } = await supabase
         .from("usuarios")
         .select(`
           id,
@@ -282,6 +282,7 @@ export default function FormadorPage({ user, onLogout }) {
     }
   };
 
+  // === NUEVO: Guardar cambios de una fila completa ===
   const guardarCambiosFila = async (userId) => {
     setLoading(true);
     try {
@@ -340,29 +341,6 @@ export default function FormadorPage({ user, onLogout }) {
     setValoresEditables(prev => ({ ...prev, [campo]: valor }));
   };
 
-  // === Función para renderizar badge de asistencia con ícono y color ===
-  const renderBadgeAsistencia = (estado) => {
-    if (!estado) return <span className="text-gray-500 text-xs">—</span>;
-
-    const config = {
-      "ASISTIÓ": { icon: "✅", color: "bg-green-500/20 text-green-100" },
-      "FALTA": { icon: "❌", color: "bg-red-500/20 text-red-100" },
-      "TARDANZA": { icon: "⏱️", color: "bg-yellow-500/20 text-yellow-900" },
-      "DESERTÓ": { icon: "🚪", color: "bg-purple-500/20 text-purple-100" },
-      "NO SE PRESENTÓ": { icon: "🕳️", color: "bg-gray-700 text-gray-300" },
-      "RETIRADO": { icon: "🚶‍♂️", color: "bg-orange-500/20 text-orange-900" },
-      "NO APROBO ROLE PLAY": { icon: "📉", color: "bg-blue-500/20 text-blue-100" },
-    };
-
-    const { icon, color } = config[estado] || { icon: "?", color: "bg-gray-500/20 text-gray-300" };
-
-    return (
-      <span className={`inline-flex items-center gap-0.5 px-1 py-0.5 rounded-full text-[10px] font-medium ${color}`}>
-        {icon}
-      </span>
-    );
-  };
-
   const activarCurso = async () => {
     const { campana_id, dia, grupo_id, curso_id } = seleccion;
     if (!campana_id || !dia || !grupo_id || !curso_id) {
@@ -371,7 +349,7 @@ export default function FormadorPage({ user, onLogout }) {
     }
     setLoading(true);
     try {
-      const {  existe } = await supabase
+      const { data: existe } = await supabase
         .from("cursos_activados")
         .select("*")
         .eq("fecha", fechaHoy)
@@ -384,7 +362,7 @@ export default function FormadorPage({ user, onLogout }) {
         return;
       }
 
-      const {  activacion, error } = await supabase
+      const { data: activacion, error } = await supabase
         .from("cursos_activados")
         .insert([
           {
@@ -400,14 +378,14 @@ export default function FormadorPage({ user, onLogout }) {
         .single();
       if (error) throw error;
 
-      const {  grupo, error: errGrupo } = await supabase
+      const { data: grupo, error: errGrupo } = await supabase
         .from("grupos")
         .select("nombre")
         .eq("id", grupo_id)
         .single();
       if (errGrupo || !grupo) throw new Error("No se pudo obtener el grupo");
 
-      const {  asesores, error: errAsesores } = await supabase
+      const { data: asesores, error: errAsesores } = await supabase
         .from("usuarios")
         .select("id")
         .eq("rol", "usuario")
@@ -897,14 +875,14 @@ export default function FormadorPage({ user, onLogout }) {
           </h2>
           <div className="flex flex-wrap items-center gap-4 mb-6">
             <div>
-              <label className="block text-xs font-medium text-gray-300 mb-1">Filtrar por Grupo</label>
+              <label className="block text-sm font-medium text-gray-300 mb-1">Filtrar por Grupo</label>
               <select
                 value={filtroGrupo}
                 onChange={(e) => {
                   setFiltroGrupo(e.target.value);
                   setPaginaActual(1);
                 }}
-                className="bg-white/10 border border-white/20 text-white rounded-lg px-2 py-1.5 text-xs focus:ring-2 focus:ring-purple-400 focus:border-transparent"
+                className="bg-white/10 border border-white/20 text-white rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-purple-400 focus:border-transparent"
               >
                 <option value="todos" className="bg-slate-800">Todos los grupos</option>
                 {gruposDisponibles.map(grupo => (
@@ -913,7 +891,7 @@ export default function FormadorPage({ user, onLogout }) {
               </select>
             </div>
             <div>
-              <label className="block text-xs font-medium text-gray-300 mb-1">Buscar por nombre o usuario</label>
+              <label className="block text-sm font-medium text-gray-300 mb-1">Buscar por nombre o usuario</label>
               <input
                 type="text"
                 value={busqueda}
@@ -922,45 +900,45 @@ export default function FormadorPage({ user, onLogout }) {
                   setPaginaActual(1);
                 }}
                 placeholder="Ej: Juan Pérez o jperz123"
-                className="w-full bg-white/10 border border-white/20 text-white rounded-lg px-2 py-1.5 text-xs focus:ring-2 focus:ring-purple-400 focus:border-transparent placeholder-gray-400"
+                className="w-full bg-white/10 border border-white/20 text-white rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-purple-400 focus:border-transparent placeholder-gray-400"
               />
             </div>
-            <div className="text-xs text-gray-400 mt-5">
+            <div className="text-sm text-gray-400 mt-5">
               Mostrando {usuariosPaginados.length} de {totalFiltrados} usuarios
             </div>
           </div>
           {loading && !usuariosDotacion.length ? (
             <div className="text-center py-12">
-              <div className="animate-spin w-6 h-6 border-2 border-purple-400 border-t-transparent rounded-full mx-auto mb-3"></div>
-              <p className="text-gray-400 text-xs">Cargando dotación...</p>
+              <div className="animate-spin w-8 h-8 border-2 border-purple-400 border-t-transparent rounded-full mx-auto mb-4"></div>
+              <p className="text-gray-400 text-sm">Cargando dotación...</p>
             </div>
           ) : (
             <>
               <div className="overflow-x-auto">
-                <table className="min-w-full divide-y divide-white/10 text-xs">
+                <table className="min-w-full divide-y divide-white/10">
                   <thead>
                     <tr>
-                      <th className="px-2 py-2 text-left text-[10px] font-medium text-gray-300 uppercase tracking-wider">Nombre</th>
-                      <th className="px-2 py-2 text-left text-[10px] font-medium text-gray-300 uppercase tracking-wider">Usuario</th>
-                      <th className="px-2 py-2 text-left text-[10px] font-medium text-gray-300 uppercase tracking-wider">Rol</th>
-                      <th className="px-2 py-2 text-left text-[10px] font-medium text-gray-300 uppercase tracking-wider">Grupo</th>
-                      <th className="px-2 py-2 text-left text-[10px] font-medium text-gray-300 uppercase tracking-wider">Estado</th>
+                      <th className="px-2 py-2 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Nombre</th>
+                      <th className="px-2 py-2 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Usuario</th>
+                      <th className="px-2 py-2 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Rol</th>
+                      <th className="px-2 py-2 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Grupo</th>
+                      <th className="px-2 py-2 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Estado</th>
                       {[1,2,3,4,5,6].map(d => (
-                        <th key={d} className="px-2 py-2 text-center text-[10px] font-medium text-gray-300 uppercase tracking-wider">Día {d}</th>
+                        <th key={d} className="px-2 py-2 text-center text-xs font-medium text-gray-300 uppercase tracking-wider">Día {d}</th>
                       ))}
-                      <th className="px-2 py-2 text-center text-[10px] font-medium text-gray-300 uppercase tracking-wider">Fecha Baja</th>
-                      <th className="px-2 py-2 text-center text-[10px] font-medium text-gray-300 uppercase tracking-wider">Motivo Baja</th>
-                      <th className="px-2 py-2 text-left text-[10px] font-medium text-gray-300 uppercase tracking-wider">Acción</th>
+                      <th className="px-2 py-2 text-center text-xs font-medium text-gray-300 uppercase tracking-wider">Fecha Baja</th>
+                      <th className="px-2 py-2 text-center text-xs font-medium text-gray-300 uppercase tracking-wider">Motivo Baja</th>
+                      <th className="px-2 py-2 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Acción</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-white/5">
                     {usuariosPaginados.length > 0 ? (
                       usuariosPaginados.map((u) => (
                         <tr key={u.id} className="hover:bg-white/5 transition-colors">
-                          <td className="px-2 py-2 whitespace-nowrap text-xs text-gray-100">{u.nombre}</td>
-                          <td className="px-2 py-2 whitespace-nowrap text-xs text-gray-200">{u.usuario}</td>
-                          <td className="px-2 py-2 whitespace-nowrap">
-                            <span className={`inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-medium ${
+                          <td className="px-2 py-2 whitespace-nowrap text-sm text-gray-100">{u.nombre}</td>
+                          <td className="px-2 py-2 whitespace-nowrap text-sm text-gray-200">{u.usuario}</td>
+                          <td className="px-2 py-2 whitespace-nowrap text-sm">
+                            <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
                               u.rol === 'Administrador' ? 'bg-purple-500/20 text-purple-300' :
                               u.rol === 'Formador' ? 'bg-green-500/20 text-green-300' :
                               'bg-blue-500/20 text-blue-300'
@@ -968,9 +946,9 @@ export default function FormadorPage({ user, onLogout }) {
                               {u.rol}
                             </span>
                           </td>
-                          <td className="px-2 py-2 whitespace-nowrap text-xs text-gray-200">{u.grupo_nombre || '-'}</td>
-                          <td className="px-2 py-2 whitespace-nowrap">
-                            <span className={`inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-medium ${
+                          <td className="px-2 py-2 whitespace-nowrap text-sm text-gray-200">{u.grupo_nombre || '-'}</td>
+                          <td className="px-2 py-2 whitespace-nowrap text-sm">
+                            <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
                               u.estado === 'Activo' ? 'bg-green-500/20 text-green-300' : 'bg-red-500/20 text-red-300'
                             }`}>
                               {u.estado}
@@ -982,12 +960,12 @@ export default function FormadorPage({ user, onLogout }) {
                             const key = `dia_${d}`;
                             const esEditable = filaEditando === u.id;
                             return (
-                              <td key={key} className="px-2 py-2 whitespace-nowrap text-center">
+                              <td key={key} className="px-2 py-2 whitespace-nowrap text-sm">
                                 {esEditable ? (
                                   <select
                                     value={valoresEditables[key] || ""}
                                     onChange={(e) => handleInputChange(key, e.target.value)}
-                                    className="w-full bg-white/10 border border-white/20 text-white text-[10px] rounded px-1 py-0.5 focus:ring-1 focus:ring-purple-400 focus:border-transparent"
+                                    className="w-full bg-white/10 border border-white/20 text-white text-xs rounded px-1 py-0.5 focus:ring-1 focus:ring-purple-400 focus:border-transparent"
                                   >
                                     <option value="">—</option>
                                     {OPCIONES_ASISTENCIA.map(op => (
@@ -995,57 +973,55 @@ export default function FormadorPage({ user, onLogout }) {
                                     ))}
                                   </select>
                                 ) : (
-                                  <div className="flex justify-center">
-                                    {renderBadgeAsistencia(u[key])}
-                                  </div>
+                                  <span className="text-gray-300">{u[key] || "—"}</span>
                                 )}
                               </td>
                             );
                           })}
 
                           {/* Fecha de baja */}
-                          <td className="px-2 py-2 whitespace-nowrap text-center">
+                          <td className="px-2 py-2 whitespace-nowrap text-sm">
                             {filaEditando === u.id ? (
                               <input
                                 type="date"
                                 value={valoresEditables.fecha_baja || ""}
                                 onChange={(e) => handleInputChange("fecha_baja", e.target.value)}
-                                className="w-full bg-white/10 border border-white/20 text-white text-[10px] rounded px-1 py-0.5 focus:ring-1 focus:ring-purple-400"
+                                className="w-full bg-white/10 border border-white/20 text-white text-xs rounded px-1 py-0.5 focus:ring-1 focus:ring-purple-400"
                               />
                             ) : (
-                              <span className="text-gray-300 text-xs">{u.fecha_baja || "—"}</span>
+                              <span className="text-gray-300">{u.fecha_baja || "—"}</span>
                             )}
                           </td>
 
                           {/* Motivo de baja */}
-                          <td className="px-2 py-2 whitespace-nowrap text-center">
+                          <td className="px-2 py-2 whitespace-nowrap text-sm">
                             {filaEditando === u.id ? (
                               <input
                                 type="text"
                                 value={valoresEditables.motivo_baja || ""}
                                 onChange={(e) => handleInputChange("motivo_baja", e.target.value)}
                                 placeholder="Motivo..."
-                                className="w-full bg-white/10 border border-white/20 text-white text-[10px] rounded px-1 py-0.5 focus:ring-1 focus:ring-purple-400 placeholder-gray-500"
+                                className="w-full bg-white/10 border border-white/20 text-white text-xs rounded px-1 py-0.5 focus:ring-1 focus:ring-purple-400 placeholder-gray-500"
                               />
                             ) : (
-                              <span className="text-gray-300 text-xs">{u.motivo_baja || "—"}</span>
+                              <span className="text-gray-300">{u.motivo_baja || "—"}</span>
                             )}
                           </td>
 
                           {/* Acción */}
-                          <td className="px-2 py-2 whitespace-nowrap">
+                          <td className="px-2 py-2 whitespace-nowrap text-sm">
                             {filaEditando === u.id ? (
                               <div className="flex gap-1">
                                 <button
                                   onClick={() => guardarCambiosFila(u.id)}
                                   disabled={loading}
-                                  className="px-1.5 py-0.5 bg-green-500/20 text-green-300 rounded text-[10px] hover:bg-green-500/30 disabled:opacity-50"
+                                  className="px-2 py-1 bg-green-500/20 text-green-300 rounded text-xs hover:bg-green-500/30 disabled:opacity-50"
                                 >
                                   Guardar
                                 </button>
                                 <button
                                   onClick={cancelarEdicion}
-                                  className="px-1.5 py-0.5 bg-gray-500/20 text-gray-300 rounded text-[10px] hover:bg-gray-500/30"
+                                  className="px-2 py-1 bg-gray-500/20 text-gray-300 rounded text-xs hover:bg-gray-500/30"
                                 >
                                   Cancelar
                                 </button>
@@ -1054,20 +1030,20 @@ export default function FormadorPage({ user, onLogout }) {
                               <div className="flex gap-1">
                                 <button
                                   onClick={() => iniciarEdicion(u)}
-                                  className="px-1.5 py-0.5 bg-blue-500/20 text-blue-300 rounded text-[10px] hover:bg-blue-500/30"
+                                  className="px-2 py-1 bg-blue-500/20 text-blue-300 rounded text-xs hover:bg-blue-500/30"
                                 >
                                   Editar
                                 </button>
                                 <button
                                   onClick={() => actualizarEstadoUsuario(u.id, u.estado === 'Activo' ? 'Inactivo' : 'Activo')}
                                   disabled={loading}
-                                  className={`px-1.5 py-0.5 rounded text-[10px] font-medium transition-colors ${
+                                  className={`px-2 py-1 rounded text-xs font-medium transition-colors ${
                                     u.estado === 'Activo'
                                       ? 'bg-red-500/20 text-red-300 hover:bg-red-500/30'
                                       : 'bg-green-500/20 text-green-300 hover:bg-green-500/30'
                                   } disabled:opacity-50`}
                                 >
-                                  {u.estado === 'Activo' ? 'Inact.' : 'Activo'}
+                                  {u.estado === 'Activo' ? 'Inactivo' : 'Activo'}
                                 </button>
                               </div>
                             )}
@@ -1076,7 +1052,7 @@ export default function FormadorPage({ user, onLogout }) {
                       ))
                     ) : (
                       <tr>
-                        <td colSpan="13" className="px-4 py-6 text-center text-gray-400 text-xs">
+                        <td colSpan="13" className="px-4 py-8 text-center text-gray-400">
                           No se encontraron usuarios con ese filtro.
                         </td>
                       </tr>
@@ -1085,19 +1061,19 @@ export default function FormadorPage({ user, onLogout }) {
                 </table>
               </div>
               {totalPaginas > 1 && (
-                <div className="flex items-center justify-between mt-4">
+                <div className="flex items-center justify-between mt-6">
                   <button
                     onClick={() => setPaginaActual(p => Math.max(1, p - 1))}
                     disabled={paginaActual === 1 || loading}
-                    className="px-3 py-1.5 bg-white/10 text-white rounded text-xs disabled:opacity-50 disabled:cursor-not-allowed hover:bg-white/20 transition"
+                    className="px-4 py-2 bg-white/10 text-white rounded-lg disabled:opacity-50 disabled:cursor-not-allowed hover:bg-white/20 transition"
                   >
                     ← Anterior
                   </button>
-                  <span className="text-gray-300 text-xs">Página {paginaActual} de {totalPaginas}</span>
+                  <span className="text-gray-300 text-sm">Página {paginaActual} de {totalPaginas}</span>
                   <button
                     onClick={() => setPaginaActual(p => Math.min(totalPaginas, p + 1))}
                     disabled={paginaActual === totalPaginas || loading}
-                    className="px-3 py-1.5 bg-white/10 text-white rounded text-xs disabled:opacity-50 disabled:cursor-not-allowed hover:bg-white/20 transition"
+                    className="px-4 py-2 bg-white/10 text-white rounded-lg disabled:opacity-50 disabled:cursor-not-allowed hover:bg-white/20 transition"
                   >
                     Siguiente →
                   </button>
@@ -1158,3 +1134,4 @@ export default function FormadorPage({ user, onLogout }) {
     </div>
   );
 }
+    
