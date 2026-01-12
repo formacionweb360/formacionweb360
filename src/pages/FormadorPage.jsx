@@ -1003,75 +1003,80 @@ export default function FormadorPage({ user, onLogout }) {
         </div>
       </div>
 
-      {/* SECCIÓN: LECTOR QR PARA ASISTENCIA */}
-      <div className="max-w-[95vw] mx-auto px-4 md:px-8 py-6">
-        <div className="bg-white/10 backdrop-blur-md rounded-2xl border border-white/20 shadow-xl shadow-purple-500/5 p-6">
-          <h2 className="font-semibold text-xl text-white mb-4 flex items-center gap-2">
-            <span className="bg-green-500/20 text-green-300 p-2 rounded-lg border border-green-500/30">
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 15h.01M12 18h.01M12 9h.01M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-              </svg>
-            </span>
-            Registrar Asistencia por QR
-          </h2>
+{/* SECCIÓN: LECTOR QR PARA ASISTENCIA */}
+<div className="max-w-[95vw] mx-auto px-4 md:px-8 py-6">
+  <div className="bg-white/10 backdrop-blur-md rounded-2xl border border-white/20 shadow-xl shadow-purple-500/5 p-6">
+    <h2 className="font-semibold text-xl text-white mb-4 flex items-center gap-2">
+      <span className="bg-green-500/20 text-green-300 p-2 rounded-lg border border-green-500/30">
+        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 15h.01M12 18h.01M12 9h.01M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+        </svg>
+      </span>
+      Registrar Asistencia por QR
+    </h2>
 
-          <div className="flex flex-wrap gap-4 items-end mb-4">
-            <div>
-              <label className="block text-xs font-medium text-gray-300 mb-1">
-                Seleccionar Día
-              </label>
-              <select
-                value={seleccion.dia || ""}
-                onChange={(e) => setSeleccion(prev => ({ ...prev, dia: e.target.value }))}
-                className="bg-white/10 border border-white/20 text-white rounded-lg px-2 py-1.5 text-xs focus:ring-2 focus:ring-purple-400 focus:border-transparent"
-              >
-                <option value="" className="bg-slate-800">Selecciona un día</option>
-                <option value="1" className="bg-slate-800">Día 1</option>
-                <option value="2" className="bg-slate-800">Día 2</option>
-                <option value="3" className="bg-slate-800">Día 3</option>
-                <option value="4" className="bg-slate-800">Día 4</option>
-                <option value="5" className="bg-slate-800">Día 5</option>
-                <option value="6" className="bg-slate-800">Día 6</option>
-              </select>
-            </div>
-
-            <button
-              onClick={iniciarLecturaQR}
-              disabled={!seleccion.dia || loading}
-              className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded text-xs font-medium disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
-            >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 15h.01M12 18h.01M12 9h.01M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-              </svg>
-              Iniciar Escaneo QR
-            </button>
-          </div>
-
-          {/* Contenedor del lector QR (solo visible al escanear) */}
-          {escaneandoQR && (
-            <div className="mt-4 p-4 bg-black/30 rounded-lg relative">
-              <video ref={videoRef} style={{ display: 'none' }} />
-              <canvas ref={canvasRef} style={{ display: 'none' }} />
-              <div className="w-full max-w-md mx-auto aspect-video bg-black rounded flex items-center justify-center">
-                <div className="text-white text-sm">Apunta la cámara al código QR</div>
-              </div>
-              <button
-                onClick={detenerLecturaQR}
-                className="mt-3 px-3 py-1 bg-gray-600 text-white rounded text-xs"
-              >
-                Cancelar
-              </button>
-            </div>
-          )}
-
-          {/* Mensaje de estado */}
-          {mensajeQR && (
-            <div className={`mt-3 p-2 rounded text-xs ${mensajeQR.tipo === 'success' ? 'bg-green-500/20 text-green-200' : 'bg-red-500/20 text-red-200'}`}>
-              {mensajeQR.texto}
-            </div>
-          )}
-        </div>
+    <div className="flex flex-wrap gap-4 items-end mb-4">
+      <div>
+        <label className="block text-xs font-medium text-gray-300 mb-1">
+          Seleccionar Día
+        </label>
+        <select
+          value={seleccion.dia || ""}
+          onChange={(e) => setSeleccion(prev => ({ ...prev, dia: e.target.value }))}
+          className="bg-white/10 border border-white/20 text-white rounded-lg px-2 py-1.5 text-xs focus:ring-2 focus:ring-purple-400 focus:border-transparent"
+        >
+          <option value="" className="bg-slate-800">Selecciona un día</option>
+          <option value="1" className="bg-slate-800">Día 1</option>
+          <option value="2" className="bg-slate-800">Día 2</option>
+          <option value="3" className="bg-slate-800">Día 3</option>
+          <option value="4" className="bg-slate-800">Día 4</option>
+          <option value="5" className="bg-slate-800">Día 5</option>
+          <option value="6" className="bg-slate-800">Día 6</option>
+        </select>
       </div>
+
+      <button
+        onClick={iniciarLecturaQR}
+        disabled={!seleccion.dia || loading}
+        className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded text-xs font-medium disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
+      >
+        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 15h.01M12 18h.01M12 9h.01M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+        </svg>
+        Iniciar Escaneo QR
+      </button>
+    </div>
+
+    {/* Contenedor del lector QR (solo visible al escanear) */}
+    {escaneandoQR && (
+      <div className="mt-4 p-4 bg-black/30 rounded-lg relative">
+        {/* Video en vivo */}
+        <video
+          ref={videoRef}
+          autoPlay
+          playsInline
+          muted
+          className="w-full max-w-md mx-auto aspect-video bg-black rounded"
+        ></video>
+
+        {/* Mensaje de estado */}
+        {mensajeQR && (
+          <div className={`mt-3 p-2 rounded text-xs ${mensajeQR.tipo === 'success' ? 'bg-green-500/20 text-green-200' : 'bg-red-500/20 text-red-200'}`}>
+            {mensajeQR.texto}
+          </div>
+        )}
+
+        {/* Botón Cancelar */}
+        <button
+          onClick={detenerLecturaQR}
+          className="mt-3 px-3 py-1 bg-gray-600 text-white rounded text-xs"
+        >
+          Cancelar
+        </button>
+      </div>
+    )}
+  </div>
+</div>
 
       {/* SECCIÓN: TABLA DE DOTACIÓN */}
       <div className="max-w-[95vw] mx-auto px-4 md:px-8 py-6">
