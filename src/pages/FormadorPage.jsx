@@ -1,6 +1,17 @@
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "../services/supabaseClient";
 
+// === OPCIONES DE ASISTENCIA ===
+const OPCIONES_ASISTENCIA = [
+  "ASISTIÓ",
+  "FALTA",
+  "DESERTÓ",
+  "TARDANZA",
+  "NO SE PRESENTÓ",
+  "RETIRADO",
+  "NO APROBO ROLE PLAY"
+];
+
 export default function FormadorPage({ user, onLogout }) {
   const [campañas, setCampañas] = useState([]);
   const [grupos, setGrupos] = useState([]);
@@ -24,7 +35,7 @@ export default function FormadorPage({ user, onLogout }) {
   const [usuariosDotacion, setUsuariosDotacion] = useState([]);
   const [gruposDisponibles, setGruposDisponibles] = useState([]);
   const [filtroGrupo, setFiltroGrupo] = useState("todos");
-  const [busqueda, setBusqueda] = useState(""); // ✅ NUEVO: estado de búsqueda
+  const [busqueda, setBusqueda] = useState(""); // ✅ Búsqueda por nombre/usuario
   const [paginaActual, setPaginaActual] = useState(1);
   const REGISTROS_POR_PAGINA = 10;
 
@@ -207,12 +218,28 @@ export default function FormadorPage({ user, onLogout }) {
     }
   };
 
+  // ✅ MODIFICADO: ahora trae las nuevas columnas
   const cargarUsuariosDotacion = async () => {
     setLoading(true);
     try {
       const { data: usuarios, error: errUsuarios } = await supabase
         .from("usuarios")
-        .select("id, usuario, rol, nombre, estado, grupo_nombre")
+        .select(`
+          id,
+          usuario,
+          rol,
+          nombre,
+          estado,
+          grupo_nombre,
+          dia_1,
+          dia_2,
+          dia_3,
+          dia_4,
+          dia_5,
+          dia_6,
+          fecha_baja,
+          motivo_baja
+        `)
         .order("nombre", { ascending: true });
       if (errUsuarios) throw errUsuarios;
       setUsuariosDotacion(usuarios || []);
@@ -248,6 +275,29 @@ export default function FormadorPage({ user, onLogout }) {
     } catch (err) {
       console.error("Error al actualizar estado:", err);
       mostrarMensaje("error", "Error al actualizar el estado");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // ✅ NUEVA FUNCIÓN: guardar cualquier campo de asistencia o baja
+  const guardarAsistencia = async (userId, campo, valor) => {
+    setLoading(true);
+    try {
+      const valorGuardar = valor === "" ? null : valor;
+      const { error } = await supabase
+        .from("usuarios")
+        .update({ [campo]: valorGuardar })
+        .eq("id", userId);
+      if (error) throw error;
+
+      setUsuariosDotacion(prev =>
+        prev.map(u => u.id === userId ? { ...u, [campo]: valorGuardar } : u)
+      );
+      mostrarMensaje("success", "✅ Cambio guardado");
+    } catch (err) {
+      console.error("Error al guardar:", err);
+      mostrarMensaje("error", "❌ Error al guardar el cambio");
     } finally {
       setLoading(false);
     }
@@ -387,16 +437,14 @@ export default function FormadorPage({ user, onLogout }) {
     setExpandedGroupId(prev => prev === numericGroupId ? null : numericGroupId);
   };
 
-  // === Lógica de filtrado y paginación para Dotación (con búsqueda) ===
+  // ✅ ACTUALIZADO: incluye búsqueda por nombre/usuario
   const { usuariosPaginados, totalPaginas, totalFiltrados } = useMemo(() => {
     let usuariosFiltrados = [...usuariosDotacion];
 
-    // Filtro por grupo
     if (filtroGrupo !== "todos") {
       usuariosFiltrados = usuariosFiltrados.filter(u => u.grupo_nombre === filtroGrupo);
     }
 
-    // Filtro por búsqueda (nombre o usuario)
     if (busqueda.trim() !== "") {
       const termino = busqueda.toLowerCase().trim();
       usuariosFiltrados = usuariosFiltrados.filter(
@@ -415,7 +463,6 @@ export default function FormadorPage({ user, onLogout }) {
     return { usuariosPaginados: pagina, totalPaginas: totalPag, totalFiltrados: total };
   }, [usuariosDotacion, filtroGrupo, busqueda, paginaActual, REGISTROS_POR_PAGINA]);
 
-  // === Lógica de filtrado para Cursos Activos ===
   const gruposUnicosActivos = useMemo(() => {
     const ids = [...new Set(activos.map(a => a.grupo_id).filter(id => id !== null))];
     return ids.map(id => {
@@ -441,7 +488,6 @@ export default function FormadorPage({ user, onLogout }) {
     return Object.values(map);
   }, [activosFiltrados]);
 
-  // === DATOS DE LA MALLA DE CAPACITACIÓN ===
   const mallaActividades = [
     ["Espera Grupal", "00:30:00", "REPASO DÍA 1", "00:30:00", "REPASO DÍA 3", "00:30:00", "NEXUM Y CRM", "00:30:00"],
     ["Charla Selección", "01:30:00", "DINAMICA 2", "00:30:00", "DINAMICA 3", "01:00:00", "TALLER DE TIPIFICACIONES", "01:00:00"],
@@ -835,21 +881,29 @@ export default function FormadorPage({ user, onLogout }) {
                 <table className="min-w-full divide-y divide-white/10">
                   <thead>
                     <tr>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Nombre</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Usuario</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Rol</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Grupo</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Estado</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Acción</th>
+                      <th className="px-2 py-2 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Nombre</th>
+                      <th className="px-2 py-2 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Usuario</th>
+                      <th className="px-2 py-2 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Rol</th>
+                      <th className="px-2 py-2 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Grupo</th>
+                      <th className="px-2 py-2 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Estado</th>
+                      
+                      {/* Nuevas columnas */}
+                      {[1,2,3,4,5,6].map(d => (
+                        <th key={d} className="px-2 py-2 text-center text-xs font-medium text-gray-300 uppercase tracking-wider">Día {d}</th>
+                      ))}
+                      <th className="px-2 py-2 text-center text-xs font-medium text-gray-300 uppercase tracking-wider">Fecha Baja</th>
+                      <th className="px-2 py-2 text-center text-xs font-medium text-gray-300 uppercase tracking-wider">Motivo Baja</th>
+                      
+                      <th className="px-2 py-2 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Acción</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-white/5">
                     {usuariosPaginados.length > 0 ? (
                       usuariosPaginados.map((u) => (
                         <tr key={u.id} className="hover:bg-white/5 transition-colors">
-                          <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-100">{u.nombre}</td>
-                          <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-200">{u.usuario}</td>
-                          <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-200">
+                          <td className="px-2 py-2 whitespace-nowrap text-sm text-gray-100">{u.nombre}</td>
+                          <td className="px-2 py-2 whitespace-nowrap text-sm text-gray-200">{u.usuario}</td>
+                          <td className="px-2 py-2 whitespace-nowrap text-sm">
                             <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
                               u.rol === 'Administrador' ? 'bg-purple-500/20 text-purple-300' :
                               u.rol === 'Formador' ? 'bg-green-500/20 text-green-300' :
@@ -858,32 +912,74 @@ export default function FormadorPage({ user, onLogout }) {
                               {u.rol}
                             </span>
                           </td>
-                          <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-200">{u.grupo_nombre || '-'}</td>
-                          <td className="px-4 py-3 whitespace-nowrap text-sm">
+                          <td className="px-2 py-2 whitespace-nowrap text-sm text-gray-200">{u.grupo_nombre || '-'}</td>
+                          <td className="px-2 py-2 whitespace-nowrap text-sm">
                             <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
                               u.estado === 'Activo' ? 'bg-green-500/20 text-green-300' : 'bg-red-500/20 text-red-300'
                             }`}>
                               {u.estado}
                             </span>
                           </td>
-                          <td className="px-4 py-3 whitespace-nowrap text-sm">
+
+                          {/* Selects para Día 1 a Día 6 */}
+                          {[1,2,3,4,5,6].map(d => {
+                            const key = `dia_${d}`;
+                            return (
+                              <td key={key} className="px-2 py-2 whitespace-nowrap text-sm">
+                                <select
+                                  value={u[key] || ""}
+                                  onChange={(e) => guardarAsistencia(u.id, key, e.target.value)}
+                                  className="w-full bg-white/10 border border-white/20 text-white text-xs rounded px-1 py-0.5 focus:ring-1 focus:ring-purple-400 focus:border-transparent"
+                                >
+                                  <option value="">—</option>
+                                  {OPCIONES_ASISTENCIA.map(op => (
+                                    <option key={op} value={op} className="bg-slate-800">{op}</option>
+                                  ))}
+                                </select>
+                              </td>
+                            );
+                          })}
+
+                          {/* Fecha de baja */}
+                          <td className="px-2 py-2 whitespace-nowrap text-sm">
+                            <input
+                              type="date"
+                              value={u.fecha_baja || ""}
+                              onChange={(e) => guardarAsistencia(u.id, "fecha_baja", e.target.value || null)}
+                              className="w-full bg-white/10 border border-white/20 text-white text-xs rounded px-1 py-0.5 focus:ring-1 focus:ring-purple-400"
+                            />
+                          </td>
+
+                          {/* Motivo de baja */}
+                          <td className="px-2 py-2 whitespace-nowrap text-sm">
+                            <input
+                              type="text"
+                              value={u.motivo_baja || ""}
+                              onChange={(e) => guardarAsistencia(u.id, "motivo_baja", e.target.value)}
+                              placeholder="Motivo..."
+                              className="w-full bg-white/10 border border-white/20 text-white text-xs rounded px-1 py-0.5 focus:ring-1 focus:ring-purple-400 placeholder-gray-500"
+                            />
+                          </td>
+
+                          {/* Acción */}
+                          <td className="px-2 py-2 whitespace-nowrap text-sm">
                             <button
                               onClick={() => actualizarEstadoUsuario(u.id, u.estado === 'Activo' ? 'Inactivo' : 'Activo')}
                               disabled={loading}
-                              className={`px-3 py-1 rounded-md text-xs font-medium transition-colors ${
+                              className={`px-2 py-1 rounded text-xs font-medium transition-colors ${
                                 u.estado === 'Activo'
                                   ? 'bg-red-500/20 text-red-300 hover:bg-red-500/30'
                                   : 'bg-green-500/20 text-green-300 hover:bg-green-500/30'
                               } disabled:opacity-50`}
                             >
-                              {u.estado === 'Activo' ? 'Marcar Inactivo' : 'Marcar Activo'}
+                              {u.estado === 'Activo' ? 'Inactivo' : 'Activo'}
                             </button>
                           </td>
                         </tr>
                       ))
                     ) : (
                       <tr>
-                        <td colSpan="6" className="px-4 py-8 text-center text-gray-400">
+                        <td colSpan="13" className="px-4 py-8 text-center text-gray-400">
                           No se encontraron usuarios con ese filtro.
                         </td>
                       </tr>
