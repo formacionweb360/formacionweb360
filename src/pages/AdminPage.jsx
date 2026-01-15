@@ -11,6 +11,7 @@ const OPCIONES_ASISTENCIA = [
   "NO APROBO ROLE PLAY"
 ];
 
+// Configuración de colores para cada estado
 const ESTADO_CONFIG = {
   "ASISTIÓ": { label: "Asistió", color: "bg-green-500", text: "text-green-800" },
   "FALTA": { label: "Falta", color: "bg-red-500", text: "text-red-800" },
@@ -21,7 +22,7 @@ const ESTADO_CONFIG = {
   "NO APROBO ROLE PLAY": { label: "No aprobó RP", color: "bg-blue-500", text: "text-blue-800" },
 };
 
-export default function AdminPage({ user }) {
+export default function AdminPage({ user, onLogout }) {
   const [usuarios, setUsuarios] = useState([]);
   const [grupos, setGrupos] = useState([]);
   const [filtroGrupo, setFiltroGrupo] = useState("todos");
@@ -52,6 +53,7 @@ export default function AdminPage({ user }) {
         if (error) throw error;
 
         setUsuarios(data || []);
+
         const gruposUnicos = [...new Set(data.map(u => u.grupo_nombre).filter(Boolean))];
         setGrupos(gruposUnicos.sort());
       } catch (err) {
@@ -64,28 +66,36 @@ export default function AdminPage({ user }) {
     fetchDotacion();
   }, [user]);
 
+  // Filtrar usuarios por grupo
   const usuariosFiltrados = useMemo(() => {
     if (filtroGrupo === "todos") return usuarios;
     return usuarios.filter(u => u.grupo_nombre === filtroGrupo);
   }, [usuarios, filtroGrupo]);
 
+  // Calcular estadísticas por día
   const statsPorDia = useMemo(() => {
+    const dias = [1, 2, 3, 4, 5, 6];
     const stats = {};
-    [1, 2, 3, 4, 5, 6].forEach(dia => {
+
+    dias.forEach(dia => {
       const key = `dia_${dia}`;
       const conteo = {};
       OPCIONES_ASISTENCIA.forEach(op => conteo[op] = 0);
+
       usuariosFiltrados.forEach(u => {
         const valor = u[key];
         if (valor && OPCIONES_ASISTENCIA.includes(valor)) {
           conteo[valor] += 1;
         }
       });
+
       stats[dia] = conteo;
     });
+
     return stats;
   }, [usuariosFiltrados]);
 
+  // Total de usuarios activos
   const totalActivos = usuariosFiltrados.filter(u => u.estado === "Activo").length;
 
   if (user?.rol !== "Administrador") {
@@ -97,27 +107,15 @@ export default function AdminPage({ user }) {
     );
   }
 
-  // Función para cerrar sesión
-  const handleLogout = async () => {
-    await supabase.auth.signOut();
-    window.location.href = '/login'; // o '/' si tu login está en la raíz
-  };
-
   return (
     <div className="min-h-screen bg-slate-50">
-      {/* Barra superior con botón de logout */}
+      {/* Barra superior con título y botón de logout */}
       <div className="flex justify-between items-center p-4 bg-white shadow-sm">
         <h1 className="text-xl font-bold text-indigo-700">📊 Dashboard de Asistencia</h1>
         <button
-          onClick={handleLogout}
-          className="flex items-center gap-1.5 bg-red-500 hover:bg-red-600 text-white px-3 py-1.5 rounded-lg text-sm font-medium transition shadow-sm"
-          aria-label="Cerrar sesión"
+          onClick={onLogout}
+          className="text-sm bg-red-500 text-white px-4 py-2 rounded-lg hover:bg-red-600 transition"
         >
-          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
-            <polyline points="16 17 21 12 16 7" />
-            <line x1="21" x2="9" y1="12" y2="12" />
-          </svg>
           Cerrar sesión
         </button>
       </div>
