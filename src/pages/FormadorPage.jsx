@@ -17,7 +17,7 @@ export default function FormadorPage({ user, onLogout }) {
   const [cursos, setCursos] = useState([]);
   const [seleccion, setSeleccion] = useState({
     campana_id: "",
-    dia: "", // ← usado para asistencia por QR
+    dia: "",
     grupo_id: "",
     curso_id: "",
   });
@@ -34,12 +34,13 @@ export default function FormadorPage({ user, onLogout }) {
   const [usuariosDotacion, setUsuariosDotacion] = useState([]);
   const [gruposDisponibles, setGruposDisponibles] = useState([]);
   const [filtroGrupo, setFiltroGrupo] = useState("todos");
-  const [busqueda, setBusqueda] = useState(""); // ✅ Búsqueda por nombre/usuario
+  const [filtroEstado, setFiltroEstado] = useState("todos"); // ← NUEVO FILTRO
+  const [busqueda, setBusqueda] = useState("");
   const [paginaActual, setPaginaActual] = useState(1);
   const REGISTROS_POR_PAGINA = 10;
 
   // === Estado para edición por fila ===
-  const [filaEditando, setFilaEditando] = useState(null); // id del usuario
+  const [filaEditando, setFilaEditando] = useState(null);
   const [valoresEditables, setValoresEditables] = useState({});
 
   // === Estados para QR ===
@@ -208,7 +209,6 @@ export default function FormadorPage({ user, onLogout }) {
         })
       );
       setActivos(activosConConteo);
-
       const gruposMap = {};
       activosConConteo.forEach((a) => {
         const grupoId = a.grupo_id;
@@ -250,7 +250,7 @@ export default function FormadorPage({ user, onLogout }) {
           motivo_baja,
           qr_id
         `)
-         .eq("rol", "usuario")
+        .eq("rol", "usuario")
         .order("nombre", { ascending: true });
       if (errUsuarios) throw errUsuarios;
       setUsuariosDotacion(usuarios || []);
@@ -307,14 +307,11 @@ export default function FormadorPage({ user, onLogout }) {
       if (valoresEditables.motivo_baja !== undefined) {
         cambios.motivo_baja = valoresEditables.motivo_baja || null;
       }
-
       const { error } = await supabase
         .from("usuarios")
         .update(cambios)
         .eq("id", userId);
-
       if (error) throw error;
-
       setUsuariosDotacion(prev =>
         prev.map(u => u.id === userId ? { ...u, ...cambios } : u)
       );
@@ -351,7 +348,6 @@ export default function FormadorPage({ user, onLogout }) {
 
   const renderBadgeAsistencia = (estado) => {
     if (!estado) return <span className="text-gray-500 text-xs">—</span>;
-
     const config = {
       "ASISTIÓ": { icon: "✅", color: "bg-green-500/20 text-green-100" },
       "FALTA": { icon: "❌", color: "bg-red-500/20 text-red-100" },
@@ -361,9 +357,7 @@ export default function FormadorPage({ user, onLogout }) {
       "RETIRADO": { icon: "🚶‍♂️", color: "bg-orange-500/20 text-orange-900" },
       "NO APROBO ROLE PLAY": { icon: "📉", color: "bg-blue-500/20 text-blue-100" },
     };
-
     const { icon, color } = config[estado] || { icon: "?", color: "bg-gray-500/20 text-gray-300" };
-
     return (
       <span className={`inline-flex items-center gap-0.5 px-1 py-0.5 rounded-full text-[10px] font-medium ${color}`}>
         {icon}
@@ -374,23 +368,18 @@ export default function FormadorPage({ user, onLogout }) {
   // --- LÓGICA DE QR ---
   const procesarFrame = () => {
     if (!videoRef.current || !canvasRef.current) return;
-
     const video = videoRef.current;
     const canvas = canvasRef.current;
     const ctx = canvas.getContext("2d");
-
     if (video.readyState === video.HAVE_ENOUGH_DATA) {
       canvas.height = video.videoHeight;
       canvas.width = video.videoWidth;
       ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
       const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-      
-      // jsQR es global porque lo cargamos vía CDN
       if (typeof jsQR !== 'undefined') {
         const qrCode = jsQR(imageData.data, imageData.width, imageData.height, {
           inversionAttempts: "dontInvert",
         });
-
         if (qrCode) {
           detenerLecturaQR();
           procesarAsistenciaQR(qrCode.data);
@@ -398,7 +387,6 @@ export default function FormadorPage({ user, onLogout }) {
         }
       }
     }
-
     if (escaneandoQR) {
       animationRef.current = requestAnimationFrame(procesarFrame);
     }
@@ -409,10 +397,8 @@ export default function FormadorPage({ user, onLogout }) {
       setMensajeQR({ tipo: "error", texto: "⚠️ Primero selecciona un día." });
       return;
     }
-
     setEscaneandoQR(true);
     setMensajeQR(null);
-
     navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } })
       .then(stream => {
         if (videoRef.current) {
@@ -441,40 +427,31 @@ export default function FormadorPage({ user, onLogout }) {
   const procesarAsistenciaQR = async (qrContent) => {
     setLoading(true);
     setMensajeQR({ tipo: "info", texto: `🔍 Procesando QR...` });
-
     try {
       const qr_id = qrContent.trim();
       if (!qr_id) throw new Error("Código QR vacío");
-
       const { data: usuario, error } = await supabase
         .from("usuarios")
         .select("id, nombre, usuario")
         .eq("qr_id", qr_id)
         .single();
-
       if (error || !usuario) {
         throw new Error("Usuario no encontrado con ese QR.");
       }
-
       const campoDia = `dia_${seleccion.dia}`;
       const { error: updateError } = await supabase
         .from("usuarios")
         .update({ [campoDia]: "ASISTIÓ" })
         .eq("id", usuario.id);
-
       if (updateError) throw updateError;
-
       setUsuariosDotacion(prev =>
         prev.map(u => u.id === usuario.id ? { ...u, [campoDia]: "ASISTIÓ" } : u)
       );
-
       setMensajeQR({
         tipo: "success",
         texto: `✅ ¡Asistencia registrada! ${usuario.nombre} - Día ${seleccion.dia}`
       });
-
       mostrarMensaje("success", `✅ Asistencia registrada para ${usuario.nombre} (Día ${seleccion.dia})`);
-
     } catch (err) {
       console.error("Error al procesar QR:", err);
       setMensajeQR({
@@ -506,7 +483,6 @@ export default function FormadorPage({ user, onLogout }) {
         mostrarMensaje("error", "⚠️ Este curso ya está activado hoy para esa campaña y grupo");
         return;
       }
-
       const { data: activacion, error } = await supabase
         .from("cursos_activados")
         .insert([
@@ -522,14 +498,12 @@ export default function FormadorPage({ user, onLogout }) {
         .select()
         .single();
       if (error) throw error;
-
       const { data: grupo, error: errGrupo } = await supabase
         .from("grupos")
         .select("nombre")
         .eq("id", grupo_id)
         .single();
       if (errGrupo || !grupo) throw new Error("No se pudo obtener el grupo");
-
       const { data: asesores, error: errAsesores } = await supabase
         .from("usuarios")
         .select("id")
@@ -537,7 +511,6 @@ export default function FormadorPage({ user, onLogout }) {
         .eq("grupo_nombre", grupo.nombre)
         .eq("estado", "Activo");
       if (errAsesores) throw errAsesores;
-
       if (asesores && asesores.length > 0) {
         const { error: errorInsert } = await supabase.from("cursos_asesores").insert(
           asesores.map((u) => ({
@@ -553,7 +526,6 @@ export default function FormadorPage({ user, onLogout }) {
       } else {
         mostrarMensaje("success", "✅ Curso activado (sin asesores activos en el grupo)");
       }
-
       await cargarActivos();
       await cargarGrupos(seleccion.campana_id);
       setSeleccion({ ...seleccion, curso_id: "" });
@@ -576,13 +548,11 @@ export default function FormadorPage({ user, onLogout }) {
         .delete()
         .eq("curso_activado_id", id);
       if (errorAsesores) throw errorAsesores;
-
       const { error } = await supabase
         .from("cursos_activados")
         .delete()
         .eq("id", id);
       if (error) throw error;
-
       mostrarMensaje("success", "🗑️ Curso desactivado correctamente");
       await cargarActivos();
     } catch (err) {
@@ -620,11 +590,18 @@ export default function FormadorPage({ user, onLogout }) {
     setExpandedGroupId(prev => prev === numericGroupId ? null : numericGroupId);
   };
 
+  // 🔁 Filtro por grupo + estado + búsqueda
   const { usuariosPaginados, totalPaginas, totalFiltrados } = useMemo(() => {
     let usuariosFiltrados = [...usuariosDotacion];
+
     if (filtroGrupo !== "todos") {
       usuariosFiltrados = usuariosFiltrados.filter(u => u.grupo_nombre === filtroGrupo);
     }
+
+    if (filtroEstado !== "todos") {
+      usuariosFiltrados = usuariosFiltrados.filter(u => u.estado === filtroEstado);
+    }
+
     if (busqueda.trim() !== "") {
       const termino = busqueda.toLowerCase().trim();
       usuariosFiltrados = usuariosFiltrados.filter(
@@ -633,13 +610,14 @@ export default function FormadorPage({ user, onLogout }) {
           (u.usuario && u.usuario.toLowerCase().includes(termino))
       );
     }
+
     const total = usuariosFiltrados.length;
     const desde = (paginaActual - 1) * REGISTROS_POR_PAGINA;
     const hasta = desde + REGISTROS_POR_PAGINA;
     const pagina = usuariosFiltrados.slice(desde, hasta);
     const totalPag = Math.ceil(total / REGISTROS_POR_PAGINA) || 1;
     return { usuariosPaginados: pagina, totalPaginas: totalPag, totalFiltrados: total };
-  }, [usuariosDotacion, filtroGrupo, busqueda, paginaActual, REGISTROS_POR_PAGINA]);
+  }, [usuariosDotacion, filtroGrupo, filtroEstado, busqueda, paginaActual, REGISTROS_POR_PAGINA]);
 
   const gruposUnicosActivos = useMemo(() => {
     const ids = [...new Set(activos.map(a => a.grupo_id).filter(id => id !== null))];
@@ -772,9 +750,7 @@ export default function FormadorPage({ user, onLogout }) {
               )}
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-300 mb-2">
-                Campaña
-              </label>
+              <label className="block text-sm font-medium text-gray-300 mb-2">Campaña</label>
               <select
                 className="w-full bg-white/10 border border-white/20 rounded-lg p-3 focus:ring-2 focus:ring-purple-400 focus:border-transparent transition text-sm text-white placeholder-gray-400"
                 value={seleccion.campana_id}
@@ -783,16 +759,12 @@ export default function FormadorPage({ user, onLogout }) {
               >
                 <option value="" className="bg-slate-800">Selecciona una campaña</option>
                 {campañas.map((c) => (
-                  <option key={c.id} value={c.id} className="bg-slate-800">
-                    {c.nombre}
-                  </option>
+                  <option key={c.id} value={c.id} className="bg-slate-800">{c.nombre}</option>
                 ))}
               </select>
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-300 mb-2">
-                Día de capacitación
-              </label>
+              <label className="block text-sm font-medium text-gray-300 mb-2">Día de capacitación</label>
               <select
                 className="w-full bg-white/10 border border-white/20 rounded-lg p-3 focus:ring-2 focus:ring-purple-400 focus:border-transparent transition text-sm text-white placeholder-gray-400 disabled:bg-gray-700"
                 value={seleccion.dia}
@@ -809,9 +781,7 @@ export default function FormadorPage({ user, onLogout }) {
               </select>
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-300 mb-2">
-                Grupo
-              </label>
+              <label className="block text-sm font-medium text-gray-300 mb-2">Grupo</label>
               <select
                 className="w-full bg-white/10 border border-white/20 rounded-lg p-3 focus:ring-2 focus:ring-purple-400 focus:border-transparent transition text-sm text-white placeholder-gray-400 disabled:bg-gray-700"
                 value={seleccion.grupo_id}
@@ -820,9 +790,7 @@ export default function FormadorPage({ user, onLogout }) {
               >
                 <option value="" className="bg-slate-800">Selecciona un grupo</option>
                 {grupos.map((g) => (
-                  <option key={g.id} value={g.id} className="bg-slate-800">
-                    {g.nombre} ({g.activos || 0} asesores activos)
-                  </option>
+                  <option key={g.id} value={g.id} className="bg-slate-800">{g.nombre} ({g.activos || 0} asesores activos)</option>
                 ))}
               </select>
             </div>
@@ -856,9 +824,7 @@ export default function FormadorPage({ user, onLogout }) {
               </div>
             )}
             <div>
-              <label className="block text-sm font-medium text-gray-300 mb-2">
-                Curso a activar
-              </label>
+              <label className="block text-sm font-medium text-gray-300 mb-2">Curso a activar</label>
               <select
                 className="w-full bg-white/10 border border-white/20 rounded-lg p-3 focus:ring-2 focus:ring-purple-400 focus:border-transparent transition text-sm text-white placeholder-gray-400 disabled:bg-gray-700"
                 value={seleccion.curso_id}
@@ -867,9 +833,7 @@ export default function FormadorPage({ user, onLogout }) {
               >
                 <option value="" className="bg-slate-800">Selecciona el curso a activar</option>
                 {cursos.map((c) => (
-                  <option key={c.id} value={c.id} className="bg-slate-800">
-                    {c.titulo} - {c.duracion_minutos} min
-                  </option>
+                  <option key={c.id} value={c.id} className="bg-slate-800">{c.titulo} - {c.duracion_minutos} min</option>
                 ))}
               </select>
             </div>
@@ -882,7 +846,7 @@ export default function FormadorPage({ user, onLogout }) {
             </button>
           </div>
 
-          {/* Sección derecha: Grupos asignados (con filtro por grupo) */}
+          {/* Sección derecha: Grupos asignados */}
           <div className="bg-white/10 backdrop-blur-md rounded-2xl border border-white/20 shadow-xl shadow-purple-500/5 p-6">
             <div className="flex flex-wrap items-center gap-2 mb-4">
               <h2 className="font-semibold text-xl text-white flex items-center gap-2">
@@ -1015,12 +979,9 @@ export default function FormadorPage({ user, onLogout }) {
             </span>
             Registrar Asistencia por QR
           </h2>
-
           <div className="flex flex-wrap gap-4 items-end mb-4">
             <div>
-              <label className="block text-xs font-medium text-gray-300 mb-1">
-                Seleccionar Día
-              </label>
+              <label className="block text-xs font-medium text-gray-300 mb-1">Seleccionar Día</label>
               <select
                 value={seleccion.dia || ""}
                 onChange={(e) => setSeleccion(prev => ({ ...prev, dia: e.target.value }))}
@@ -1035,7 +996,6 @@ export default function FormadorPage({ user, onLogout }) {
                 <option value="6" className="bg-slate-800">Día 6</option>
               </select>
             </div>
-
             <button
               onClick={iniciarLecturaQR}
               disabled={!seleccion.dia || loading}
@@ -1047,8 +1007,6 @@ export default function FormadorPage({ user, onLogout }) {
               Iniciar Escaneo QR
             </button>
           </div>
-
-          {/* Contenedor del lector QR (solo visible al escanear) */}
           {escaneandoQR && (
             <div className="mt-4 p-4 bg-black/30 rounded-lg relative">
               <video ref={videoRef} style={{ display: 'none' }} />
@@ -1064,8 +1022,6 @@ export default function FormadorPage({ user, onLogout }) {
               </button>
             </div>
           )}
-
-          {/* Mensaje de estado */}
           {mensajeQR && (
             <div className={`mt-3 p-2 rounded text-xs ${mensajeQR.tipo === 'success' ? 'bg-green-500/20 text-green-200' : 'bg-red-500/20 text-red-200'}`}>
               {mensajeQR.texto}
@@ -1100,6 +1056,21 @@ export default function FormadorPage({ user, onLogout }) {
                 {gruposDisponibles.map(grupo => (
                   <option key={grupo} value={grupo} className="bg-slate-800">{grupo}</option>
                 ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-300 mb-1">Filtrar por Estado</label> {/* ← NUEVO FILTRO */}
+              <select
+                value={filtroEstado}
+                onChange={(e) => {
+                  setFiltroEstado(e.target.value);
+                  setPaginaActual(1);
+                }}
+                className="bg-white/10 border border-white/20 text-white rounded-lg px-2 py-1.5 text-xs focus:ring-2 focus:ring-purple-400 focus:border-transparent"
+              >
+                <option value="todos" className="bg-slate-800">Todos los estados</option>
+                <option value="Activo" className="bg-slate-800">Activo</option>
+                <option value="Inactivo" className="bg-slate-800">Inactivo</option>
               </select>
             </div>
             <div>
@@ -1166,8 +1137,6 @@ export default function FormadorPage({ user, onLogout }) {
                               {u.estado}
                             </span>
                           </td>
-
-                          {/* Días 1-6 */}
                           {[1,2,3,4,5,6].map(d => {
                             const key = `dia_${d}`;
                             const esEditable = filaEditando === u.id;
@@ -1192,8 +1161,6 @@ export default function FormadorPage({ user, onLogout }) {
                               </td>
                             );
                           })}
-
-                          {/* Fecha de baja */}
                           <td className="px-2 py-2 whitespace-nowrap text-center">
                             {filaEditando === u.id ? (
                               <input
@@ -1206,8 +1173,6 @@ export default function FormadorPage({ user, onLogout }) {
                               <span className="text-gray-300 text-xs">{u.fecha_baja || "—"}</span>
                             )}
                           </td>
-
-                          {/* Motivo de baja */}
                           <td className="px-2 py-2 whitespace-nowrap text-center">
                             {filaEditando === u.id ? (
                               <input
@@ -1221,8 +1186,6 @@ export default function FormadorPage({ user, onLogout }) {
                               <span className="text-gray-300 text-xs">{u.motivo_baja || "—"}</span>
                             )}
                           </td>
-
-                          {/* Acción */}
                           <td className="px-2 py-2 whitespace-nowrap">
                             {filaEditando === u.id ? (
                               <div className="flex gap-1">
