@@ -250,6 +250,7 @@ export default function FormadorPage({ user, onLogout }) {
           motivo_baja,
           qr_id
         `)
+         .eq("rol", "usuario")
         .order("nombre", { ascending: true });
       if (errUsuarios) throw errUsuarios;
       setUsuariosDotacion(usuarios || []);
