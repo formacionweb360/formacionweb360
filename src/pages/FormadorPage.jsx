@@ -34,7 +34,7 @@ export default function FormadorPage({ user, onLogout }) {
   const [usuariosDotacion, setUsuariosDotacion] = useState([]);
   const [gruposDisponibles, setGruposDisponibles] = useState([]);
   const [filtroGrupo, setFiltroGrupo] = useState("todos");
-  const [filtroEstado, setFiltroEstado] = useState("todos"); // ← NUEVO FILTRO
+  const [filtroEstado, setFiltroEstado] = useState("todos");
   const [busqueda, setBusqueda] = useState("");
   const [paginaActual, setPaginaActual] = useState(1);
   const REGISTROS_POR_PAGINA = 10;
@@ -50,6 +50,9 @@ export default function FormadorPage({ user, onLogout }) {
   const canvasRef = useRef(null);
   const animationRef = useRef(null);
 
+  // === Estado para malla de capacitación ===
+  const [mallaActiva, setMallaActiva] = useState("Portabilidad"); // ← NUEVO
+
   const fechaHoy = new Date().toISOString().split("T")[0];
   const fechaHoyFormateada = new Date().toLocaleDateString('es-PE', {
     weekday: 'long',
@@ -57,6 +60,35 @@ export default function FormadorPage({ user, onLogout }) {
     month: 'long',
     day: 'numeric'
   });
+
+  // === MALLAS DE CAPACITACIÓN ===
+  const mallasDeCapacitacion = {
+    Portabilidad: [
+      ["Espera Grupal", "00:30:00", "REPASO DÍA 1", "00:30:00", "REPASO DÍA 3", "00:30:00", "NEXUM Y CRM", "00:30:00"],
+      ["Charla Selección", "01:30:00", "DINAMICA 2", "00:30:00", "DINAMICA 3", "01:00:00", "TALLER DE TIPIFICACIONES", "01:00:00"],
+      ["Consulta RUC - Examen Psicológico", "00:30:00", "DIRECCIONES", "00:30:00", "ESTRUCTURA DE LLAMADA", "01:00:00", "REPASO GENERAL", "00:30:00"],
+      ["Presentación General", "00:20:00", "PROCESO DELIVERY", "01:00:00", "TALLER DE SPEECH DE VENTA", "01:00:00", "EXAMEN FINAL", "00:30:00"],
+      ["DÍNAMICA 1 - Rompe Hielo", "00:30:00", "Examen 2", "00:30:00", "TALLER DE ARGUMENTACIÓN", "00:30:00", "BREAK", "00:30:00"],
+      ["Charla ISO", "00:30:00", "CICLO DE FACTURACION", "01:00:00", "BREAK", "00:30:00", "CHARLA DE CALIDAD", "01:00:00"],
+      ["Examen ISO", "00:20:00", "BREAK", "00:30:00", "TALLER DE MANEJO DE OBJECIONES", "01:00:00", "CHARLA DE BACKOFFICE", "01:00:00"],
+      ["Break", "00:30:00", "EXAMEN PRÁCTICO CICLOS DE FACTURACIÓN", "01:00:00", "APLICATIVOS DE GESTIÓN", "01:00:00", "ROLL PLAY FINAL", "02:00:00"],
+      ["Producto Portabilidad", "01:50:00", "DITO - APP", "01:00:00", "EXAMEN 3 APLICATIVOS DE GESTIÓN", "00:30:00", "", ""],
+      ["Examen 1", "00:30:00", "Examen 4", "00:30:00", "", "", "", ""],
+    ],
+    Blindaje: [
+      ["Bienvenida y Normas", "00:30:00", "Repaso Día 1", "00:30:00", "Repaso Día 3", "00:30:00", "CRM Básico", "00:30:00"],
+      ["Charla de Seguridad", "01:00:00", "Dinámica 2", "00:30:00", "Dinámica 3", "01:00:00", "Taller de Tipificaciones", "01:00:00"],
+      ["Consulta RUC - Examen Psicológico", "00:30:00", "Direcciones", "00:30:00", "Estructura de Llamada", "01:00:00", "Repaso General", "00:30:00"],
+      ["Presentación General", "00:20:00", "Proceso de Blindaje", "01:00:00", "Taller de Speech de Venta", "01:00:00", "Examen Final", "00:30:00"],
+      ["Dinámica 1 - Rompe Hielo", "00:30:00", "Examen 2", "00:30:00", "Taller de Argumentación", "00:30:00", "Break", "00:30:00"],
+      ["Charla ISO", "00:30:00", "Ciclo de Facturación", "01:00:00", "Break", "00:30:00", "Charla de Calidad", "01:00:00"],
+      ["Examen ISO", "00:20:00", "Break", "00:30:00", "Taller de Manejo de Objeciones", "01:00:00", "Charla de Backoffice", "01:00:00"],
+      ["Break", "00:30:00", "Examen Práctico", "01:00:00", "Aplicativos de Gestión", "01:00:00", "Roll Play Final", "02:00:00"],
+      ["Producto Blindaje", "01:50:00", "App Blindaje", "01:00:00", "Examen 3 Aplicativos", "00:30:00", "", ""],
+      ["Examen 1", "00:30:00", "Examen 4", "00:30:00", "", "", "", ""],
+    ],
+    // Puedes agregar más campañas aquí
+  };
 
   useEffect(() => {
     cargarDatos();
@@ -644,29 +676,18 @@ export default function FormadorPage({ user, onLogout }) {
     return Object.values(map);
   }, [activosFiltrados]);
 
-  const mallaActividades = [
-    ["Espera Grupal", "00:30:00", "REPASO DÍA 1", "00:30:00", "REPASO DÍA 3", "00:30:00", "NEXUM Y CRM", "00:30:00"],
-    ["Charla Selección", "01:30:00", "DINAMICA 2", "00:30:00", "DINAMICA 3", "01:00:00", "TALLER DE TIPIFICACIONES", "01:00:00"],
-    ["Consulta RUC - Examen Psicológico", "00:30:00", "DIRECCIONES", "00:30:00", "ESTRUCTURA DE LLAMADA", "01:00:00", "REPASO GENERAL", "00:30:00"],
-    ["Presentación General", "00:20:00", "PROCESO DELIVERY", "01:00:00", "TALLER DE SPEECH DE VENTA", "01:00:00", "EXAMEN FINAL", "00:30:00"],
-    ["DÍNAMICA 1 - Rompe Hielo", "00:30:00", "Examen 2", "00:30:00", "TALLER DE ARGUMENTACIÓN", "00:30:00", "BREAK", "00:30:00"],
-    ["Charla ISO", "00:30:00", "CICLO DE FACTURACION", "01:00:00", "BREAK", "00:30:00", "CHARLA DE CALIDAD", "01:00:00"],
-    ["Examen ISO", "00:20:00", "BREAK", "00:30:00", "TALLER DE MANEJO DE OBJECIONES", "01:00:00", "CHARLA DE BACKOFFICE", "01:00:00"],
-    ["Break", "00:30:00", "EXAMEN PRÁCTICO CICLOS DE FACTURACIÓN", "01:00:00", "APLICATIVOS DE GESTIÓN", "01:00:00", "ROLL PLAY FINAL", "02:00:00"],
-    ["Producto Portabilidad", "01:50:00", "DITO - APP", "01:00:00", "EXAMEN 3 APLICATIVOS DE GESTIÓN", "00:30:00", "", ""],
-    ["Examen 1", "00:30:00", "Examen 4", "00:30:00", "", "", "", ""],
-  ];
-
+  // 🔁 Actividades por día según malla activa
   const actividadesPorDia = useMemo(() => {
     const dias = { 1: [], 2: [], 3: [], 4: [] };
-    mallaActividades.forEach(row => {
+    const mallaActual = mallasDeCapacitacion[mallaActiva] || mallasDeCapacitacion.Portabilidad;
+    mallaActual.forEach(row => {
       if (row[0] && row[1]) dias[1].push({ actividad: row[0], tiempo: row[1] });
       if (row[2] && row[3]) dias[2].push({ actividad: row[2], tiempo: row[3] });
       if (row[4] && row[5]) dias[3].push({ actividad: row[4], tiempo: row[5] });
       if (row[6] && row[7]) dias[4].push({ actividad: row[6], tiempo: row[7] });
     });
     return dias;
-  }, []);
+  }, [mallaActiva]);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 overflow-hidden">
@@ -1059,7 +1080,7 @@ export default function FormadorPage({ user, onLogout }) {
               </select>
             </div>
             <div>
-              <label className="block text-xs font-medium text-gray-300 mb-1">Filtrar por Estado</label> {/* ← NUEVO FILTRO */}
+              <label className="block text-xs font-medium text-gray-300 mb-1">Filtrar por Estado</label>
               <select
                 value={filtroEstado}
                 onChange={(e) => {
@@ -1261,7 +1282,7 @@ export default function FormadorPage({ user, onLogout }) {
         </div>
       </div>
 
-      {/* SECCIÓN: MALLA DE CAPACITACIÓN */}
+      {/* SECCIÓN: MALLA DE CAPACITACIÓN CON PESTAÑAS */}
       <div className="max-w-[95vw] mx-auto px-4 md:px-8 py-6">
         <div className="bg-white/10 backdrop-blur-md rounded-2xl border border-white/20 shadow-xl shadow-purple-500/5 p-6">
           <h2 className="font-semibold text-xl text-white mb-4 flex items-center gap-2">
@@ -1272,6 +1293,25 @@ export default function FormadorPage({ user, onLogout }) {
             </span>
             Malla de Capacitación
           </h2>
+
+          {/* PESTAÑAS */}
+          <div className="flex space-x-2 mb-4 border-b border-white/20 pb-2 overflow-x-auto hide-scrollbar">
+            {Object.keys(mallasDeCapacitacion).map((nombreMalla) => (
+              <button
+                key={nombreMalla}
+                onClick={() => setMallaActiva(nombreMalla)}
+                className={`px-4 py-2 rounded-t-lg font-medium text-sm transition-colors ${
+                  mallaActiva === nombreMalla
+                    ? "bg-white/20 text-amber-300 border-b-2 border-amber-400"
+                    : "text-gray-300 hover:bg-white/10"
+                }`}
+              >
+                {nombreMalla}
+              </button>
+            ))}
+          </div>
+
+          {/* CONTENIDO DE LA MALLA */}
           <div className="flex overflow-x-auto gap-6 pb-4 hide-scrollbar" style={{ scrollSnapType: 'x mandatory' }}>
             {[1, 2, 3, 4].map(dia => (
               <div
