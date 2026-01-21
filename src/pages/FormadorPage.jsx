@@ -87,7 +87,6 @@ export default function FormadorPage({ user, onLogout }) {
       ["Producto Blindaje", "01:50:00", "App Blindaje", "01:00:00", "Examen 3 Aplicativos", "00:30:00", "", ""],
       ["Examen 1", "00:30:00", "Examen 4", "00:30:00", "", "", "", ""],
     ],
-    // Puedes agregar más campañas aquí
   };
 
   useEffect(() => {
@@ -272,6 +271,10 @@ export default function FormadorPage({ user, onLogout }) {
           nombre,
           estado,
           grupo_nombre,
+          qr_id,
+          segmento_prefiltro,
+          certifica,
+          segmento_certificado,
           dia_1,
           dia_2,
           dia_3,
@@ -279,8 +282,7 @@ export default function FormadorPage({ user, onLogout }) {
           dia_5,
           dia_6,
           fecha_baja,
-          motivo_baja,
-          qr_id
+          motivo_baja
         `)
         .eq("rol", "usuario")
         .order("nombre", { ascending: true });
@@ -327,26 +329,45 @@ export default function FormadorPage({ user, onLogout }) {
     setLoading(true);
     try {
       const cambios = {};
+
+      // Días
       for (let i = 1; i <= 6; i++) {
         const key = `dia_${i}`;
         if (valoresEditables[key] !== undefined) {
           cambios[key] = valoresEditables[key] === "" ? null : valoresEditables[key];
         }
       }
+
+      // Nuevas columnas
+      if (valoresEditables.segmento_prefiltro !== undefined) {
+        cambios.segmento_prefiltro = valoresEditables.segmento_prefiltro || null;
+      }
+      if (valoresEditables.certifica !== undefined) {
+        cambios.certifica = valoresEditables.certifica || null;
+      }
+      if (valoresEditables.segmento_certificado !== undefined) {
+        cambios.segmento_certificado = valoresEditables.segmento_certificado || null;
+      }
+
+      // Fecha y motivo baja
       if (valoresEditables.fecha_baja !== undefined) {
         cambios.fecha_baja = valoresEditables.fecha_baja || null;
       }
       if (valoresEditables.motivo_baja !== undefined) {
         cambios.motivo_baja = valoresEditables.motivo_baja || null;
       }
+
       const { error } = await supabase
         .from("usuarios")
         .update(cambios)
         .eq("id", userId);
+
       if (error) throw error;
+
       setUsuariosDotacion(prev =>
         prev.map(u => u.id === userId ? { ...u, ...cambios } : u)
       );
+
       setFilaEditando(null);
       setValoresEditables({});
       mostrarMensaje("success", "✅ Cambios guardados");
@@ -363,6 +384,10 @@ export default function FormadorPage({ user, onLogout }) {
     for (let i = 1; i <= 6; i++) {
       campos[`dia_${i}`] = usuario[`dia_${i}`] || "";
     }
+    // Nuevas columnas
+    campos.segmento_prefiltro = usuario.segmento_prefiltro || "";
+    campos.certifica = usuario.certifica || "";
+    campos.segmento_certificado = usuario.segmento_certificado || "";
     campos.fecha_baja = usuario.fecha_baja || "";
     campos.motivo_baja = usuario.motivo_baja || "";
     setValoresEditables(campos);
@@ -625,15 +650,12 @@ export default function FormadorPage({ user, onLogout }) {
   // 🔁 Filtro por grupo + estado + búsqueda
   const { usuariosPaginados, totalPaginas, totalFiltrados } = useMemo(() => {
     let usuariosFiltrados = [...usuariosDotacion];
-
     if (filtroGrupo !== "todos") {
       usuariosFiltrados = usuariosFiltrados.filter(u => u.grupo_nombre === filtroGrupo);
     }
-
     if (filtroEstado !== "todos") {
       usuariosFiltrados = usuariosFiltrados.filter(u => u.estado === filtroEstado);
     }
-
     if (busqueda.trim() !== "") {
       const termino = busqueda.toLowerCase().trim();
       usuariosFiltrados = usuariosFiltrados.filter(
@@ -642,7 +664,6 @@ export default function FormadorPage({ user, onLogout }) {
           (u.usuario && u.usuario.toLowerCase().includes(termino))
       );
     }
-
     const total = usuariosFiltrados.length;
     const desde = (paginaActual - 1) * REGISTROS_POR_PAGINA;
     const hasta = desde + REGISTROS_POR_PAGINA;
@@ -744,8 +765,8 @@ export default function FormadorPage({ user, onLogout }) {
         <div className="max-w-[95vw] mx-auto px-4 md:px-8 pt-4">
           <div className={`p-4 rounded-lg shadow-sm border-l-4 animate-in slide-in-from-top duration-500 ${
             mensaje.tipo === "success" ? "bg-green-500/20 border-l-green-400 text-green-200" :
-            mensaje.tipo === "error" ? "bg-red-500/20 border-l-red-400 text-red-200" :
-            "bg-blue-500/20 border-l-blue-400 text-blue-200"
+              mensaje.tipo === "error" ? "bg-red-500/20 border-l-red-400 text-red-200" :
+                "bg-blue-500/20 border-l-blue-400 text-blue-200"
           }`}>
             <p className="text-sm">{mensaje.texto}</p>
           </div>
@@ -1127,6 +1148,9 @@ export default function FormadorPage({ user, onLogout }) {
                       <th className="px-2 py-2 text-left text-[10px] font-medium text-gray-300 uppercase tracking-wider">Rol</th>
                       <th className="px-2 py-2 text-left text-[10px] font-medium text-gray-300 uppercase tracking-wider">Grupo</th>
                       <th className="px-2 py-2 text-left text-[10px] font-medium text-gray-300 uppercase tracking-wider">Estado</th>
+                      <th className="px-2 py-2 text-center text-[10px] font-medium text-gray-300 uppercase tracking-wider">Seg. Prefiltro</th>
+                      <th className="px-2 py-2 text-center text-[10px] font-medium text-gray-300 uppercase tracking-wider">Certifica</th>
+                      <th className="px-2 py-2 text-center text-[10px] font-medium text-gray-300 uppercase tracking-wider">Seg. Certificado</th>
                       {[1,2,3,4,5,6].map(d => (
                         <th key={d} className="px-2 py-2 text-center text-[10px] font-medium text-gray-300 uppercase tracking-wider">Día {d}</th>
                       ))}
@@ -1144,8 +1168,8 @@ export default function FormadorPage({ user, onLogout }) {
                           <td className="px-2 py-2 whitespace-nowrap">
                             <span className={`inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-medium ${
                               u.rol === 'Administrador' ? 'bg-purple-500/20 text-purple-300' :
-                              u.rol === 'Formador' ? 'bg-green-500/20 text-green-300' :
-                              'bg-blue-500/20 text-blue-300'
+                                u.rol === 'Formador' ? 'bg-green-500/20 text-green-300' :
+                                  'bg-blue-500/20 text-blue-300'
                             }`}>
                               {u.rol}
                             </span>
@@ -1158,6 +1182,62 @@ export default function FormadorPage({ user, onLogout }) {
                               {u.estado}
                             </span>
                           </td>
+
+                          {/* segmento_prefiltro */}
+                          <td className="px-2 py-2 whitespace-nowrap text-center">
+                            {filaEditando === u.id ? (
+                              <select
+                                value={valoresEditables.segmento_prefiltro || ""}
+                                onChange={(e) => handleInputChange("segmento_prefiltro", e.target.value)}
+                                className="w-full bg-white/10 border border-white/20 text-white text-[10px] rounded px-1 py-0.5 focus:ring-1 focus:ring-purple-400 focus:border-transparent"
+                              >
+                                <option value="">—</option>
+                                {['A', 'B', 'C'].map(op => (
+                                  <option key={op} value={op} className="bg-slate-800">{op}</option>
+                                ))}
+                              </select>
+                            ) : (
+                              <span className="text-gray-300 text-xs">{u.segmento_prefiltro || "—"}</span>
+                            )}
+                          </td>
+
+                          {/* certifica */}
+                          <td className="px-2 py-2 whitespace-nowrap text-center">
+                            {filaEditando === u.id ? (
+                              <select
+                                value={valoresEditables.certifica || ""}
+                                onChange={(e) => handleInputChange("certifica", e.target.value)}
+                                className="w-full bg-white/10 border border-white/20 text-white text-[10px] rounded px-1 py-0.5 focus:ring-1 focus:ring-purple-400 focus:border-transparent"
+                              >
+                                <option value="">—</option>
+                                {['SI', 'NO'].map(op => (
+                                  <option key={op} value={op} className="bg-slate-800">{op}</option>
+                                ))}
+                              </select>
+                            ) : (
+                              <span className="text-gray-300 text-xs">{u.certifica || "—"}</span>
+                            )}
+                          </td>
+
+                          {/* segmento_certificado */}
+                          <td className="px-2 py-2 whitespace-nowrap text-center">
+                            {filaEditando === u.id ? (
+                              <select
+                                value={valoresEditables.segmento_certificado || ""}
+                                onChange={(e) => handleInputChange("segmento_certificado", e.target.value)}
+                                className="w-full bg-white/10 border border-white/20 text-white text-[10px] rounded px-1 py-0.5 focus:ring-1 focus:ring-purple-400 focus:border-transparent"
+                              >
+                                <option value="">—</option>
+                                {['A', 'B', 'C'].map(op => (
+                                  <option key={op} value={op} className="bg-slate-800">{op}</option>
+                                ))}
+                              </select>
+                            ) : (
+                              <span className="text-gray-300 text-xs">{u.segmento_certificado || "—"}</span>
+                            )}
+                          </td>
+
+                          {/* Días */}
                           {[1,2,3,4,5,6].map(d => {
                             const key = `dia_${d}`;
                             const esEditable = filaEditando === u.id;
@@ -1182,6 +1262,8 @@ export default function FormadorPage({ user, onLogout }) {
                               </td>
                             );
                           })}
+
+                          {/* Fecha y motivo baja */}
                           <td className="px-2 py-2 whitespace-nowrap text-center">
                             {filaEditando === u.id ? (
                               <input
@@ -1207,6 +1289,8 @@ export default function FormadorPage({ user, onLogout }) {
                               <span className="text-gray-300 text-xs">{u.motivo_baja || "—"}</span>
                             )}
                           </td>
+
+                          {/* Acciones */}
                           <td className="px-2 py-2 whitespace-nowrap">
                             {filaEditando === u.id ? (
                               <div className="flex gap-1">
@@ -1250,7 +1334,7 @@ export default function FormadorPage({ user, onLogout }) {
                       ))
                     ) : (
                       <tr>
-                        <td colSpan="13" className="px-4 py-6 text-center text-gray-400 text-xs">
+                        <td colSpan="16" className="px-4 py-6 text-center text-gray-400 text-xs">
                           No se encontraron usuarios con ese filtro.
                         </td>
                       </tr>
@@ -1293,7 +1377,6 @@ export default function FormadorPage({ user, onLogout }) {
             </span>
             Malla de Capacitación
           </h2>
-
           {/* PESTAÑAS */}
           <div className="flex space-x-2 mb-4 border-b border-white/20 pb-2 overflow-x-auto hide-scrollbar">
             {Object.keys(mallasDeCapacitacion).map((nombreMalla) => (
@@ -1310,7 +1393,6 @@ export default function FormadorPage({ user, onLogout }) {
               </button>
             ))}
           </div>
-
           {/* CONTENIDO DE LA MALLA */}
           <div className="flex overflow-x-auto gap-6 pb-4 hide-scrollbar" style={{ scrollSnapType: 'x mandatory' }}>
             {[1, 2, 3, 4].map(dia => (
