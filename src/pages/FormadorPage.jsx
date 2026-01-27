@@ -26,10 +26,10 @@ export default function FormadorPage({ user, onLogout }) {
   const [loading, setLoading] = useState(false);
   const [mensaje, setMensaje] = useState({ tipo: "", texto: "" });
   const [expandedGroupId, setExpandedGroupId] = useState(null);
-
+  
   // === Estados para filtro por grupo en cursos activos ===
   const [filtroGrupoActivo, setFiltroGrupoActivo] = useState("todos");
-
+  
   // === Estados para Dotación ===
   const [usuariosDotacion, setUsuariosDotacion] = useState([]);
   const [gruposDisponibles, setGruposDisponibles] = useState([]);
@@ -38,21 +38,21 @@ export default function FormadorPage({ user, onLogout }) {
   const [busqueda, setBusqueda] = useState("");
   const [paginaActual, setPaginaActual] = useState(1);
   const REGISTROS_POR_PAGINA = 10;
-
+  
   // === Estado para edición por fila ===
   const [filaEditando, setFilaEditando] = useState(null);
   const [valoresEditables, setValoresEditables] = useState({});
-
+  
   // === Estados para QR ===
   const [escaneandoQR, setEscaneandoQR] = useState(false);
   const [mensajeQR, setMensajeQR] = useState(null);
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
   const animationRef = useRef(null);
-
+  
   // === Estado para malla de capacitación ===
   const [mallaActiva, setMallaActiva] = useState("Portabilidad"); // ← NUEVO
-
+  
   const fechaHoy = new Date().toISOString().split("T")[0];
   const fechaHoyFormateada = new Date().toLocaleDateString('es-PE', {
     weekday: 'long',
@@ -60,7 +60,7 @@ export default function FormadorPage({ user, onLogout }) {
     month: 'long',
     day: 'numeric'
   });
-
+  
   // === MALLAS DE CAPACITACIÓN ===
   const mallasDeCapacitacion = {
     Portabilidad: [
@@ -93,6 +93,184 @@ export default function FormadorPage({ user, onLogout }) {
     cargarDatos();
     cargarUsuariosDotacion();
   }, []);
+
+  // ✅ NUEVA FUNCIÓN: Descargar CSV
+  const descargarCSV = () => {
+    // Obtener todos los usuarios filtrados (sin paginación)
+    let usuariosFiltrados = [...usuariosDotacion];
+    
+    if (filtroGrupo !== "todos") {
+      usuariosFiltrados = usuariosFiltrados.filter(u => u.grupo_nombre === filtroGrupo);
+    }
+    
+    if (filtroEstado !== "todos") {
+      usuariosFiltrados = usuariosFiltrados.filter(u => u.estado === filtroEstado);
+    }
+    
+    if (busqueda.trim() !== "") {
+      const termino = busqueda.toLowerCase().trim();
+      usuariosFiltrados = usuariosFiltrados.filter(
+        u =>
+          (u.nombre && u.nombre.toLowerCase().includes(termino)) ||
+          (u.usuario && u.usuario.toLowerCase().includes(termino))
+      );
+    }
+    
+    if (usuariosFiltrados.length === 0) {
+      mostrarMensaje("warning", "⚠️ No hay datos para descargar");
+      return;
+    }
+    
+    // Encabezados del CSV
+    const headers = [
+      "Nombre",
+      "Usuario",
+      "Rol",
+      "Grupo",
+      "Estado",
+      "Segmento Prefiltro",
+      "Certifica",
+      "Segmento Certificado",
+      "Día 1",
+      "Día 2",
+      "Día 3",
+      "Día 4",
+      "Día 5",
+      "Día 6",
+      "Fecha Baja",
+      "Motivo Baja"
+    ];
+    
+    // Convertir datos a CSV
+    const csvRows = [];
+    csvRows.push(headers.join(","));
+    
+    usuariosFiltrados.forEach(u => {
+      const row = [
+        `"${u.nombre || ''}"`,
+        `"${u.usuario || ''}"`,
+        u.rol || '',
+        u.grupo_nombre || '',
+        u.estado || '',
+        u.segmento_prefiltro || '',
+        u.certifica || '',
+        u.segmento_certificado || '',
+        u.dia_1 || '',
+        u.dia_2 || '',
+        u.dia_3 || '',
+        u.dia_4 || '',
+        u.dia_5 || '',
+        u.dia_6 || '',
+        u.fecha_baja || '',
+        `"${u.motivo_baja || ''}"`
+      ];
+      csvRows.push(row.join(","));
+    });
+    
+    // Crear blob y descargar
+    const csvContent = csvRows.join("\n");
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute("download", `dotacion_${new Date().toISOString().split('T')[0]}.csv`);
+    link.style.visibility = "hidden";
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+    
+    mostrarMensaje("success", `✅ Descargado ${usuariosFiltrados.length} registros en CSV`);
+  };
+
+  // ✅ NUEVA FUNCIÓN: Descargar Excel (formato CSV con extensión .xlsx)
+  const descargarExcel = () => {
+    // Obtener todos los usuarios filtrados (sin paginación)
+    let usuariosFiltrados = [...usuariosDotacion];
+    
+    if (filtroGrupo !== "todos") {
+      usuariosFiltrados = usuariosFiltrados.filter(u => u.grupo_nombre === filtroGrupo);
+    }
+    
+    if (filtroEstado !== "todos") {
+      usuariosFiltrados = usuariosFiltrados.filter(u => u.estado === filtroEstado);
+    }
+    
+    if (busqueda.trim() !== "") {
+      const termino = busqueda.toLowerCase().trim();
+      usuariosFiltrados = usuariosFiltrados.filter(
+        u =>
+          (u.nombre && u.nombre.toLowerCase().includes(termino)) ||
+          (u.usuario && u.usuario.toLowerCase().includes(termino))
+      );
+    }
+    
+    if (usuariosFiltrados.length === 0) {
+      mostrarMensaje("warning", "⚠️ No hay datos para descargar");
+      return;
+    }
+    
+    // Encabezados del Excel
+    const headers = [
+      "Nombre",
+      "Usuario",
+      "Rol",
+      "Grupo",
+      "Estado",
+      "Segmento Prefiltro",
+      "Certifica",
+      "Segmento Certificado",
+      "Día 1",
+      "Día 2",
+      "Día 3",
+      "Día 4",
+      "Día 5",
+      "Día 6",
+      "Fecha Baja",
+      "Motivo Baja"
+    ];
+    
+    // Convertir datos a CSV (formato compatible con Excel)
+    const csvRows = [];
+    csvRows.push(headers.join("\t"));
+    
+    usuariosFiltrados.forEach(u => {
+      const row = [
+        u.nombre || '',
+        u.usuario || '',
+        u.rol || '',
+        u.grupo_nombre || '',
+        u.estado || '',
+        u.segmento_prefiltro || '',
+        u.certifica || '',
+        u.segmento_certificado || '',
+        u.dia_1 || '',
+        u.dia_2 || '',
+        u.dia_3 || '',
+        u.dia_4 || '',
+        u.dia_5 || '',
+        u.dia_6 || '',
+        u.fecha_baja || '',
+        u.motivo_baja || ''
+      ];
+      csvRows.push(row.join("\t"));
+    });
+    
+    // Crear blob y descargar como Excel
+    const csvContent = "\ufeff" + csvRows.join("\n"); // BOM para Excel
+    const blob = new Blob([csvContent], { type: "application/vnd.ms-excel;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute("download", `dotacion_${new Date().toISOString().split('T')[0]}.xlsx`);
+    link.style.visibility = "hidden";
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+    
+    mostrarMensaje("success", `✅ Descargado ${usuariosFiltrados.length} registros en Excel`);
+  };
 
   const mostrarMensaje = (tipo, texto) => {
     setMensaje({ tipo, texto });
@@ -131,7 +309,9 @@ export default function FormadorPage({ user, onLogout }) {
         .from("grupos")
         .select("*")
         .eq("campana_id", campana_id);
+      
       if (gruposError) throw gruposError;
+      
       const gruposConConteo = await Promise.all(
         (gruposData || []).map(async (g) => {
           try {
@@ -141,6 +321,7 @@ export default function FormadorPage({ user, onLogout }) {
               .eq("grupo_nombre", g.nombre)
               .eq("rol", "usuario")
               .eq("estado", "Activo");
+            
             return {
               ...g,
               activos: count || 0,
@@ -158,6 +339,7 @@ export default function FormadorPage({ user, onLogout }) {
           }
         })
       );
+      
       setGrupos(gruposConConteo);
     } catch (err) {
       console.error("Error en cargarGrupos:", err);
@@ -178,12 +360,14 @@ export default function FormadorPage({ user, onLogout }) {
         .eq("campana_id", campana_id)
         .eq("dia", dia)
         .eq("estado", "Activo");
+      
       if (grupo_id) {
         const grupoIdNum = Number(grupo_id);
         if (!isNaN(grupoIdNum)) {
           query = query.or(`grupo_id.is.null,grupo_id.eq.${grupoIdNum}`);
         }
       }
+      
       const { data, error } = await query;
       if (error) throw error;
       setCursos(data || []);
@@ -203,6 +387,7 @@ export default function FormadorPage({ user, onLogout }) {
       setGruposConCursos([]);
       return;
     }
+    
     try {
       const { data, error } = await supabase
         .from("cursos_activados")
@@ -219,12 +404,15 @@ export default function FormadorPage({ user, onLogout }) {
         `)
         .eq("formador_id", user.id)
         .order("fecha", { ascending: false });
+      
       if (error) throw error;
+      
       if (!data || data.length === 0) {
         setActivos([]);
         setGruposConCursos([]);
         return;
       }
+      
       const activosConConteo = await Promise.all(
         data.map(async (activado) => {
           try {
@@ -232,6 +420,7 @@ export default function FormadorPage({ user, onLogout }) {
               .from("cursos_asesores")
               .select("*", { count: "exact", head: true })
               .eq("curso_activado_id", activado.id);
+            
             return { ...activado, asesores_count: count || 0 };
           } catch (err) {
             console.error(`Error contando asesores para curso ${activado.id}:`, err);
@@ -239,7 +428,9 @@ export default function FormadorPage({ user, onLogout }) {
           }
         })
       );
+      
       setActivos(activosConConteo);
+      
       const gruposMap = {};
       activosConConteo.forEach((a) => {
         const grupoId = a.grupo_id;
@@ -250,6 +441,7 @@ export default function FormadorPage({ user, onLogout }) {
           gruposMap[grupoId].cursos.push(a);
         }
       });
+      
       setGruposConCursos(Object.values(gruposMap));
     } catch (err) {
       console.error("Error al cargar cursos activos:", err);
@@ -286,8 +478,11 @@ export default function FormadorPage({ user, onLogout }) {
         `)
         .eq("rol", "usuario")
         .order("nombre", { ascending: true });
+      
       if (errUsuarios) throw errUsuarios;
+      
       setUsuariosDotacion(usuarios || []);
+      
       const gruposSet = new Set(
         (usuarios || [])
           .map(u => u.grupo_nombre)
@@ -312,10 +507,13 @@ export default function FormadorPage({ user, onLogout }) {
         .from("usuarios")
         .update({ estado: nuevoEstado })
         .eq("id", userId);
+      
       if (error) throw error;
+      
       setUsuariosDotacion(prev =>
         prev.map(u => (u.id === userId ? { ...u, estado: nuevoEstado } : u))
       );
+      
       mostrarMensaje("success", "✅ Estado actualizado correctamente");
     } catch (err) {
       console.error("Error al actualizar estado:", err);
@@ -329,7 +527,7 @@ export default function FormadorPage({ user, onLogout }) {
     setLoading(true);
     try {
       const cambios = {};
-
+      
       // Días
       for (let i = 1; i <= 6; i++) {
         const key = `dia_${i}`;
@@ -337,7 +535,7 @@ export default function FormadorPage({ user, onLogout }) {
           cambios[key] = valoresEditables[key] === "" ? null : valoresEditables[key];
         }
       }
-
+      
       // Nuevas columnas
       if (valoresEditables.segmento_prefiltro !== undefined) {
         cambios.segmento_prefiltro = valoresEditables.segmento_prefiltro || null;
@@ -348,7 +546,7 @@ export default function FormadorPage({ user, onLogout }) {
       if (valoresEditables.segmento_certificado !== undefined) {
         cambios.segmento_certificado = valoresEditables.segmento_certificado || null;
       }
-
+      
       // Fecha y motivo baja
       if (valoresEditables.fecha_baja !== undefined) {
         cambios.fecha_baja = valoresEditables.fecha_baja || null;
@@ -356,18 +554,18 @@ export default function FormadorPage({ user, onLogout }) {
       if (valoresEditables.motivo_baja !== undefined) {
         cambios.motivo_baja = valoresEditables.motivo_baja || null;
       }
-
+      
       const { error } = await supabase
         .from("usuarios")
         .update(cambios)
         .eq("id", userId);
-
+      
       if (error) throw error;
-
+      
       setUsuariosDotacion(prev =>
         prev.map(u => u.id === userId ? { ...u, ...cambios } : u)
       );
-
+      
       setFilaEditando(null);
       setValoresEditables({});
       mostrarMensaje("success", "✅ Cambios guardados");
@@ -390,6 +588,7 @@ export default function FormadorPage({ user, onLogout }) {
     campos.segmento_certificado = usuario.segmento_certificado || "";
     campos.fecha_baja = usuario.fecha_baja || "";
     campos.motivo_baja = usuario.motivo_baja || "";
+    
     setValoresEditables(campos);
     setFilaEditando(usuario.id);
   };
@@ -405,6 +604,7 @@ export default function FormadorPage({ user, onLogout }) {
 
   const renderBadgeAsistencia = (estado) => {
     if (!estado) return <span className="text-gray-500 text-xs">—</span>;
+    
     const config = {
       "ASISTIÓ": { icon: "✅", color: "bg-green-500/20 text-green-100" },
       "FALTA": { icon: "❌", color: "bg-red-500/20 text-red-100" },
@@ -414,7 +614,9 @@ export default function FormadorPage({ user, onLogout }) {
       "RETIRADO": { icon: "🚶‍♂️", color: "bg-orange-500/20 text-orange-900" },
       "NO APROBO ROLE PLAY": { icon: "📉", color: "bg-blue-500/20 text-blue-100" },
     };
+    
     const { icon, color } = config[estado] || { icon: "?", color: "bg-gray-500/20 text-gray-300" };
+    
     return (
       <span className={`inline-flex items-center gap-0.5 px-1 py-0.5 rounded-full text-[10px] font-medium ${color}`}>
         {icon}
@@ -425,18 +627,23 @@ export default function FormadorPage({ user, onLogout }) {
   // --- LÓGICA DE QR ---
   const procesarFrame = () => {
     if (!videoRef.current || !canvasRef.current) return;
+    
     const video = videoRef.current;
     const canvas = canvasRef.current;
     const ctx = canvas.getContext("2d");
+    
     if (video.readyState === video.HAVE_ENOUGH_DATA) {
       canvas.height = video.videoHeight;
       canvas.width = video.videoWidth;
       ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      
       const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      
       if (typeof jsQR !== 'undefined') {
         const qrCode = jsQR(imageData.data, imageData.width, imageData.height, {
           inversionAttempts: "dontInvert",
         });
+        
         if (qrCode) {
           detenerLecturaQR();
           procesarAsistenciaQR(qrCode.data);
@@ -444,6 +651,7 @@ export default function FormadorPage({ user, onLogout }) {
         }
       }
     }
+    
     if (escaneandoQR) {
       animationRef.current = requestAnimationFrame(procesarFrame);
     }
@@ -454,8 +662,10 @@ export default function FormadorPage({ user, onLogout }) {
       setMensajeQR({ tipo: "error", texto: "⚠️ Primero selecciona un día." });
       return;
     }
+    
     setEscaneandoQR(true);
     setMensajeQR(null);
+    
     navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } })
       .then(stream => {
         if (videoRef.current) {
@@ -473,9 +683,11 @@ export default function FormadorPage({ user, onLogout }) {
 
   const detenerLecturaQR = () => {
     setEscaneandoQR(false);
+    
     if (animationRef.current) {
       cancelAnimationFrame(animationRef.current);
     }
+    
     if (videoRef.current?.srcObject) {
       videoRef.current.srcObject.getTracks().forEach(track => track.stop());
     }
@@ -484,30 +696,38 @@ export default function FormadorPage({ user, onLogout }) {
   const procesarAsistenciaQR = async (qrContent) => {
     setLoading(true);
     setMensajeQR({ tipo: "info", texto: `🔍 Procesando QR...` });
+    
     try {
       const qr_id = qrContent.trim();
       if (!qr_id) throw new Error("Código QR vacío");
+      
       const { data: usuario, error } = await supabase
         .from("usuarios")
         .select("id, nombre, usuario")
         .eq("qr_id", qr_id)
         .single();
+      
       if (error || !usuario) {
         throw new Error("Usuario no encontrado con ese QR.");
       }
+      
       const campoDia = `dia_${seleccion.dia}`;
       const { error: updateError } = await supabase
         .from("usuarios")
         .update({ [campoDia]: "ASISTIÓ" })
         .eq("id", usuario.id);
+      
       if (updateError) throw updateError;
+      
       setUsuariosDotacion(prev =>
         prev.map(u => u.id === usuario.id ? { ...u, [campoDia]: "ASISTIÓ" } : u)
       );
+      
       setMensajeQR({
         tipo: "success",
         texto: `✅ ¡Asistencia registrada! ${usuario.nombre} - Día ${seleccion.dia}`
       });
+      
       mostrarMensaje("success", `✅ Asistencia registrada para ${usuario.nombre} (Día ${seleccion.dia})`);
     } catch (err) {
       console.error("Error al procesar QR:", err);
@@ -522,11 +742,14 @@ export default function FormadorPage({ user, onLogout }) {
 
   const activarCurso = async () => {
     const { campana_id, dia, grupo_id, curso_id } = seleccion;
+    
     if (!campana_id || !dia || !grupo_id || !curso_id) {
       mostrarMensaje("error", "⚠️ Debes seleccionar campaña, día, grupo y curso");
       return;
     }
+    
     setLoading(true);
+    
     try {
       const { data: existe } = await supabase
         .from("cursos_activados")
@@ -536,10 +759,12 @@ export default function FormadorPage({ user, onLogout }) {
         .eq("grupo_id", grupo_id)
         .eq("curso_id", curso_id)
         .maybeSingle();
+      
       if (existe) {
         mostrarMensaje("error", "⚠️ Este curso ya está activado hoy para esa campaña y grupo");
         return;
       }
+      
       const { data: activacion, error } = await supabase
         .from("cursos_activados")
         .insert([
@@ -554,20 +779,26 @@ export default function FormadorPage({ user, onLogout }) {
         ])
         .select()
         .single();
+      
       if (error) throw error;
+      
       const { data: grupo, error: errGrupo } = await supabase
         .from("grupos")
         .select("nombre")
         .eq("id", grupo_id)
         .single();
+      
       if (errGrupo || !grupo) throw new Error("No se pudo obtener el grupo");
+      
       const { data: asesores, error: errAsesores } = await supabase
         .from("usuarios")
         .select("id")
         .eq("rol", "usuario")
         .eq("grupo_nombre", grupo.nombre)
         .eq("estado", "Activo");
+      
       if (errAsesores) throw errAsesores;
+      
       if (asesores && asesores.length > 0) {
         const { error: errorInsert } = await supabase.from("cursos_asesores").insert(
           asesores.map((u) => ({
@@ -575,6 +806,7 @@ export default function FormadorPage({ user, onLogout }) {
             asesor_id: u.id,
           }))
         );
+        
         if (errorInsert) {
           mostrarMensaje("success", "✅ Curso activado (pero hubo problemas al asignar algunos asesores)");
         } else {
@@ -583,6 +815,7 @@ export default function FormadorPage({ user, onLogout }) {
       } else {
         mostrarMensaje("success", "✅ Curso activado (sin asesores activos en el grupo)");
       }
+      
       await cargarActivos();
       await cargarGrupos(seleccion.campana_id);
       setSeleccion({ ...seleccion, curso_id: "" });
@@ -598,18 +831,24 @@ export default function FormadorPage({ user, onLogout }) {
     if (!window.confirm("¿Seguro que deseas desactivar este curso? Se eliminarán todas las asignaciones a asesores.")) {
       return;
     }
+    
     setLoading(true);
+    
     try {
       const { error: errorAsesores } = await supabase
         .from("cursos_asesores")
         .delete()
         .eq("curso_activado_id", id);
+      
       if (errorAsesores) throw errorAsesores;
+      
       const { error } = await supabase
         .from("cursos_activados")
         .delete()
         .eq("id", id);
+      
       if (error) throw error;
+      
       mostrarMensaje("success", "🗑️ Curso desactivado correctamente");
       await cargarActivos();
     } catch (err) {
@@ -650,12 +889,15 @@ export default function FormadorPage({ user, onLogout }) {
   // 🔁 Filtro por grupo + estado + búsqueda
   const { usuariosPaginados, totalPaginas, totalFiltrados } = useMemo(() => {
     let usuariosFiltrados = [...usuariosDotacion];
+    
     if (filtroGrupo !== "todos") {
       usuariosFiltrados = usuariosFiltrados.filter(u => u.grupo_nombre === filtroGrupo);
     }
+    
     if (filtroEstado !== "todos") {
       usuariosFiltrados = usuariosFiltrados.filter(u => u.estado === filtroEstado);
     }
+    
     if (busqueda.trim() !== "") {
       const termino = busqueda.toLowerCase().trim();
       usuariosFiltrados = usuariosFiltrados.filter(
@@ -664,11 +906,13 @@ export default function FormadorPage({ user, onLogout }) {
           (u.usuario && u.usuario.toLowerCase().includes(termino))
       );
     }
+    
     const total = usuariosFiltrados.length;
     const desde = (paginaActual - 1) * REGISTROS_POR_PAGINA;
     const hasta = desde + REGISTROS_POR_PAGINA;
     const pagina = usuariosFiltrados.slice(desde, hasta);
     const totalPag = Math.ceil(total / REGISTROS_POR_PAGINA) || 1;
+    
     return { usuariosPaginados: pagina, totalPaginas: totalPag, totalFiltrados: total };
   }, [usuariosDotacion, filtroGrupo, filtroEstado, busqueda, paginaActual, REGISTROS_POR_PAGINA]);
 
@@ -701,12 +945,14 @@ export default function FormadorPage({ user, onLogout }) {
   const actividadesPorDia = useMemo(() => {
     const dias = { 1: [], 2: [], 3: [], 4: [] };
     const mallaActual = mallasDeCapacitacion[mallaActiva] || mallasDeCapacitacion.Portabilidad;
+    
     mallaActual.forEach(row => {
       if (row[0] && row[1]) dias[1].push({ actividad: row[0], tiempo: row[1] });
       if (row[2] && row[3]) dias[2].push({ actividad: row[2], tiempo: row[3] });
       if (row[4] && row[5]) dias[3].push({ actividad: row[4], tiempo: row[5] });
       if (row[6] && row[7]) dias[4].push({ actividad: row[6], tiempo: row[7] });
     });
+    
     return dias;
   }, [mallaActiva]);
 
@@ -737,7 +983,7 @@ export default function FormadorPage({ user, onLogout }) {
           scrollbar-width: none;
         }
       `}</style>
-
+      
       {/* Header */}
       <div className="bg-black/30 backdrop-blur-md border-b border-white/10 sticky top-0 z-50 shadow-sm">
         <div className="max-w-[95vw] mx-auto px-4 md:px-8 py-6">
@@ -759,20 +1005,21 @@ export default function FormadorPage({ user, onLogout }) {
           </div>
         </div>
       </div>
-
+      
       {/* Mensajes */}
       {mensaje.texto && (
         <div className="max-w-[95vw] mx-auto px-4 md:px-8 pt-4">
           <div className={`p-4 rounded-lg shadow-sm border-l-4 animate-in slide-in-from-top duration-500 ${
             mensaje.tipo === "success" ? "bg-green-500/20 border-l-green-400 text-green-200" :
-              mensaje.tipo === "error" ? "bg-red-500/20 border-l-red-400 text-red-200" :
-                "bg-blue-500/20 border-l-blue-400 text-blue-200"
+            mensaje.tipo === "error" ? "bg-red-500/20 border-l-red-400 text-red-200" :
+            mensaje.tipo === "warning" ? "bg-yellow-500/20 border-l-yellow-400 text-yellow-200" :
+            "bg-blue-500/20 border-l-blue-400 text-blue-200"
           }`}>
             <p className="text-sm">{mensaje.texto}</p>
           </div>
         </div>
       )}
-
+      
       {/* Contenido principal */}
       <div className="max-w-[95vw] mx-auto px-4 md:px-8 py-6">
         <div className="grid md:grid-cols-2 gap-6">
@@ -791,6 +1038,7 @@ export default function FormadorPage({ user, onLogout }) {
                 <div className="w-5 h-5 border-2 border-purple-400 border-t-transparent rounded-full animate-spin"></div>
               )}
             </div>
+            
             <div>
               <label className="block text-sm font-medium text-gray-300 mb-2">Campaña</label>
               <select
@@ -805,6 +1053,7 @@ export default function FormadorPage({ user, onLogout }) {
                 ))}
               </select>
             </div>
+            
             <div>
               <label className="block text-sm font-medium text-gray-300 mb-2">Día de capacitación</label>
               <select
@@ -822,6 +1071,7 @@ export default function FormadorPage({ user, onLogout }) {
                 <option value="6" className="bg-slate-800">Día 6</option>
               </select>
             </div>
+            
             <div>
               <label className="block text-sm font-medium text-gray-300 mb-2">Grupo</label>
               <select
@@ -836,6 +1086,7 @@ export default function FormadorPage({ user, onLogout }) {
                 ))}
               </select>
             </div>
+            
             {cursos.length > 0 && (
               <div className="bg-gradient-to-r from-purple-500/10 to-pink-500/10 backdrop-blur-sm rounded-xl border border-purple-500/20 p-4">
                 <h3 className="font-semibold text-white mb-3 flex items-center gap-2">
@@ -865,6 +1116,7 @@ export default function FormadorPage({ user, onLogout }) {
                 </div>
               </div>
             )}
+            
             <div>
               <label className="block text-sm font-medium text-gray-300 mb-2">Curso a activar</label>
               <select
@@ -879,6 +1131,7 @@ export default function FormadorPage({ user, onLogout }) {
                 ))}
               </select>
             </div>
+            
             <button
               onClick={activarCurso}
               disabled={!seleccion.curso_id || loading}
@@ -887,7 +1140,7 @@ export default function FormadorPage({ user, onLogout }) {
               {loading ? "Activando..." : "✨ Activar curso de hoy"}
             </button>
           </div>
-
+          
           {/* Sección derecha: Grupos asignados */}
           <div className="bg-white/10 backdrop-blur-md rounded-2xl border border-white/20 shadow-xl shadow-purple-500/5 p-6">
             <div className="flex flex-wrap items-center gap-2 mb-4">
@@ -910,6 +1163,7 @@ export default function FormadorPage({ user, onLogout }) {
                 ))}
               </select>
             </div>
+            
             {gruposConCursosFiltrados.length === 0 ? (
               <div className="text-center py-12">
                 <div className="text-6xl mb-4 text-gray-500">📭</div>
@@ -923,6 +1177,7 @@ export default function FormadorPage({ user, onLogout }) {
                   const cursosDelGrupo = grupoData.cursos;
                   const groupId = Number(cursosDelGrupo[0]?.grupo_id);
                   const isExpanded = expandedGroupId === groupId;
+                  
                   return (
                     <div
                       key={groupId}
@@ -951,6 +1206,7 @@ export default function FormadorPage({ user, onLogout }) {
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                         </svg>
                       </div>
+                      
                       {isExpanded && (
                         <div className="border-t border-white/20 p-4 space-y-3">
                           {cursosDelGrupo.map((a) => (
@@ -1009,7 +1265,7 @@ export default function FormadorPage({ user, onLogout }) {
           </div>
         </div>
       </div>
-
+      
       {/* SECCIÓN: LECTOR QR PARA ASISTENCIA */}
       <div className="max-w-[95vw] mx-auto px-4 md:px-8 py-6">
         <div className="bg-white/10 backdrop-blur-md rounded-2xl border border-white/20 shadow-xl shadow-purple-500/5 p-6">
@@ -1021,6 +1277,7 @@ export default function FormadorPage({ user, onLogout }) {
             </span>
             Registrar Asistencia por QR
           </h2>
+          
           <div className="flex flex-wrap gap-4 items-end mb-4">
             <div>
               <label className="block text-xs font-medium text-gray-300 mb-1">Seleccionar Día</label>
@@ -1038,6 +1295,7 @@ export default function FormadorPage({ user, onLogout }) {
                 <option value="6" className="bg-slate-800">Día 6</option>
               </select>
             </div>
+            
             <button
               onClick={iniciarLecturaQR}
               disabled={!seleccion.dia || loading}
@@ -1049,6 +1307,7 @@ export default function FormadorPage({ user, onLogout }) {
               Iniciar Escaneo QR
             </button>
           </div>
+          
           {escaneandoQR && (
             <div className="mt-4 p-4 bg-black/30 rounded-lg relative">
               <video ref={videoRef} style={{ display: 'none' }} />
@@ -1064,6 +1323,7 @@ export default function FormadorPage({ user, onLogout }) {
               </button>
             </div>
           )}
+          
           {mensajeQR && (
             <div className={`mt-3 p-2 rounded text-xs ${mensajeQR.tipo === 'success' ? 'bg-green-500/20 text-green-200' : 'bg-red-500/20 text-red-200'}`}>
               {mensajeQR.texto}
@@ -1071,7 +1331,7 @@ export default function FormadorPage({ user, onLogout }) {
           )}
         </div>
       </div>
-
+      
       {/* SECCIÓN: TABLA DE DOTACIÓN */}
       <div className="max-w-[95vw] mx-auto px-4 md:px-8 py-6">
         <div className="bg-white/10 backdrop-blur-md rounded-2xl border border-white/20 shadow-xl shadow-purple-500/5 p-6">
@@ -1083,6 +1343,36 @@ export default function FormadorPage({ user, onLogout }) {
             </span>
             Tabla de Dotación (Usuarios)
           </h2>
+          
+          {/* ✅ NUEVO: Botones de descarga */}
+          <div className="flex flex-wrap items-center gap-3 mb-4">
+            <button
+              onClick={descargarCSV}
+              disabled={loading || totalFiltrados === 0}
+              className="px-4 py-2 bg-green-600 hover:bg-green-500 text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 shadow-md"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+              </svg>
+              Descargar CSV ({totalFiltrados})
+            </button>
+            
+            <button
+              onClick={descargarExcel}
+              disabled={loading || totalFiltrados === 0}
+              className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 shadow-md"
+            >
+              <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                <path fillRule="evenodd" d="M4 4a2 2 0 00-2 2v8a2 2 0 002 2h12a2 2 0 002-2V6a2 2 0 00-2-2H4zm2 6a2 2 0 114 0v2a2 2 0 11-4 0v-2zm8 0a2 2 0 114 0v2a2 2 0 11-4 0v-2z" clipRule="evenodd" />
+              </svg>
+              Descargar Excel ({totalFiltrados})
+            </button>
+            
+            <div className="text-xs text-gray-400 ml-auto">
+              Mostrando {usuariosPaginados.length} de {totalFiltrados} usuarios
+            </div>
+          </div>
+          
           <div className="flex flex-wrap items-center gap-4 mb-6">
             <div>
               <label className="block text-xs font-medium text-gray-300 mb-1">Filtrar por Grupo</label>
@@ -1100,6 +1390,7 @@ export default function FormadorPage({ user, onLogout }) {
                 ))}
               </select>
             </div>
+            
             <div>
               <label className="block text-xs font-medium text-gray-300 mb-1">Filtrar por Estado</label>
               <select
@@ -1115,7 +1406,8 @@ export default function FormadorPage({ user, onLogout }) {
                 <option value="Inactivo" className="bg-slate-800">Inactivo</option>
               </select>
             </div>
-            <div>
+            
+            <div className="flex-1 min-w-[250px]">
               <label className="block text-xs font-medium text-gray-300 mb-1">Buscar por nombre o usuario</label>
               <input
                 type="text"
@@ -1128,10 +1420,8 @@ export default function FormadorPage({ user, onLogout }) {
                 className="w-full bg-white/10 border border-white/20 text-white rounded-lg px-2 py-1.5 text-xs focus:ring-2 focus:ring-purple-400 focus:border-transparent placeholder-gray-400"
               />
             </div>
-            <div className="text-xs text-gray-400 mt-5">
-              Mostrando {usuariosPaginados.length} de {totalFiltrados} usuarios
-            </div>
           </div>
+          
           {loading && !usuariosDotacion.length ? (
             <div className="text-center py-12">
               <div className="animate-spin w-6 h-6 border-2 border-purple-400 border-t-transparent rounded-full mx-auto mb-3"></div>
@@ -1168,8 +1458,8 @@ export default function FormadorPage({ user, onLogout }) {
                           <td className="px-2 py-2 whitespace-nowrap">
                             <span className={`inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-medium ${
                               u.rol === 'Administrador' ? 'bg-purple-500/20 text-purple-300' :
-                                u.rol === 'Formador' ? 'bg-green-500/20 text-green-300' :
-                                  'bg-blue-500/20 text-blue-300'
+                              u.rol === 'Formador' ? 'bg-green-500/20 text-green-300' :
+                              'bg-blue-500/20 text-blue-300'
                             }`}>
                               {u.rol}
                             </span>
@@ -1182,7 +1472,7 @@ export default function FormadorPage({ user, onLogout }) {
                               {u.estado}
                             </span>
                           </td>
-
+                          
                           {/* segmento_prefiltro */}
                           <td className="px-2 py-2 whitespace-nowrap text-center">
                             {filaEditando === u.id ? (
@@ -1200,7 +1490,7 @@ export default function FormadorPage({ user, onLogout }) {
                               <span className="text-gray-300 text-xs">{u.segmento_prefiltro || "—"}</span>
                             )}
                           </td>
-
+                          
                           {/* certifica */}
                           <td className="px-2 py-2 whitespace-nowrap text-center">
                             {filaEditando === u.id ? (
@@ -1218,7 +1508,7 @@ export default function FormadorPage({ user, onLogout }) {
                               <span className="text-gray-300 text-xs">{u.certifica || "—"}</span>
                             )}
                           </td>
-
+                          
                           {/* segmento_certificado */}
                           <td className="px-2 py-2 whitespace-nowrap text-center">
                             {filaEditando === u.id ? (
@@ -1236,7 +1526,7 @@ export default function FormadorPage({ user, onLogout }) {
                               <span className="text-gray-300 text-xs">{u.segmento_certificado || "—"}</span>
                             )}
                           </td>
-
+                          
                           {/* Días */}
                           {[1,2,3,4,5,6].map(d => {
                             const key = `dia_${d}`;
@@ -1262,7 +1552,7 @@ export default function FormadorPage({ user, onLogout }) {
                               </td>
                             );
                           })}
-
+                          
                           {/* Fecha y motivo baja */}
                           <td className="px-2 py-2 whitespace-nowrap text-center">
                             {filaEditando === u.id ? (
@@ -1276,6 +1566,7 @@ export default function FormadorPage({ user, onLogout }) {
                               <span className="text-gray-300 text-xs">{u.fecha_baja || "—"}</span>
                             )}
                           </td>
+                          
                           <td className="px-2 py-2 whitespace-nowrap text-center">
                             {filaEditando === u.id ? (
                               <input
@@ -1289,7 +1580,7 @@ export default function FormadorPage({ user, onLogout }) {
                               <span className="text-gray-300 text-xs">{u.motivo_baja || "—"}</span>
                             )}
                           </td>
-
+                          
                           {/* Acciones */}
                           <td className="px-2 py-2 whitespace-nowrap">
                             {filaEditando === u.id ? (
@@ -1342,6 +1633,7 @@ export default function FormadorPage({ user, onLogout }) {
                   </tbody>
                 </table>
               </div>
+              
               {totalPaginas > 1 && (
                 <div className="flex items-center justify-between mt-4">
                   <button
@@ -1365,7 +1657,7 @@ export default function FormadorPage({ user, onLogout }) {
           )}
         </div>
       </div>
-
+      
       {/* SECCIÓN: MALLA DE CAPACITACIÓN CON PESTAÑAS */}
       <div className="max-w-[95vw] mx-auto px-4 md:px-8 py-6">
         <div className="bg-white/10 backdrop-blur-md rounded-2xl border border-white/20 shadow-xl shadow-purple-500/5 p-6">
@@ -1377,6 +1669,7 @@ export default function FormadorPage({ user, onLogout }) {
             </span>
             Malla de Capacitación
           </h2>
+          
           {/* PESTAÑAS */}
           <div className="flex space-x-2 mb-4 border-b border-white/20 pb-2 overflow-x-auto hide-scrollbar">
             {Object.keys(mallasDeCapacitacion).map((nombreMalla) => (
@@ -1393,6 +1686,7 @@ export default function FormadorPage({ user, onLogout }) {
               </button>
             ))}
           </div>
+          
           {/* CONTENIDO DE LA MALLA */}
           <div className="flex overflow-x-auto gap-6 pb-4 hide-scrollbar" style={{ scrollSnapType: 'x mandatory' }}>
             {[1, 2, 3, 4].map(dia => (
@@ -1425,12 +1719,13 @@ export default function FormadorPage({ user, onLogout }) {
               </div>
             ))}
           </div>
+          
           <div className="text-center mt-2">
             <p className="text-xs text-gray-500">Desliza horizontalmente para ver más días</p>
           </div>
         </div>
       </div>
-
+      
       {/* Elementos ocultos para QR */}
       <video ref={videoRef} style={{ display: 'none' }} />
       <canvas ref={canvasRef} style={{ display: 'none' }} />
