@@ -51,7 +51,7 @@ export default function FormadorPage({ user, onLogout }) {
   const animationRef = useRef(null);
   
   // === Estado para malla de capacitación ===
-  const [mallaActiva, setMallaActiva] = useState("Portabilidad"); // ← NUEVO
+  const [mallaActiva, setMallaActiva] = useState("Portabilidad");
   
   const fechaHoy = new Date().toISOString().split("T")[0];
   const fechaHoyFormateada = new Date().toLocaleDateString('es-PE', {
@@ -94,9 +94,8 @@ export default function FormadorPage({ user, onLogout }) {
     cargarUsuariosDotacion();
   }, []);
 
-  // ✅ NUEVA FUNCIÓN: Descargar CSV
+  // ✅ FUNCIÓN DE DESCARGA CSV (ÚNICA Y COMPLETA)
   const descargarCSV = () => {
-    // Obtener todos los usuarios filtrados (sin paginación)
     let usuariosFiltrados = [...usuariosDotacion];
     
     if (filtroGrupo !== "todos") {
@@ -121,7 +120,6 @@ export default function FormadorPage({ user, onLogout }) {
       return;
     }
     
-    // Encabezados del CSV
     const headers = [
       "Nombre",
       "Usuario",
@@ -141,7 +139,6 @@ export default function FormadorPage({ user, onLogout }) {
       "Motivo Baja"
     ];
     
-    // Convertir datos a CSV
     const csvRows = [];
     csvRows.push(headers.join(","));
     
@@ -167,7 +164,6 @@ export default function FormadorPage({ user, onLogout }) {
       csvRows.push(row.join(","));
     });
     
-    // Crear blob y descargar
     const csvContent = csvRows.join("\n");
     const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
@@ -181,95 +177,6 @@ export default function FormadorPage({ user, onLogout }) {
     URL.revokeObjectURL(url);
     
     mostrarMensaje("success", `✅ Descargado ${usuariosFiltrados.length} registros en CSV`);
-  };
-
-  // ✅ NUEVA FUNCIÓN: Descargar Excel (formato CSV con extensión .xlsx)
-  const descargarExcel = () => {
-    // Obtener todos los usuarios filtrados (sin paginación)
-    let usuariosFiltrados = [...usuariosDotacion];
-    
-    if (filtroGrupo !== "todos") {
-      usuariosFiltrados = usuariosFiltrados.filter(u => u.grupo_nombre === filtroGrupo);
-    }
-    
-    if (filtroEstado !== "todos") {
-      usuariosFiltrados = usuariosFiltrados.filter(u => u.estado === filtroEstado);
-    }
-    
-    if (busqueda.trim() !== "") {
-      const termino = busqueda.toLowerCase().trim();
-      usuariosFiltrados = usuariosFiltrados.filter(
-        u =>
-          (u.nombre && u.nombre.toLowerCase().includes(termino)) ||
-          (u.usuario && u.usuario.toLowerCase().includes(termino))
-      );
-    }
-    
-    if (usuariosFiltrados.length === 0) {
-      mostrarMensaje("warning", "⚠️ No hay datos para descargar");
-      return;
-    }
-    
-    // Encabezados del Excel
-    const headers = [
-      "Nombre",
-      "Usuario",
-      "Rol",
-      "Grupo",
-      "Estado",
-      "Segmento Prefiltro",
-      "Certifica",
-      "Segmento Certificado",
-      "Día 1",
-      "Día 2",
-      "Día 3",
-      "Día 4",
-      "Día 5",
-      "Día 6",
-      "Fecha Baja",
-      "Motivo Baja"
-    ];
-    
-    // Convertir datos a CSV (formato compatible con Excel)
-    const csvRows = [];
-    csvRows.push(headers.join("\t"));
-    
-    usuariosFiltrados.forEach(u => {
-      const row = [
-        u.nombre || '',
-        u.usuario || '',
-        u.rol || '',
-        u.grupo_nombre || '',
-        u.estado || '',
-        u.segmento_prefiltro || '',
-        u.certifica || '',
-        u.segmento_certificado || '',
-        u.dia_1 || '',
-        u.dia_2 || '',
-        u.dia_3 || '',
-        u.dia_4 || '',
-        u.dia_5 || '',
-        u.dia_6 || '',
-        u.fecha_baja || '',
-        u.motivo_baja || ''
-      ];
-      csvRows.push(row.join("\t"));
-    });
-    
-    // Crear blob y descargar como Excel
-    const csvContent = "\ufeff" + csvRows.join("\n"); // BOM para Excel
-    const blob = new Blob([csvContent], { type: "application/vnd.ms-excel;charset=utf-8;" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.setAttribute("href", url);
-    link.setAttribute("download", `dotacion_${new Date().toISOString().split('T')[0]}.xlsx`);
-    link.style.visibility = "hidden";
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
-    
-    mostrarMensaje("success", `✅ Descargado ${usuariosFiltrados.length} registros en Excel`);
   };
 
   const mostrarMensaje = (tipo, texto) => {
@@ -528,7 +435,6 @@ export default function FormadorPage({ user, onLogout }) {
     try {
       const cambios = {};
       
-      // Días
       for (let i = 1; i <= 6; i++) {
         const key = `dia_${i}`;
         if (valoresEditables[key] !== undefined) {
@@ -536,7 +442,6 @@ export default function FormadorPage({ user, onLogout }) {
         }
       }
       
-      // Nuevas columnas
       if (valoresEditables.segmento_prefiltro !== undefined) {
         cambios.segmento_prefiltro = valoresEditables.segmento_prefiltro || null;
       }
@@ -546,8 +451,6 @@ export default function FormadorPage({ user, onLogout }) {
       if (valoresEditables.segmento_certificado !== undefined) {
         cambios.segmento_certificado = valoresEditables.segmento_certificado || null;
       }
-      
-      // Fecha y motivo baja
       if (valoresEditables.fecha_baja !== undefined) {
         cambios.fecha_baja = valoresEditables.fecha_baja || null;
       }
@@ -582,7 +485,6 @@ export default function FormadorPage({ user, onLogout }) {
     for (let i = 1; i <= 6; i++) {
       campos[`dia_${i}`] = usuario[`dia_${i}`] || "";
     }
-    // Nuevas columnas
     campos.segmento_prefiltro = usuario.segmento_prefiltro || "";
     campos.certifica = usuario.certifica || "";
     campos.segmento_certificado = usuario.segmento_certificado || "";
@@ -1012,7 +914,6 @@ export default function FormadorPage({ user, onLogout }) {
           <div className={`p-4 rounded-lg shadow-sm border-l-4 animate-in slide-in-from-top duration-500 ${
             mensaje.tipo === "success" ? "bg-green-500/20 border-l-green-400 text-green-200" :
             mensaje.tipo === "error" ? "bg-red-500/20 border-l-red-400 text-red-200" :
-            mensaje.tipo === "warning" ? "bg-yellow-500/20 border-l-yellow-400 text-yellow-200" :
             "bg-blue-500/20 border-l-blue-400 text-blue-200"
           }`}>
             <p className="text-sm">{mensaje.texto}</p>
@@ -1332,7 +1233,7 @@ export default function FormadorPage({ user, onLogout }) {
         </div>
       </div>
       
-      {/* SECCIÓN: TABLA DE DOTACIÓN */}
+      {/* SECCIÓN: TABLA DE DOTACIÓN CON BOTÓN DE DESCARGA */}
       <div className="max-w-[95vw] mx-auto px-4 md:px-8 py-6">
         <div className="bg-white/10 backdrop-blur-md rounded-2xl border border-white/20 shadow-xl shadow-purple-500/5 p-6">
           <h2 className="font-semibold text-xl text-white mb-4 flex items-center gap-2">
@@ -1344,7 +1245,7 @@ export default function FormadorPage({ user, onLogout }) {
             Tabla de Dotación (Usuarios)
           </h2>
           
-          {/* ✅ NUEVO: Botones de descarga */}
+          {/* ✅ BOTÓN DE DESCARGA CSV (ÚNICO) */}
           <div className="flex flex-wrap items-center gap-3 mb-4">
             <button
               onClick={descargarCSV}
@@ -1355,17 +1256,6 @@ export default function FormadorPage({ user, onLogout }) {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
               </svg>
               Descargar CSV ({totalFiltrados})
-            </button>
-            
-            <button
-              onClick={descargarExcel}
-              disabled={loading || totalFiltrados === 0}
-              className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 shadow-md"
-            >
-              <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-                <path fillRule="evenodd" d="M4 4a2 2 0 00-2 2v8a2 2 0 002 2h12a2 2 0 002-2V6a2 2 0 00-2-2H4zm2 6a2 2 0 114 0v2a2 2 0 11-4 0v-2zm8 0a2 2 0 114 0v2a2 2 0 11-4 0v-2z" clipRule="evenodd" />
-              </svg>
-              Descargar Excel ({totalFiltrados})
             </button>
             
             <div className="text-xs text-gray-400 ml-auto">
