@@ -1233,323 +1233,322 @@ export default function FormadorPage({ user, onLogout }) {
         </div>
       </div>
       
-      {/* SECCIÓN: TABLA DE DOTACIÓN CON BOTÓN DE DESCARGA */}
-      <div className="max-w-[95vw] mx-auto px-4 md:px-8 py-6">
-        <div className="bg-white/10 backdrop-blur-md rounded-2xl border border-white/20 shadow-xl shadow-purple-500/5 p-6">
-          <h2 className="font-semibold text-xl text-white mb-4 flex items-center gap-2">
-            <span className="bg-blue-500/20 text-blue-300 p-2 rounded-lg border border-blue-500/30">
-              <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
-                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-              </svg>
-            </span>
-            Tabla de Dotación (Usuarios)
-          </h2>
-          
-          {/* ✅ BOTÓN DE DESCARGA CSV (ÚNICO) */}
-          <div className="flex flex-wrap items-center gap-3 mb-4">
-            <button
-              onClick={descargarCSV}
-              disabled={loading || totalFiltrados === 0}
-              className="px-4 py-2 bg-green-600 hover:bg-green-500 text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 shadow-md"
-            >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-              </svg>
-              Descargar CSV ({totalFiltrados})
-            </button>
-            
-            <div className="text-xs text-gray-400 ml-auto">
-              Mostrando {usuariosPaginados.length} de {totalFiltrados} usuarios
-            </div>
-          </div>
-          
-          <div className="flex flex-wrap items-center gap-4 mb-6">
-            <div>
-              <label className="block text-xs font-medium text-gray-300 mb-1">Filtrar por Grupo</label>
-              <select
-                value={filtroGrupo}
-                onChange={(e) => {
-                  setFiltroGrupo(e.target.value);
-                  setPaginaActual(1);
-                }}
-                className="bg-white/10 border border-white/20 text-white rounded-lg px-2 py-1.5 text-xs focus:ring-2 focus:ring-purple-400 focus:border-transparent"
-              >
-                <option value="todos" className="bg-slate-800">Todos los grupos</option>
-                {gruposDisponibles.map(grupo => (
-                  <option key={grupo} value={grupo} className="bg-slate-800">{grupo}</option>
-                ))}
-              </select>
-            </div>
-            
-            <div>
-              <label className="block text-xs font-medium text-gray-300 mb-1">Filtrar por Estado</label>
-              <select
-                value={filtroEstado}
-                onChange={(e) => {
-                  setFiltroEstado(e.target.value);
-                  setPaginaActual(1);
-                }}
-                className="bg-white/10 border border-white/20 text-white rounded-lg px-2 py-1.5 text-xs focus:ring-2 focus:ring-purple-400 focus:border-transparent"
-              >
-                <option value="todos" className="bg-slate-800">Todos los estados</option>
-                <option value="Activo" className="bg-slate-800">Activo</option>
-                <option value="Inactivo" className="bg-slate-800">Inactivo</option>
-              </select>
-            </div>
-            
-            <div className="flex-1 min-w-[250px]">
-              <label className="block text-xs font-medium text-gray-300 mb-1">Buscar por nombre o usuario</label>
-              <input
-                type="text"
-                value={busqueda}
-                onChange={(e) => {
-                  setBusqueda(e.target.value);
-                  setPaginaActual(1);
-                }}
-                placeholder="Ej: Juan Pérez o jperz123"
-                className="w-full bg-white/10 border border-white/20 text-white rounded-lg px-2 py-1.5 text-xs focus:ring-2 focus:ring-purple-400 focus:border-transparent placeholder-gray-400"
-              />
-            </div>
-          </div>
-          
-          {loading && !usuariosDotacion.length ? (
-            <div className="text-center py-12">
-              <div className="animate-spin w-6 h-6 border-2 border-purple-400 border-t-transparent rounded-full mx-auto mb-3"></div>
-              <p className="text-gray-400 text-xs">Cargando dotación...</p>
-            </div>
-          ) : (
-            <>
-              <div className="overflow-x-auto">
-                <table className="min-w-full divide-y divide-white/10 text-xs">
-                  <thead>
-                    <tr>
-                      <th className="px-2 py-2 text-left text-[10px] font-medium text-gray-300 uppercase tracking-wider">Nombre</th>
-                      <th className="px-2 py-2 text-left text-[10px] font-medium text-gray-300 uppercase tracking-wider">Usuario</th>
-                      <th className="px-2 py-2 text-left text-[10px] font-medium text-gray-300 uppercase tracking-wider">Rol</th>
-                      <th className="px-2 py-2 text-left text-[10px] font-medium text-gray-300 uppercase tracking-wider">Grupo</th>
-                      <th className="px-2 py-2 text-left text-[10px] font-medium text-gray-300 uppercase tracking-wider">Estado</th>
-                      <th className="px-2 py-2 text-center text-[10px] font-medium text-gray-300 uppercase tracking-wider">Seg. Prefiltro</th>
-
-                      {[1,2,3,4,5,6].map(d => (
-                        <th key={d} className="px-2 py-2 text-center text-[10px] font-medium text-gray-300 uppercase tracking-wider">Día {d}</th>
-                      ))}
-
-                    <th className="px-2 py-2 text-center text-[10px] font-medium text-gray-300 uppercase tracking-wider">Certifica</th>
-                      <th className="px-2 py-2 text-center text-[10px] font-medium text-gray-300 uppercase tracking-wider">Seg. Certificado</th>
-
-                      <th className="px-2 py-2 text-center text-[10px] font-medium text-gray-300 uppercase tracking-wider">Fecha Baja</th>
-                      <th className="px-2 py-2 text-center text-[10px] font-medium text-gray-300 uppercase tracking-wider">Motivo Baja</th>
-                      <th className="px-2 py-2 text-left text-[10px] font-medium text-gray-300 uppercase tracking-wider">Acción</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-white/5">
-                    {usuariosPaginados.length > 0 ? (
-                      usuariosPaginados.map((u) => (
-                        <tr key={u.id} className="hover:bg-white/5 transition-colors">
-                          <td className="px-2 py-2 whitespace-nowrap text-xs text-gray-100">{u.nombre}</td>
-                          <td className="px-2 py-2 whitespace-nowrap text-xs text-gray-200">{u.usuario}</td>
-                          <td className="px-2 py-2 whitespace-nowrap">
-                            <span className={`inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-medium ${
-                              u.rol === 'Administrador' ? 'bg-purple-500/20 text-purple-300' :
-                              u.rol === 'Formador' ? 'bg-green-500/20 text-green-300' :
-                              'bg-blue-500/20 text-blue-300'
-                            }`}>
-                              {u.rol}
-                            </span>
-                          </td>
-                          <td className="px-2 py-2 whitespace-nowrap text-xs text-gray-200">{u.grupo_nombre || '-'}</td>
-                          <td className="px-2 py-2 whitespace-nowrap">
-                            <span className={`inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-medium ${
-                              u.estado === 'Activo' ? 'bg-green-500/20 text-green-300' : 'bg-red-500/20 text-red-300'
-                            }`}>
-                              {u.estado}
-                            </span>
-                          </td>
-                          
-                          {/* segmento_prefiltro */}
-                          <td className="px-2 py-2 whitespace-nowrap text-center">
-                            {filaEditando === u.id ? (
-                              <select
-                                value={valoresEditables.segmento_prefiltro || ""}
-                                onChange={(e) => handleInputChange("segmento_prefiltro", e.target.value)}
-                                className="w-full bg-white/10 border border-white/20 text-white text-[10px] rounded px-1 py-0.5 focus:ring-1 focus:ring-purple-400 focus:border-transparent"
-                              >
-                                <option value="">—</option>
-                                {['A', 'B', 'C'].map(op => (
-                                  <option key={op} value={op} className="bg-slate-800">{op}</option>
-                                ))}
-                              </select>
-                            ) : (
-                              <span className="text-gray-300 text-xs">{u.segmento_prefiltro || "—"}</span>
-                            )}
-                          </td>
-                          
-                          {/* certifica */}
-                          <td className="px-2 py-2 whitespace-nowrap text-center">
-                            {filaEditando === u.id ? (
-                              <select
-                                value={valoresEditables.certifica || ""}
-                                onChange={(e) => handleInputChange("certifica", e.target.value)}
-                                className="w-full bg-white/10 border border-white/20 text-white text-[10px] rounded px-1 py-0.5 focus:ring-1 focus:ring-purple-400 focus:border-transparent"
-                              >
-                                <option value="">—</option>
-                                {['SI', 'NO'].map(op => (
-                                  <option key={op} value={op} className="bg-slate-800">{op}</option>
-                                ))}
-                              </select>
-                            ) : (
-                              <span className="text-gray-300 text-xs">{u.certifica || "—"}</span>
-                            )}
-                          </td>
-                          
-                          {/* segmento_certificado */}
-                          <td className="px-2 py-2 whitespace-nowrap text-center">
-                            {filaEditando === u.id ? (
-                              <select
-                                value={valoresEditables.segmento_certificado || ""}
-                                onChange={(e) => handleInputChange("segmento_certificado", e.target.value)}
-                                className="w-full bg-white/10 border border-white/20 text-white text-[10px] rounded px-1 py-0.5 focus:ring-1 focus:ring-purple-400 focus:border-transparent"
-                              >
-                                <option value="">—</option>
-                                {['A', 'B', 'C'].map(op => (
-                                  <option key={op} value={op} className="bg-slate-800">{op}</option>
-                                ))}
-                              </select>
-                            ) : (
-                              <span className="text-gray-300 text-xs">{u.segmento_certificado || "—"}</span>
-                            )}
-                          </td>
-                          
-                          {/* Días */}
-                          {[1,2,3,4,5,6].map(d => {
-                            const key = `dia_${d}`;
-                            const esEditable = filaEditando === u.id;
-                            return (
-                              <td key={key} className="px-2 py-2 whitespace-nowrap text-center">
-                                {esEditable ? (
-                                  <select
-                                    value={valoresEditables[key] || ""}
-                                    onChange={(e) => handleInputChange(key, e.target.value)}
-                                    className="w-full bg-white/10 border border-white/20 text-white text-[10px] rounded px-1 py-0.5 focus:ring-1 focus:ring-purple-400 focus:border-transparent"
-                                  >
-                                    <option value="">—</option>
-                                    {OPCIONES_ASISTENCIA.map(op => (
-                                      <option key={op} value={op} className="bg-slate-800">{op}</option>
-                                    ))}
-                                  </select>
-                                ) : (
-                                  <div className="flex justify-center">
-                                    {renderBadgeAsistencia(u[key])}
-                                  </div>
-                                )}
-                              </td>
-                            );
-                          })}
-                          
-                          {/* Fecha y motivo baja */}
-                          <td className="px-2 py-2 whitespace-nowrap text-center">
-                            {filaEditando === u.id ? (
-                              <input
-                                type="date"
-                                value={valoresEditables.fecha_baja || ""}
-                                onChange={(e) => handleInputChange("fecha_baja", e.target.value)}
-                                className="w-full bg-white/10 border border-white/20 text-white text-[10px] rounded px-1 py-0.5 focus:ring-1 focus:ring-purple-400"
-                              />
-                            ) : (
-                              <span className="text-gray-300 text-xs">{u.fecha_baja || "—"}</span>
-                            )}
-                          </td>
-                          
-                          <td className="px-2 py-2 whitespace-nowrap text-center">
-                            {filaEditando === u.id ? (
-                              <input
-                                type="text"
-                                value={valoresEditables.motivo_baja || ""}
-                                onChange={(e) => handleInputChange("motivo_baja", e.target.value)}
-                                placeholder="Motivo..."
-                                className="w-full bg-white/10 border border-white/20 text-white text-[10px] rounded px-1 py-0.5 focus:ring-1 focus:ring-purple-400 placeholder-gray-500"
-                              />
-                            ) : (
-                              <span className="text-gray-300 text-xs">{u.motivo_baja || "—"}</span>
-                            )}
-                          </td>
-                          
-                          {/* Acciones */}
-                          <td className="px-2 py-2 whitespace-nowrap">
-                            {filaEditando === u.id ? (
-                              <div className="flex gap-1">
-                                <button
-                                  onClick={() => guardarCambiosFila(u.id)}
-                                  disabled={loading}
-                                  className="px-1.5 py-0.5 bg-green-500/20 text-green-300 rounded text-[10px] hover:bg-green-500/30 disabled:opacity-50"
-                                >
-                                  Guardar
-                                </button>
-                                <button
-                                  onClick={cancelarEdicion}
-                                  className="px-1.5 py-0.5 bg-gray-500/20 text-gray-300 rounded text-[10px] hover:bg-gray-500/30"
-                                >
-                                  Cancelar
-                                </button>
-                              </div>
-                            ) : (
-                              <div className="flex gap-1">
-                                <button
-                                  onClick={() => iniciarEdicion(u)}
-                                  className="px-1.5 py-0.5 bg-blue-500/20 text-blue-300 rounded text-[10px] hover:bg-blue-500/30"
-                                >
-                                  Editar
-                                </button>
-                                <button
-                                  onClick={() => actualizarEstadoUsuario(u.id, u.estado === 'Activo' ? 'Inactivo' : 'Activo')}
-                                  disabled={loading}
-                                  className={`px-1.5 py-0.5 rounded text-[10px] font-medium transition-colors ${
-                                    u.estado === 'Activo'
-                                      ? 'bg-red-500/20 text-red-300 hover:bg-red-500/30'
-                                      : 'bg-green-500/20 text-green-300 hover:bg-green-500/30'
-                                  } disabled:opacity-50`}
-                                >
-                                  {u.estado === 'Activo' ? 'Inact.' : 'Activo'}
-                                </button>
-                              </div>
-                            )}
-                          </td>
-                        </tr>
-                      ))
-                    ) : (
-                      <tr>
-                        <td colSpan="16" className="px-4 py-6 text-center text-gray-400 text-xs">
-                          No se encontraron usuarios con ese filtro.
-                        </td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
-              
-              {totalPaginas > 1 && (
-                <div className="flex items-center justify-between mt-4">
-                  <button
-                    onClick={() => setPaginaActual(p => Math.max(1, p - 1))}
-                    disabled={paginaActual === 1 || loading}
-                    className="px-3 py-1.5 bg-white/10 text-white rounded text-xs disabled:opacity-50 disabled:cursor-not-allowed hover:bg-white/20 transition"
-                  >
-                    ← Anterior
-                  </button>
-                  <span className="text-gray-300 text-xs">Página {paginaActual} de {totalPaginas}</span>
-                  <button
-                    onClick={() => setPaginaActual(p => Math.min(totalPaginas, p + 1))}
-                    disabled={paginaActual === totalPaginas || loading}
-                    className="px-3 py-1.5 bg-white/10 text-white rounded text-xs disabled:opacity-50 disabled:cursor-not-allowed hover:bg-white/20 transition"
-                  >
-                    Siguiente →
-                  </button>
-                </div>
-              )}
-            </>
-          )}
-        </div>
+{/* SECCIÓN: TABLA DE DOTACIÓN CON BOTÓN DE DESCARGA */}
+<div className="max-w-[95vw] mx-auto px-4 md:px-8 py-6">
+  <div className="bg-white/10 backdrop-blur-md rounded-2xl border border-white/20 shadow-xl shadow-purple-500/5 p-6">
+    <h2 className="font-semibold text-xl text-white mb-4 flex items-center gap-2">
+      <span className="bg-blue-500/20 text-blue-300 p-2 rounded-lg border border-blue-500/30">
+        <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+          <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+        </svg>
+      </span>
+      Tabla de Dotación (Usuarios)
+    </h2>
+    
+    {/* ✅ BOTÓN DE DESCARGA CSV (ÚNICO) */}
+    <div className="flex flex-wrap items-center gap-3 mb-4">
+      <button
+        onClick={descargarCSV}
+        disabled={loading || totalFiltrados === 0}
+        className="px-4 py-2 bg-green-600 hover:bg-green-500 text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 shadow-md"
+      >
+        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+        </svg>
+        Descargar CSV ({totalFiltrados})
+      </button>
+      
+      <div className="text-xs text-gray-400 ml-auto">
+        Mostrando {usuariosPaginados.length} de {totalFiltrados} usuarios
       </div>
+    </div>
+    
+    <div className="flex flex-wrap items-center gap-4 mb-6">
+      <div>
+        <label className="block text-xs font-medium text-gray-300 mb-1">Filtrar por Grupo</label>
+        <select
+          value={filtroGrupo}
+          onChange={(e) => {
+            setFiltroGrupo(e.target.value);
+            setPaginaActual(1);
+          }}
+          className="bg-white/10 border border-white/20 text-white rounded-lg px-2 py-1.5 text-xs focus:ring-2 focus:ring-purple-400 focus:border-transparent"
+        >
+          <option value="todos" className="bg-slate-800">Todos los grupos</option>
+          {gruposDisponibles.map(grupo => (
+            <option key={grupo} value={grupo} className="bg-slate-800">{grupo}</option>
+          ))}
+        </select>
+      </div>
+      
+      <div>
+        <label className="block text-xs font-medium text-gray-300 mb-1">Filtrar por Estado</label>
+        <select
+          value={filtroEstado}
+          onChange={(e) => {
+            setFiltroEstado(e.target.value);
+            setPaginaActual(1);
+          }}
+          className="bg-white/10 border border-white/20 text-white rounded-lg px-2 py-1.5 text-xs focus:ring-2 focus:ring-purple-400 focus:border-transparent"
+        >
+          <option value="todos" className="bg-slate-800">Todos los estados</option>
+          <option value="Activo" className="bg-slate-800">Activo</option>
+          <option value="Inactivo" className="bg-slate-800">Inactivo</option>
+        </select>
+      </div>
+      
+      <div className="flex-1 min-w-[250px]">
+        <label className="block text-xs font-medium text-gray-300 mb-1">Buscar por nombre o usuario</label>
+        <input
+          type="text"
+          value={busqueda}
+          onChange={(e) => {
+            setBusqueda(e.target.value);
+            setPaginaActual(1);
+          }}
+          placeholder="Ej: Juan Pérez o jperz123"
+          className="w-full bg-white/10 border border-white/20 text-white rounded-lg px-2 py-1.5 text-xs focus:ring-2 focus:ring-purple-400 focus:border-transparent placeholder-gray-400"
+        />
+      </div>
+    </div>
+    
+    {loading && !usuariosDotacion.length ? (
+      <div className="text-center py-12">
+        <div className="animate-spin w-6 h-6 border-2 border-purple-400 border-t-transparent rounded-full mx-auto mb-3"></div>
+        <p className="text-gray-400 text-xs">Cargando dotación...</p>
+      </div>
+    ) : (
+      <>
+        <div className="overflow-x-auto">
+          <table className="min-w-full divide-y divide-white/10 text-xs">
+            <thead>
+              <tr>
+                <th className="px-2 py-2 text-left text-[10px] font-medium text-gray-300 uppercase tracking-wider">Nombre</th>
+                <th className="px-2 py-2 text-left text-[10px] font-medium text-gray-300 uppercase tracking-wider">Usuario</th>
+                <th className="px-2 py-2 text-left text-[10px] font-medium text-gray-300 uppercase tracking-wider">Rol</th>
+                <th className="px-2 py-2 text-left text-[10px] font-medium text-gray-300 uppercase tracking-wider">Grupo</th>
+                <th className="px-2 py-2 text-left text-[10px] font-medium text-gray-300 uppercase tracking-wider">Estado</th>
+                <th className="px-2 py-2 text-center text-[10px] font-medium text-gray-300 uppercase tracking-wider">Seg. Prefiltro</th>
+                
+                {[1,2,3,4,5,6].map(d => (
+                  <th key={d} className="px-2 py-2 text-center text-[10px] font-medium text-gray-300 uppercase tracking-wider">Día {d}</th>
+                ))}
+                
+                <th className="px-2 py-2 text-center text-[10px] font-medium text-gray-300 uppercase tracking-wider">Certifica</th>
+                <th className="px-2 py-2 text-center text-[10px] font-medium text-gray-300 uppercase tracking-wider">Seg. Certificado</th>
+                <th className="px-2 py-2 text-center text-[10px] font-medium text-gray-300 uppercase tracking-wider">Fecha Baja</th>
+                <th className="px-2 py-2 text-center text-[10px] font-medium text-gray-300 uppercase tracking-wider">Motivo Baja</th>
+                <th className="px-2 py-2 text-left text-[10px] font-medium text-gray-300 uppercase tracking-wider">Acción</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-white/5">
+              {usuariosPaginados.length > 0 ? (
+                usuariosPaginados.map((u) => (
+                  <tr key={u.id} className="hover:bg-white/5 transition-colors">
+                    <td className="px-2 py-2 whitespace-nowrap text-xs text-gray-100">{u.nombre}</td>
+                    <td className="px-2 py-2 whitespace-nowrap text-xs text-gray-200">{u.usuario}</td>
+                    <td className="px-2 py-2 whitespace-nowrap">
+                      <span className={`inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-medium ${
+                        u.rol === 'Administrador' ? 'bg-purple-500/20 text-purple-300' :
+                        u.rol === 'Formador' ? 'bg-green-500/20 text-green-300' :
+                        'bg-blue-500/20 text-blue-300'
+                      }`}>
+                        {u.rol}
+                      </span>
+                    </td>
+                    <td className="px-2 py-2 whitespace-nowrap text-xs text-gray-200">{u.grupo_nombre || '-'}</td>
+                    <td className="px-2 py-2 whitespace-nowrap">
+                      <span className={`inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-medium ${
+                        u.estado === 'Activo' ? 'bg-green-500/20 text-green-300' : 'bg-red-500/20 text-red-300'
+                      }`}>
+                        {u.estado}
+                      </span>
+                    </td>
+                    
+                    {/* segmento_prefiltro */}
+                    <td className="px-2 py-2 whitespace-nowrap text-center">
+                      {filaEditando === u.id ? (
+                        <select
+                          value={valoresEditables.segmento_prefiltro || ""}
+                          onChange={(e) => handleInputChange("segmento_prefiltro", e.target.value)}
+                          className="w-full bg-white/10 border border-white/20 text-white text-[10px] rounded px-1 py-0.5 focus:ring-1 focus:ring-purple-400 focus:border-transparent"
+                        >
+                          <option value="">—</option>
+                          {['A', 'B', 'C'].map(op => (
+                            <option key={op} value={op} className="bg-slate-800">{op}</option>
+                          ))}
+                        </select>
+                      ) : (
+                        <span className="text-gray-300 text-xs">{u.segmento_prefiltro || "—"}</span>
+                      )}
+                    </td>
+                    
+                    {/* Días */}
+                    {[1,2,3,4,5,6].map(d => {
+                      const key = `dia_${d}`;
+                      const esEditable = filaEditando === u.id;
+                      return (
+                        <td key={key} className="px-2 py-2 whitespace-nowrap text-center">
+                          {esEditable ? (
+                            <select
+                              value={valoresEditables[key] || ""}
+                              onChange={(e) => handleInputChange(key, e.target.value)}
+                              className="w-full bg-white/10 border border-white/20 text-white text-[10px] rounded px-1 py-0.5 focus:ring-1 focus:ring-purple-400 focus:border-transparent"
+                            >
+                              <option value="">—</option>
+                              {OPCIONES_ASISTENCIA.map(op => (
+                                <option key={op} value={op} className="bg-slate-800">{op}</option>
+                              ))}
+                            </select>
+                          ) : (
+                            <div className="flex justify-center">
+                              {renderBadgeAsistencia(u[key])}
+                            </div>
+                          )}
+                        </td>
+                      );
+                    })}
+                    
+                    {/* certifica */}
+                    <td className="px-2 py-2 whitespace-nowrap text-center">
+                      {filaEditando === u.id ? (
+                        <select
+                          value={valoresEditables.certifica || ""}
+                          onChange={(e) => handleInputChange("certifica", e.target.value)}
+                          className="w-full bg-white/10 border border-white/20 text-white text-[10px] rounded px-1 py-0.5 focus:ring-1 focus:ring-purple-400 focus:border-transparent"
+                        >
+                          <option value="">—</option>
+                          {['SI', 'NO'].map(op => (
+                            <option key={op} value={op} className="bg-slate-800">{op}</option>
+                          ))}
+                        </select>
+                      ) : (
+                        <span className="text-gray-300 text-xs">{u.certifica || "—"}</span>
+                      )}
+                    </td>
+                    
+                    {/* segmento_certificado */}
+                    <td className="px-2 py-2 whitespace-nowrap text-center">
+                      {filaEditando === u.id ? (
+                        <select
+                          value={valoresEditables.segmento_certificado || ""}
+                          onChange={(e) => handleInputChange("segmento_certificado", e.target.value)}
+                          className="w-full bg-white/10 border border-white/20 text-white text-[10px] rounded px-1 py-0.5 focus:ring-1 focus:ring-purple-400 focus:border-transparent"
+                        >
+                          <option value="">—</option>
+                          {['A', 'B', 'C'].map(op => (
+                            <option key={op} value={op} className="bg-slate-800">{op}</option>
+                          ))}
+                        </select>
+                      ) : (
+                        <span className="text-gray-300 text-xs">{u.segmento_certificado || "—"}</span>
+                      )}
+                    </td>
+                    
+                    {/* Fecha y motivo baja */}
+                    <td className="px-2 py-2 whitespace-nowrap text-center">
+                      {filaEditando === u.id ? (
+                        <input
+                          type="date"
+                          value={valoresEditables.fecha_baja || ""}
+                          onChange={(e) => handleInputChange("fecha_baja", e.target.value)}
+                          className="w-full bg-white/10 border border-white/20 text-white text-[10px] rounded px-1 py-0.5 focus:ring-1 focus:ring-purple-400"
+                        />
+                      ) : (
+                        <span className="text-gray-300 text-xs">{u.fecha_baja || "—"}</span>
+                      )}
+                    </td>
+                    
+                    <td className="px-2 py-2 whitespace-nowrap text-center">
+                      {filaEditando === u.id ? (
+                        <input
+                          type="text"
+                          value={valoresEditables.motivo_baja || ""}
+                          onChange={(e) => handleInputChange("motivo_baja", e.target.value)}
+                          placeholder="Motivo..."
+                          className="w-full bg-white/10 border border-white/20 text-white text-[10px] rounded px-1 py-0.5 focus:ring-1 focus:ring-purple-400 placeholder-gray-500"
+                        />
+                      ) : (
+                        <span className="text-gray-300 text-xs">{u.motivo_baja || "—"}</span>
+                      )}
+                    </td>
+                    
+                    {/* Acciones */}
+                    <td className="px-2 py-2 whitespace-nowrap">
+                      {filaEditando === u.id ? (
+                        <div className="flex gap-1">
+                          <button
+                            onClick={() => guardarCambiosFila(u.id)}
+                            disabled={loading}
+                            className="px-1.5 py-0.5 bg-green-500/20 text-green-300 rounded text-[10px] hover:bg-green-500/30 disabled:opacity-50"
+                          >
+                            Guardar
+                          </button>
+                          <button
+                            onClick={cancelarEdicion}
+                            className="px-1.5 py-0.5 bg-gray-500/20 text-gray-300 rounded text-[10px] hover:bg-gray-500/30"
+                          >
+                            Cancelar
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="flex gap-1">
+                          <button
+                            onClick={() => iniciarEdicion(u)}
+                            className="px-1.5 py-0.5 bg-blue-500/20 text-blue-300 rounded text-[10px] hover:bg-blue-500/30"
+                          >
+                            Editar
+                          </button>
+                          <button
+                            onClick={() => actualizarEstadoUsuario(u.id, u.estado === 'Activo' ? 'Inactivo' : 'Activo')}
+                            disabled={loading}
+                            className={`px-1.5 py-0.5 rounded text-[10px] font-medium transition-colors ${
+                              u.estado === 'Activo'
+                                ? 'bg-red-500/20 text-red-300 hover:bg-red-500/30'
+                                : 'bg-green-500/20 text-green-300 hover:bg-green-500/30'
+                            } disabled:opacity-50`}
+                          >
+                            {u.estado === 'Activo' ? 'Inact.' : 'Activo'}
+                          </button>
+                        </div>
+                      )}
+                    </td>
+                  </tr>
+                ))
+              ) : (
+                <tr>
+                  <td colSpan="17" className="px-4 py-6 text-center text-gray-400 text-xs">
+                    No se encontraron usuarios con ese filtro.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+        
+        {totalPaginas > 1 && (
+          <div className="flex items-center justify-between mt-4">
+            <button
+              onClick={() => setPaginaActual(p => Math.max(1, p - 1))}
+              disabled={paginaActual === 1 || loading}
+              className="px-3 py-1.5 bg-white/10 text-white rounded text-xs disabled:opacity-50 disabled:cursor-not-allowed hover:bg-white/20 transition"
+            >
+              ← Anterior
+            </button>
+            <span className="text-gray-300 text-xs">Página {paginaActual} de {totalPaginas}</span>
+            <button
+              onClick={() => setPaginaActual(p => Math.min(totalPaginas, p + 1))}
+              disabled={paginaActual === totalPaginas || loading}
+              className="px-3 py-1.5 bg-white/10 text-white rounded text-xs disabled:opacity-50 disabled:cursor-not-allowed hover:bg-white/20 transition"
+            >
+              Siguiente →
+            </button>
+          </div>
+        )}
+      </>
+    )}
+  </div>
+</div>
       
       {/* SECCIÓN: MALLA DE CAPACITACIÓN CON PESTAÑAS */}
       <div className="max-w-[95vw] mx-auto px-4 md:px-8 py-6">
