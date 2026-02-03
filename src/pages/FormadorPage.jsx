@@ -1465,7 +1465,7 @@ export default function FormadorPage({ user, onLogout }) {
 <select
 value={valoresEditables.motivo_baja || ""}
 onChange={(e) => handleInputChange("motivo_baja", e.target.value)}
-className="w-full bg-white/10 border border-white/20 text-gray-100  text-[10px] rounded px-1 py-0.5 focus:ring-1 focus:ring-purple-400 focus:border-transparent"
+className="w-full bg-white/10 border border-white/20 text-gray-800  text-[10px] rounded px-1 py-0.5 focus:ring-1 focus:ring-purple-400 focus:border-transparent"
 >
 <option value="">— Seleccionar motivo —</option>
 <optgroup label="← DESERCIÓN →">
