@@ -1459,19 +1459,37 @@ export default function FormadorPage({ user, onLogout }) {
                       )}
                     </td>
                     
-                    <td className="px-2 py-2 whitespace-nowrap text-center">
-                      {filaEditando === u.id ? (
-                        <input
-                          type="text"
-                          value={valoresEditables.motivo_baja || ""}
-                          onChange={(e) => handleInputChange("motivo_baja", e.target.value)}
-                          placeholder="Motivo..."
-                          className="w-full bg-white/10 border border-white/20 text-white text-[10px] rounded px-1 py-0.5 focus:ring-1 focus:ring-purple-400 placeholder-gray-500"
-                        />
-                      ) : (
-                        <span className="text-gray-300 text-xs">{u.motivo_baja || "—"}</span>
-                      )}
-                    </td>
+{/* Motivo Baja - CAMBIADO A SELECT CON OPCIONES */}
+<td className="px-2 py-2 whitespace-nowrap text-center">
+{filaEditando === u.id ? (
+<select
+value={valoresEditables.motivo_baja || ""}
+onChange={(e) => handleInputChange("motivo_baja", e.target.value)}
+className="w-full bg-white/10 border border-white/20 text-white text-[10px] rounded px-1 py-0.5 focus:ring-1 focus:ring-purple-400 focus:border-transparent"
+>
+<option value="">— Seleccionar motivo —</option>
+<optgroup label="← DESERCIÓN →">
+<option value="DISTANCIA AL SITE">DISTANCIA AL SITE</option>
+<option value="ENFERMEDAD FAMILIAR">ENFERMEDAD FAMILIAR</option>
+<option value="ENFERMEDAD PROPIA">ENFERMEDAD PROPIA</option>
+<option value="HORARIOS">HORARIOS</option>
+<option value="MEJOR OFERTA LABORAL">MEJOR OFERTA LABORAL</option>
+<option value="MOTIVOS PERSONALES - NO ESPECIFICA">MOTIVOS PERSONALES - NO ESPECIFICA</option>
+<option value="NO LE GUSTA EL PRODUCTO">NO LE GUSTA EL PRODUCTO</option>
+<option value="NO ES LO QUE DESEA">NO ES LO QUE DESEA</option>
+<option value="SIN RESPUESTA">SIN RESPUESTA</option>
+</optgroup>
+<optgroup label="← RETIRO →">
+<option value="USUARIOS BLOQUEADOS">USUARIOS BLOQUEADOS</option>
+<option value="NO TIENE HABILIDAD COMERCIAL">NO TIENE HABILIDAD COMERCIAL</option>
+<option value="PROBLEMAS DE ACTITUD">PROBLEMAS DE ACTITUD</option>
+<option value="BLACK LIST SALESLAND">BLACK LIST SALESLAND</option>
+</optgroup>
+</select>
+) : (
+<span className="text-gray-300 text-xs">{u.motivo_baja || "—"}</span>
+)}
+</td>
                     
                     {/* Acciones */}
                     <td className="px-2 py-2 whitespace-nowrap">
