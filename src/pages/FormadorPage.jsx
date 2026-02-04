@@ -861,29 +861,62 @@ export default function FormadorPage({ user, onLogout }) {
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-950 via-blue-900 to-teal-900 overflow-hidden">
       <style>{`
-        .bg-particles::before {
-          content: "";
-          position: fixed;
-          top: 0;
-          left: 0;
-          width: 100%;
-          height: 100%;
-          background-image: radial-gradient(circle at 20% 50%, rgba(147, 51, 234, 0.1) 1px, transparent 1px);
-          background-size: 40px 40px;
-          z-index: -1;
-          animation: pulse 8s infinite alternate;
-        }
-        @keyframes pulse {
-          0% { opacity: 0.2; }
-          100% { opacity: 0.4; }
-        }
-        .hide-scrollbar::-webkit-scrollbar {
-          display: none;
-        }
-        .hide-scrollbar {
-          -ms-overflow-style: none;
-          scrollbar-width: none;
-        }
+
+.bg-particles::before,
+.bg-particles::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background-repeat: repeat;
+  will-change: opacity, transform;
+}
+
+/* Capa principal */
+.bg-particles::before {
+  background-image:
+    radial-gradient(circle at 20% 50%, rgba(147, 51, 234, 0.15) 1px, transparent 1px),
+    radial-gradient(circle at 80% 30%, rgba(79, 70, 229, 0.1) 1px, transparent 1px);
+  background-size: 40px 40px, 60px 60px;
+  animation: particlesFloat 12s ease-in-out infinite alternate;
+}
+
+/* Capa secundaria (profundidad) */
+.bg-particles::after {
+  background-image:
+    radial-gradient(circle at 50% 80%, rgba(147, 51, 234, 0.08) 1px, transparent 1px);
+  background-size: 80px 80px;
+  filter: blur(0.5px);
+  animation: particlesPulse 18s ease-in-out infinite alternate;
+}
+
+/* Animaciones */
+@keyframes particlesFloat {
+  0% {
+    opacity: 0.25;
+    transform: translateY(0) translateX(0);
+  }
+  100% {
+    opacity: 0.45;
+    transform: translateY(-10px) translateX(5px);
+  }
+}
+
+@keyframes particlesPulse {
+  0% { opacity: 0.15; }
+  100% { opacity: 0.35; }
+}
+
+/* Scroll invisible pero funcional */
+.hide-scrollbar {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.hide-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
       `}</style>
       
       {/* Header */}
