@@ -859,7 +859,7 @@ export default function FormadorPage({ user, onLogout }) {
   }, [mallaActiva]);
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 overflow-hidden">
+    <div className="min-h-screen bg-gradient-to-br from-blue-950 via-blue-900 to-teal-900 overflow-hidden">
       <style>{`
         .bg-particles::before {
           content: "";
