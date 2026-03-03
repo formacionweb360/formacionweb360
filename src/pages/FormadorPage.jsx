@@ -1,15 +1,6 @@
-import { useEffect, useMemo, useState, useRef } from "react";
+// src/pages/FormadorPage.jsx
+import { useEffect, useMemo, useState } from "react";
 import { supabase } from "../services/supabaseClient";
-
-const OPCIONES_ASISTENCIA = [
-  "ASISTIÓ",
-  "FALTA",
-  "DESERTÓ",
-  "TARDANZA",
-  "NO SE PRESENTÓ",
-  "RETIRADO",
-  "NO APROBO ROLE PLAY"
-];
 
 export default function FormadorPage({ user, onLogout }) {
   const [campañas, setCampañas] = useState([]);
@@ -26,33 +17,10 @@ export default function FormadorPage({ user, onLogout }) {
   const [loading, setLoading] = useState(false);
   const [mensaje, setMensaje] = useState({ tipo: "", texto: "" });
   const [expandedGroupId, setExpandedGroupId] = useState(null);
-  
-  // === Estados para filtro por grupo en cursos activos ===
   const [filtroGrupoActivo, setFiltroGrupoActivo] = useState("todos");
   
-  // === Estados para Dotación ===
-  const [usuariosDotacion, setUsuariosDotacion] = useState([]);
-  const [gruposDisponibles, setGruposDisponibles] = useState([]);
-  const [filtroGrupo, setFiltroGrupo] = useState("todos");
-  const [filtroEstado, setFiltroEstado] = useState("todos");
-  const [busqueda, setBusqueda] = useState("");
-  const [paginaActual, setPaginaActual] = useState(1);
-  const REGISTROS_POR_PAGINA = 10;
-  
-  // === Estado para edición por fila ===
-  const [filaEditando, setFilaEditando] = useState(null);
-  const [valoresEditables, setValoresEditables] = useState({});
-  
-  // === Estados para QR ===
-  const [escaneandoQR, setEscaneandoQR] = useState(false);
-  const [mensajeQR, setMensajeQR] = useState(null);
-  const videoRef = useRef(null);
-  const canvasRef = useRef(null);
-  const animationRef = useRef(null);
-  
-  // === Estado para malla de capacitación ===
+  // Malla de capacitación
   const [mallaActiva, setMallaActiva] = useState("Portabilidad");
-  
   const fechaHoy = new Date().toISOString().split("T")[0];
   const fechaHoyFormateada = new Date().toLocaleDateString('es-PE', {
     weekday: 'long',
@@ -60,8 +28,8 @@ export default function FormadorPage({ user, onLogout }) {
     month: 'long',
     day: 'numeric'
   });
-  
-  // === MALLAS DE CAPACITACIÓN ===
+
+  // MALLAS DE CAPACITACIÓN
   const mallasDeCapacitacion = {
     Portabilidad: [
       ["Espera Grupal", "00:30:00", "REPASO DÍA 1", "00:30:00", "REPASO DÍA 3", "00:30:00", "NEXUM Y CRM", "00:30:00"],
@@ -91,93 +59,7 @@ export default function FormadorPage({ user, onLogout }) {
 
   useEffect(() => {
     cargarDatos();
-    cargarUsuariosDotacion();
   }, []);
-
-  // ✅ FUNCIÓN DE DESCARGA CSV (ÚNICA Y COMPLETA)
-  const descargarCSV = () => {
-    let usuariosFiltrados = [...usuariosDotacion];
-    
-    if (filtroGrupo !== "todos") {
-      usuariosFiltrados = usuariosFiltrados.filter(u => u.grupo_nombre === filtroGrupo);
-    }
-    
-    if (filtroEstado !== "todos") {
-      usuariosFiltrados = usuariosFiltrados.filter(u => u.estado === filtroEstado);
-    }
-    
-    if (busqueda.trim() !== "") {
-      const termino = busqueda.toLowerCase().trim();
-      usuariosFiltrados = usuariosFiltrados.filter(
-        u =>
-          (u.nombre && u.nombre.toLowerCase().includes(termino)) ||
-          (u.usuario && u.usuario.toLowerCase().includes(termino))
-      );
-    }
-    
-    if (usuariosFiltrados.length === 0) {
-      mostrarMensaje("warning", "⚠️ No hay datos para descargar");
-      return;
-    }
-    
-    const headers = [
-      "Nombre",
-      "Usuario",
-      "Rol",
-      "Grupo",
-      "Estado",
-      "Segmento Prefiltro",
-      "Certifica",
-      "Segmento Certificado",
-      "Día 1",
-      "Día 2",
-      "Día 3",
-      "Día 4",
-      "Día 5",
-      "Día 6",
-      "Fecha Baja",
-      "Motivo Baja"
-    ];
-    
-    const csvRows = [];
-    csvRows.push(headers.join(","));
-    
-    usuariosFiltrados.forEach(u => {
-      const row = [
-        `"${u.nombre || ''}"`,
-        `"${u.usuario || ''}"`,
-        u.rol || '',
-        u.grupo_nombre || '',
-        u.estado || '',
-        u.segmento_prefiltro || '',
-        u.certifica || '',
-        u.segmento_certificado || '',
-        u.dia_1 || '',
-        u.dia_2 || '',
-        u.dia_3 || '',
-        u.dia_4 || '',
-        u.dia_5 || '',
-        u.dia_6 || '',
-        u.fecha_baja || '',
-        `"${u.motivo_baja || ''}"`
-      ];
-      csvRows.push(row.join(","));
-    });
-    
-    const csvContent = csvRows.join("\n");
-    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.setAttribute("href", url);
-    link.setAttribute("download", `dotacion_${new Date().toISOString().split('T')[0]}.csv`);
-    link.style.visibility = "hidden";
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
-    
-    mostrarMensaje("success", `✅ Descargado ${usuariosFiltrados.length} registros en CSV`);
-  };
 
   const mostrarMensaje = (tipo, texto) => {
     setMensaje({ tipo, texto });
@@ -216,9 +98,7 @@ export default function FormadorPage({ user, onLogout }) {
         .from("grupos")
         .select("*")
         .eq("campana_id", campana_id);
-      
       if (gruposError) throw gruposError;
-      
       const gruposConConteo = await Promise.all(
         (gruposData || []).map(async (g) => {
           try {
@@ -228,7 +108,6 @@ export default function FormadorPage({ user, onLogout }) {
               .eq("grupo_nombre", g.nombre)
               .eq("rol", "usuario")
               .eq("estado", "Activo");
-            
             return {
               ...g,
               activos: count || 0,
@@ -246,7 +125,6 @@ export default function FormadorPage({ user, onLogout }) {
           }
         })
       );
-      
       setGrupos(gruposConConteo);
     } catch (err) {
       console.error("Error en cargarGrupos:", err);
@@ -267,14 +145,12 @@ export default function FormadorPage({ user, onLogout }) {
         .eq("campana_id", campana_id)
         .eq("dia", dia)
         .eq("estado", "Activo");
-      
       if (grupo_id) {
         const grupoIdNum = Number(grupo_id);
         if (!isNaN(grupoIdNum)) {
           query = query.or(`grupo_id.is.null,grupo_id.eq.${grupoIdNum}`);
         }
       }
-      
       const { data, error } = await query;
       if (error) throw error;
       setCursos(data || []);
@@ -294,7 +170,6 @@ export default function FormadorPage({ user, onLogout }) {
       setGruposConCursos([]);
       return;
     }
-    
     try {
       const { data, error } = await supabase
         .from("cursos_activados")
@@ -311,15 +186,12 @@ export default function FormadorPage({ user, onLogout }) {
         `)
         .eq("formador_id", user.id)
         .order("fecha", { ascending: false });
-      
       if (error) throw error;
-      
       if (!data || data.length === 0) {
         setActivos([]);
         setGruposConCursos([]);
         return;
       }
-      
       const activosConConteo = await Promise.all(
         data.map(async (activado) => {
           try {
@@ -327,7 +199,6 @@ export default function FormadorPage({ user, onLogout }) {
               .from("cursos_asesores")
               .select("*", { count: "exact", head: true })
               .eq("curso_activado_id", activado.id);
-            
             return { ...activado, asesores_count: count || 0 };
           } catch (err) {
             console.error(`Error contando asesores para curso ${activado.id}:`, err);
@@ -335,9 +206,7 @@ export default function FormadorPage({ user, onLogout }) {
           }
         })
       );
-      
       setActivos(activosConConteo);
-      
       const gruposMap = {};
       activosConConteo.forEach((a) => {
         const grupoId = a.grupo_id;
@@ -348,7 +217,6 @@ export default function FormadorPage({ user, onLogout }) {
           gruposMap[grupoId].cursos.push(a);
         }
       });
-      
       setGruposConCursos(Object.values(gruposMap));
     } catch (err) {
       console.error("Error al cargar cursos activos:", err);
@@ -358,300 +226,13 @@ export default function FormadorPage({ user, onLogout }) {
     }
   };
 
-  const cargarUsuariosDotacion = async () => {
-    setLoading(true);
-    try {
-      const { data: usuarios, error: errUsuarios } = await supabase
-        .from("usuarios")
-        .select(`
-          id,
-          usuario,
-          rol,
-          nombre,
-          estado,
-          grupo_nombre,
-          qr_id,
-          segmento_prefiltro,
-          certifica,
-          segmento_certificado,
-          dia_1,
-          dia_2,
-          dia_3,
-          dia_4,
-          dia_5,
-          dia_6,
-          fecha_baja,
-          motivo_baja
-        `)
-        .eq("rol", "usuario")
-        .order("nombre", { ascending: true });
-      
-      if (errUsuarios) throw errUsuarios;
-      
-      setUsuariosDotacion(usuarios || []);
-      
-      const gruposSet = new Set(
-        (usuarios || [])
-          .map(u => u.grupo_nombre)
-          .filter(g => g && typeof g === 'string')
-      );
-      const gruposArray = Array.from(gruposSet).sort();
-      setGruposDisponibles(gruposArray);
-    } catch (err) {
-      console.error("Error al cargar dotación:", err);
-      mostrarMensaje("error", "Error al cargar usuarios");
-      setUsuariosDotacion([]);
-      setGruposDisponibles([]);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const actualizarEstadoUsuario = async (userId, nuevoEstado) => {
-    setLoading(true);
-    try {
-      const { error } = await supabase
-        .from("usuarios")
-        .update({ estado: nuevoEstado })
-        .eq("id", userId);
-      
-      if (error) throw error;
-      
-      setUsuariosDotacion(prev =>
-        prev.map(u => (u.id === userId ? { ...u, estado: nuevoEstado } : u))
-      );
-      
-      mostrarMensaje("success", "✅ Estado actualizado correctamente");
-    } catch (err) {
-      console.error("Error al actualizar estado:", err);
-      mostrarMensaje("error", "Error al actualizar el estado");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const guardarCambiosFila = async (userId) => {
-    setLoading(true);
-    try {
-      const cambios = {};
-      
-      for (let i = 1; i <= 6; i++) {
-        const key = `dia_${i}`;
-        if (valoresEditables[key] !== undefined) {
-          cambios[key] = valoresEditables[key] === "" ? null : valoresEditables[key];
-        }
-      }
-      
-      if (valoresEditables.segmento_prefiltro !== undefined) {
-        cambios.segmento_prefiltro = valoresEditables.segmento_prefiltro || null;
-      }
-      if (valoresEditables.certifica !== undefined) {
-        cambios.certifica = valoresEditables.certifica || null;
-      }
-      if (valoresEditables.segmento_certificado !== undefined) {
-        cambios.segmento_certificado = valoresEditables.segmento_certificado || null;
-      }
-      if (valoresEditables.fecha_baja !== undefined) {
-        cambios.fecha_baja = valoresEditables.fecha_baja || null;
-      }
-      if (valoresEditables.motivo_baja !== undefined) {
-        cambios.motivo_baja = valoresEditables.motivo_baja || null;
-      }
-      
-      const { error } = await supabase
-        .from("usuarios")
-        .update(cambios)
-        .eq("id", userId);
-      
-      if (error) throw error;
-      
-      setUsuariosDotacion(prev =>
-        prev.map(u => u.id === userId ? { ...u, ...cambios } : u)
-      );
-      
-      setFilaEditando(null);
-      setValoresEditables({});
-      mostrarMensaje("success", "✅ Cambios guardados");
-    } catch (err) {
-      console.error("Error al guardar cambios:", err);
-      mostrarMensaje("error", "❌ Error al guardar los cambios");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const iniciarEdicion = (usuario) => {
-    const campos = {};
-    for (let i = 1; i <= 6; i++) {
-      campos[`dia_${i}`] = usuario[`dia_${i}`] || "";
-    }
-    campos.segmento_prefiltro = usuario.segmento_prefiltro || "";
-    campos.certifica = usuario.certifica || "";
-    campos.segmento_certificado = usuario.segmento_certificado || "";
-    campos.fecha_baja = usuario.fecha_baja || "";
-    campos.motivo_baja = usuario.motivo_baja || "";
-    
-    setValoresEditables(campos);
-    setFilaEditando(usuario.id);
-  };
-
-  const cancelarEdicion = () => {
-    setFilaEditando(null);
-    setValoresEditables({});
-  };
-
-  const handleInputChange = (campo, valor) => {
-    setValoresEditables(prev => ({ ...prev, [campo]: valor }));
-  };
-
-  const renderBadgeAsistencia = (estado) => {
-    if (!estado) return <span className="text-gray-500 text-xs">—</span>;
-    
-    const config = {
-      "ASISTIÓ": { icon: "✅", color: "bg-green-500/20 text-green-100" },
-      "FALTA": { icon: "❌", color: "bg-red-500/20 text-red-100" },
-      "TARDANZA": { icon: "⏱️", color: "bg-yellow-500/20 text-yellow-900" },
-      "DESERTÓ": { icon: "🚪", color: "bg-purple-500/20 text-purple-100" },
-      "NO SE PRESENTÓ": { icon: "🕳️", color: "bg-gray-700 text-gray-300" },
-      "RETIRADO": { icon: "🚶‍♂️", color: "bg-orange-500/20 text-orange-900" },
-      "NO APROBO ROLE PLAY": { icon: "📉", color: "bg-blue-500/20 text-blue-100" },
-    };
-    
-    const { icon, color } = config[estado] || { icon: "?", color: "bg-gray-500/20 text-gray-300" };
-    
-    return (
-      <span className={`inline-flex items-center gap-0.5 px-1 py-0.5 rounded-full text-[10px] font-medium ${color}`}>
-        {icon}
-      </span>
-    );
-  };
-
-  // --- LÓGICA DE QR ---
-  const procesarFrame = () => {
-    if (!videoRef.current || !canvasRef.current) return;
-    
-    const video = videoRef.current;
-    const canvas = canvasRef.current;
-    const ctx = canvas.getContext("2d");
-    
-    if (video.readyState === video.HAVE_ENOUGH_DATA) {
-      canvas.height = video.videoHeight;
-      canvas.width = video.videoWidth;
-      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-      
-      const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-      
-      if (typeof jsQR !== 'undefined') {
-        const qrCode = jsQR(imageData.data, imageData.width, imageData.height, {
-          inversionAttempts: "dontInvert",
-        });
-        
-        if (qrCode) {
-          detenerLecturaQR();
-          procesarAsistenciaQR(qrCode.data);
-          return;
-        }
-      }
-    }
-    
-    if (escaneandoQR) {
-      animationRef.current = requestAnimationFrame(procesarFrame);
-    }
-  };
-
-  const iniciarLecturaQR = () => {
-    if (!seleccion.dia) {
-      setMensajeQR({ tipo: "error", texto: "⚠️ Primero selecciona un día." });
-      return;
-    }
-    
-    setEscaneandoQR(true);
-    setMensajeQR(null);
-    
-    navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } })
-      .then(stream => {
-        if (videoRef.current) {
-          videoRef.current.srcObject = stream;
-          videoRef.current.play();
-          animationRef.current = requestAnimationFrame(procesarFrame);
-        }
-      })
-      .catch(err => {
-        console.error("Error al acceder a la cámara:", err);
-        setMensajeQR({ tipo: "error", texto: "❌ No se pudo acceder a la cámara." });
-        setEscaneandoQR(false);
-      });
-  };
-
-  const detenerLecturaQR = () => {
-    setEscaneandoQR(false);
-    
-    if (animationRef.current) {
-      cancelAnimationFrame(animationRef.current);
-    }
-    
-    if (videoRef.current?.srcObject) {
-      videoRef.current.srcObject.getTracks().forEach(track => track.stop());
-    }
-  };
-
-  const procesarAsistenciaQR = async (qrContent) => {
-    setLoading(true);
-    setMensajeQR({ tipo: "info", texto: `🔍 Procesando QR...` });
-    
-    try {
-      const qr_id = qrContent.trim();
-      if (!qr_id) throw new Error("Código QR vacío");
-      
-      const { data: usuario, error } = await supabase
-        .from("usuarios")
-        .select("id, nombre, usuario")
-        .eq("qr_id", qr_id)
-        .single();
-      
-      if (error || !usuario) {
-        throw new Error("Usuario no encontrado con ese QR.");
-      }
-      
-      const campoDia = `dia_${seleccion.dia}`;
-      const { error: updateError } = await supabase
-        .from("usuarios")
-        .update({ [campoDia]: "ASISTIÓ" })
-        .eq("id", usuario.id);
-      
-      if (updateError) throw updateError;
-      
-      setUsuariosDotacion(prev =>
-        prev.map(u => u.id === usuario.id ? { ...u, [campoDia]: "ASISTIÓ" } : u)
-      );
-      
-      setMensajeQR({
-        tipo: "success",
-        texto: `✅ ¡Asistencia registrada! ${usuario.nombre} - Día ${seleccion.dia}`
-      });
-      
-      mostrarMensaje("success", `✅ Asistencia registrada para ${usuario.nombre} (Día ${seleccion.dia})`);
-    } catch (err) {
-      console.error("Error al procesar QR:", err);
-      setMensajeQR({
-        tipo: "error",
-        texto: `❌ ${err.message || "Error al registrar asistencia"}`
-      });
-    } finally {
-      setLoading(false);
-    }
-  };
-
   const activarCurso = async () => {
     const { campana_id, dia, grupo_id, curso_id } = seleccion;
-    
     if (!campana_id || !dia || !grupo_id || !curso_id) {
       mostrarMensaje("error", "⚠️ Debes seleccionar campaña, día, grupo y curso");
       return;
     }
-    
     setLoading(true);
-    
     try {
       const { data: existe } = await supabase
         .from("cursos_activados")
@@ -661,12 +242,10 @@ export default function FormadorPage({ user, onLogout }) {
         .eq("grupo_id", grupo_id)
         .eq("curso_id", curso_id)
         .maybeSingle();
-      
       if (existe) {
         mostrarMensaje("error", "⚠️ Este curso ya está activado hoy para esa campaña y grupo");
         return;
       }
-      
       const { data: activacion, error } = await supabase
         .from("cursos_activados")
         .insert([
@@ -681,26 +260,20 @@ export default function FormadorPage({ user, onLogout }) {
         ])
         .select()
         .single();
-      
       if (error) throw error;
-      
       const { data: grupo, error: errGrupo } = await supabase
         .from("grupos")
         .select("nombre")
         .eq("id", grupo_id)
         .single();
-      
       if (errGrupo || !grupo) throw new Error("No se pudo obtener el grupo");
-      
       const { data: asesores, error: errAsesores } = await supabase
         .from("usuarios")
         .select("id")
         .eq("rol", "usuario")
         .eq("grupo_nombre", grupo.nombre)
         .eq("estado", "Activo");
-      
       if (errAsesores) throw errAsesores;
-      
       if (asesores && asesores.length > 0) {
         const { error: errorInsert } = await supabase.from("cursos_asesores").insert(
           asesores.map((u) => ({
@@ -708,7 +281,6 @@ export default function FormadorPage({ user, onLogout }) {
             asesor_id: u.id,
           }))
         );
-        
         if (errorInsert) {
           mostrarMensaje("success", "✅ Curso activado (pero hubo problemas al asignar algunos asesores)");
         } else {
@@ -717,7 +289,6 @@ export default function FormadorPage({ user, onLogout }) {
       } else {
         mostrarMensaje("success", "✅ Curso activado (sin asesores activos en el grupo)");
       }
-      
       await cargarActivos();
       await cargarGrupos(seleccion.campana_id);
       setSeleccion({ ...seleccion, curso_id: "" });
@@ -733,24 +304,18 @@ export default function FormadorPage({ user, onLogout }) {
     if (!window.confirm("¿Seguro que deseas desactivar este curso? Se eliminarán todas las asignaciones a asesores.")) {
       return;
     }
-    
     setLoading(true);
-    
     try {
       const { error: errorAsesores } = await supabase
         .from("cursos_asesores")
         .delete()
         .eq("curso_activado_id", id);
-      
       if (errorAsesores) throw errorAsesores;
-      
       const { error } = await supabase
         .from("cursos_activados")
         .delete()
         .eq("id", id);
-      
       if (error) throw error;
-      
       mostrarMensaje("success", "🗑️ Curso desactivado correctamente");
       await cargarActivos();
     } catch (err) {
@@ -788,36 +353,6 @@ export default function FormadorPage({ user, onLogout }) {
     setExpandedGroupId(prev => prev === numericGroupId ? null : numericGroupId);
   };
 
-  // 🔁 Filtro por grupo + estado + búsqueda
-  const { usuariosPaginados, totalPaginas, totalFiltrados } = useMemo(() => {
-    let usuariosFiltrados = [...usuariosDotacion];
-    
-    if (filtroGrupo !== "todos") {
-      usuariosFiltrados = usuariosFiltrados.filter(u => u.grupo_nombre === filtroGrupo);
-    }
-    
-    if (filtroEstado !== "todos") {
-      usuariosFiltrados = usuariosFiltrados.filter(u => u.estado === filtroEstado);
-    }
-    
-    if (busqueda.trim() !== "") {
-      const termino = busqueda.toLowerCase().trim();
-      usuariosFiltrados = usuariosFiltrados.filter(
-        u =>
-          (u.nombre && u.nombre.toLowerCase().includes(termino)) ||
-          (u.usuario && u.usuario.toLowerCase().includes(termino))
-      );
-    }
-    
-    const total = usuariosFiltrados.length;
-    const desde = (paginaActual - 1) * REGISTROS_POR_PAGINA;
-    const hasta = desde + REGISTROS_POR_PAGINA;
-    const pagina = usuariosFiltrados.slice(desde, hasta);
-    const totalPag = Math.ceil(total / REGISTROS_POR_PAGINA) || 1;
-    
-    return { usuariosPaginados: pagina, totalPaginas: totalPag, totalFiltrados: total };
-  }, [usuariosDotacion, filtroGrupo, filtroEstado, busqueda, paginaActual, REGISTROS_POR_PAGINA]);
-
   const gruposUnicosActivos = useMemo(() => {
     const ids = [...new Set(activos.map(a => a.grupo_id).filter(id => id !== null))];
     return ids.map(id => {
@@ -843,105 +378,84 @@ export default function FormadorPage({ user, onLogout }) {
     return Object.values(map);
   }, [activosFiltrados]);
 
-  // 🔁 Actividades por día según malla activa
   const actividadesPorDia = useMemo(() => {
     const dias = { 1: [], 2: [], 3: [], 4: [] };
     const mallaActual = mallasDeCapacitacion[mallaActiva] || mallasDeCapacitacion.Portabilidad;
-    
     mallaActual.forEach(row => {
       if (row[0] && row[1]) dias[1].push({ actividad: row[0], tiempo: row[1] });
       if (row[2] && row[3]) dias[2].push({ actividad: row[2], tiempo: row[3] });
       if (row[4] && row[5]) dias[3].push({ actividad: row[4], tiempo: row[5] });
       if (row[6] && row[7]) dias[4].push({ actividad: row[6], tiempo: row[7] });
     });
-    
     return dias;
   }, [mallaActiva]);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-950 via-blue-900 to-teal-900 overflow-hidden">
       <style>{`
-
-.bg-particles::before,
-.bg-particles::after {
-  content: "";
-  position: fixed;
-  inset: 0;
-  z-index: -1;
-  pointer-events: none;
-  background-repeat: repeat;
-  will-change: opacity, transform;
-}
-
-/* Capa principal */
-.bg-particles::before {
-  background-image:
-    radial-gradient(circle at 20% 50%, rgba(147, 51, 234, 0.15) 1px, transparent 1px),
-    radial-gradient(circle at 80% 30%, rgba(79, 70, 229, 0.1) 1px, transparent 1px);
-  background-size: 40px 40px, 60px 60px;
-  animation: particlesFloat 12s ease-in-out infinite alternate;
-}
-
-/* Capa secundaria (profundidad) */
-.bg-particles::after {
-  background-image:
-    radial-gradient(circle at 50% 80%, rgba(147, 51, 234, 0.08) 1px, transparent 1px);
-  background-size: 80px 80px;
-  filter: blur(0.5px);
-  animation: particlesPulse 18s ease-in-out infinite alternate;
-}
-
-/* Animaciones */
-@keyframes particlesFloat {
-  0% {
-    opacity: 0.25;
-    transform: translateY(0) translateX(0);
-  }
-  100% {
-    opacity: 0.45;
-    transform: translateY(-10px) translateX(5px);
-  }
-}
-
-@keyframes particlesPulse {
-  0% { opacity: 0.15; }
-  100% { opacity: 0.35; }
-}
-
-/* Scroll invisible pero funcional */
-.hide-scrollbar {
-  scrollbar-width: none;
-  -ms-overflow-style: none;
-}
-.hide-scrollbar::-webkit-scrollbar {
-  display: none;
-}
-
+        .bg-particles::before,
+        .bg-particles::after {
+          content: "";
+          position: fixed;
+          inset: 0;
+          z-index: -1;
+          pointer-events: none;
+          background-repeat: repeat;
+          will-change: opacity, transform;
+        }
+        .bg-particles::before {
+          background-image:
+            radial-gradient(circle at 20% 50%, rgba(147, 51, 234, 0.15) 1px, transparent 1px),
+            radial-gradient(circle at 80% 30%, rgba(79, 70, 229, 0.1) 1px, transparent 1px);
+          background-size: 40px 40px, 60px 60px;
+          animation: particlesFloat 12s ease-in-out infinite alternate;
+        }
+        .bg-particles::after {
+          background-image:
+            radial-gradient(circle at 50% 80%, rgba(147, 51, 234, 0.08) 1px, transparent 1px);
+          background-size: 80px 80px;
+          filter: blur(0.5px);
+          animation: particlesPulse 18s ease-in-out infinite alternate;
+        }
+        @keyframes particlesFloat {
+          0% { opacity: 0.25; transform: translateY(0) translateX(0); }
+          100% { opacity: 0.45; transform: translateY(-10px) translateX(5px); }
+        }
+        @keyframes particlesPulse {
+          0% { opacity: 0.15; }
+          100% { opacity: 0.35; }
+        }
+        .hide-scrollbar {
+          scrollbar-width: none;
+          -ms-overflow-style: none;
+        }
+        .hide-scrollbar::-webkit-scrollbar {
+          display: none;
+        }
       `}</style>
-      
+
       {/* Header */}
-{/* Header */}
-<header className="bg-gradient-to-r from-slate-600 via-blue-900 to-teal-700 shadow-sm sticky top-0 z-50">
-  <div className="max-w-[95vw] mx-auto px-4 md:px-8 py-6 flex items-center justify-between">
-    <div>
-      <h1 className="text-3xl font-bold text-white mb-1">Panel del Formador</h1>
-      <p className="text-xs text-blue-200">📅 {fechaHoyFormateada}</p>
-    </div>
-    <div className="flex items-center gap-4">
-      <div className="flex items-center gap-2 text-xs text-blue-100">
-        <span className="w-2 h-2 bg-teal-300 rounded-full animate-pulse"></span>
-        <span>{user?.name || "Formador"}</span>
-      </div>
-      <button
-        onClick={onLogout}
-        className="px-3 py-1.5 text-xs font-semibold bg-white/10 border border-white/30 text-white rounded-lg hover:bg-white/20 transition"
-      >
-        Cerrar sesión
-      </button>
-    </div>
-  </div>
-</header>
-      
+      <header className="bg-gradient-to-r from-slate-600 via-blue-900 to-teal-700 shadow-sm sticky top-0 z-50">
+        <div className="max-w-[95vw] mx-auto px-4 md:px-8 py-6 flex items-center justify-between">
+          <div>
+            <h1 className="text-3xl font-bold text-white mb-1">Panel del Formador</h1>
+            <p className="text-xs text-blue-200">📅 {fechaHoyFormateada}</p>
+          </div>
+          <div className="flex items-center gap-4">
+            <div className="flex items-center gap-2 text-xs text-blue-100">
+              <span className="w-2 h-2 bg-teal-300 rounded-full animate-pulse"></span>
+              <span>{user?.name || "Formador"}</span>
+            </div>
+            <button
+              onClick={onLogout}
+              className="px-3 py-1.5 text-xs font-semibold bg-white/10 border border-white/30 text-white rounded-lg hover:bg-white/20 transition"
+            >
+              Cerrar sesión
+            </button>
+          </div>
+        </div>
+      </header>
+
       {/* Mensajes */}
       {mensaje.texto && (
         <div className="max-w-[95vw] mx-auto px-4 md:px-8 pt-4">
@@ -954,7 +468,7 @@ export default function FormadorPage({ user, onLogout }) {
           </div>
         </div>
       )}
-      
+
       {/* Contenido principal */}
       <div className="max-w-[95vw] mx-auto px-4 md:px-8 py-6">
         <div className="grid md:grid-cols-2 gap-6">
@@ -973,7 +487,6 @@ export default function FormadorPage({ user, onLogout }) {
                 <div className="w-5 h-5 border-2 border-purple-400 border-t-transparent rounded-full animate-spin"></div>
               )}
             </div>
-            
             <div>
               <label className="block text-sm font-medium text-gray-300 mb-2">Campaña</label>
               <select
@@ -988,7 +501,6 @@ export default function FormadorPage({ user, onLogout }) {
                 ))}
               </select>
             </div>
-            
             <div>
               <label className="block text-sm font-medium text-gray-300 mb-2">Día de capacitación</label>
               <select
@@ -1006,7 +518,6 @@ export default function FormadorPage({ user, onLogout }) {
                 <option value="6" className="bg-slate-800">Día 6</option>
               </select>
             </div>
-            
             <div>
               <label className="block text-sm font-medium text-gray-300 mb-2">Grupo</label>
               <select
@@ -1021,7 +532,6 @@ export default function FormadorPage({ user, onLogout }) {
                 ))}
               </select>
             </div>
-            
             {cursos.length > 0 && (
               <div className="bg-gradient-to-r from-purple-500/10 to-pink-500/10 backdrop-blur-sm rounded-xl border border-purple-500/20 p-4">
                 <h3 className="font-semibold text-white mb-3 flex items-center gap-2">
@@ -1035,10 +545,7 @@ export default function FormadorPage({ user, onLogout }) {
                 </h3>
                 <div className="space-y-2 max-h-40 overflow-y-auto">
                   {cursos.map((c, index) => (
-                    <div
-                      key={c.id}
-                      className="flex items-center justify-between bg-white/10 p-2 rounded-md shadow-sm text-sm"
-                    >
+                    <div key={c.id} className="flex items-center justify-between bg-white/10 p-2 rounded-md shadow-sm text-sm">
                       <div className="flex items-center gap-2">
                         <span className="flex items-center justify-center w-6 h-6 bg-indigo-500/20 text-indigo-300 rounded-full text-[0.6rem] font-bold border border-indigo-500/30">
                           {index + 1}
@@ -1051,7 +558,6 @@ export default function FormadorPage({ user, onLogout }) {
                 </div>
               </div>
             )}
-            
             <div>
               <label className="block text-sm font-medium text-gray-300 mb-2">Curso a activar</label>
               <select
@@ -1066,7 +572,6 @@ export default function FormadorPage({ user, onLogout }) {
                 ))}
               </select>
             </div>
-            
             <button
               onClick={activarCurso}
               disabled={!seleccion.curso_id || loading}
@@ -1075,7 +580,7 @@ export default function FormadorPage({ user, onLogout }) {
               {loading ? "Activando..." : "✨ Activar curso de hoy"}
             </button>
           </div>
-          
+
           {/* Sección derecha: Grupos asignados */}
           <div className="bg-white/10 backdrop-blur-md rounded-2xl border border-white/20 shadow-xl shadow-purple-500/5 p-6">
             <div className="flex flex-wrap items-center gap-2 mb-4">
@@ -1098,7 +603,6 @@ export default function FormadorPage({ user, onLogout }) {
                 ))}
               </select>
             </div>
-            
             {gruposConCursosFiltrados.length === 0 ? (
               <div className="text-center py-12">
                 <div className="text-6xl mb-4 text-gray-500">📭</div>
@@ -1112,12 +616,8 @@ export default function FormadorPage({ user, onLogout }) {
                   const cursosDelGrupo = grupoData.cursos;
                   const groupId = Number(cursosDelGrupo[0]?.grupo_id);
                   const isExpanded = expandedGroupId === groupId;
-                  
                   return (
-                    <div
-                      key={groupId}
-                      className="border border-white/20 rounded-lg overflow-hidden bg-white/5"
-                    >
+                    <div key={groupId} className="border border-white/20 rounded-lg overflow-hidden bg-white/5">
                       <div
                         onClick={() => toggleGroup(groupId)}
                         className="flex items-center justify-between p-4 cursor-pointer hover:bg-white/10 transition-colors"
@@ -1141,14 +641,10 @@ export default function FormadorPage({ user, onLogout }) {
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                         </svg>
                       </div>
-                      
                       {isExpanded && (
                         <div className="border-t border-white/20 p-4 space-y-3">
                           {cursosDelGrupo.map((a) => (
-                            <div
-                              key={a.id}
-                              className="border border-white/20 rounded-lg p-3 hover:shadow-md transition-all bg-white/10"
-                            >
+                            <div key={a.id} className="border border-white/20 rounded-lg p-3 hover:shadow-md transition-all bg-white/10">
                               <div className="flex justify-between items-start">
                                 <div className="flex-1 min-w-0">
                                   <h3 className="font-semibold text-gray-100 mb-1">
@@ -1200,409 +696,8 @@ export default function FormadorPage({ user, onLogout }) {
           </div>
         </div>
       </div>
-      
-      {/* SECCIÓN: LECTOR QR PARA ASISTENCIA */}
-      <div className="max-w-[95vw] mx-auto px-4 md:px-8 py-6">
-        <div className="bg-white/10 backdrop-blur-md rounded-2xl border border-white/20 shadow-xl shadow-purple-500/5 p-6">
-          <h2 className="font-semibold text-xl text-white mb-4 flex items-center gap-2">
-            <span className="bg-green-500/20 text-green-300 p-2 rounded-lg border border-green-500/30">
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 15h.01M12 18h.01M12 9h.01M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-              </svg>
-            </span>
-            Registrar Asistencia por QR
-          </h2>
-          
-          <div className="flex flex-wrap gap-4 items-end mb-4">
-            <div>
-              <label className="block text-xs font-medium text-gray-300 mb-1">Seleccionar Día</label>
-              <select
-                value={seleccion.dia || ""}
-                onChange={(e) => setSeleccion(prev => ({ ...prev, dia: e.target.value }))}
-                className="bg-white/10 border border-white/20 text-white rounded-lg px-2 py-1.5 text-xs focus:ring-2 focus:ring-purple-400 focus:border-transparent"
-              >
-                <option value="" className="bg-slate-800">Selecciona un día</option>
-                <option value="1" className="bg-slate-800">Día 1</option>
-                <option value="2" className="bg-slate-800">Día 2</option>
-                <option value="3" className="bg-slate-800">Día 3</option>
-                <option value="4" className="bg-slate-800">Día 4</option>
-                <option value="5" className="bg-slate-800">Día 5</option>
-                <option value="6" className="bg-slate-800">Día 6</option>
-              </select>
-            </div>
-            
-            <button
-              onClick={iniciarLecturaQR}
-              disabled={!seleccion.dia || loading}
-              className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded text-xs font-medium disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
-            >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 15h.01M12 18h.01M12 9h.01M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-              </svg>
-              Iniciar Escaneo QR
-            </button>
-          </div>
-          
-          {escaneandoQR && (
-            <div className="mt-4 p-4 bg-black/30 rounded-lg relative">
-              <video ref={videoRef} style={{ display: 'none' }} />
-              <canvas ref={canvasRef} style={{ display: 'none' }} />
-              <div className="w-full max-w-md mx-auto aspect-video bg-black rounded flex items-center justify-center">
-                <div className="text-white text-sm">Apunta la cámara al código QR</div>
-              </div>
-              <button
-                onClick={detenerLecturaQR}
-                className="mt-3 px-3 py-1 bg-gray-600 text-white rounded text-xs"
-              >
-                Cancelar
-              </button>
-            </div>
-          )}
-          
-          {mensajeQR && (
-            <div className={`mt-3 p-2 rounded text-xs ${mensajeQR.tipo === 'success' ? 'bg-green-500/20 text-green-200' : 'bg-red-500/20 text-red-200'}`}>
-              {mensajeQR.texto}
-            </div>
-          )}
-        </div>
-      </div>
-      
-{/* SECCIÓN: TABLA DE DOTACIÓN CON BOTÓN DE DESCARGA */}
-<div className="max-w-[95vw] mx-auto px-4 md:px-8 py-6">
-  <div className="bg-white/10 backdrop-blur-md rounded-2xl border border-white/20 shadow-xl shadow-purple-500/5 p-6">
-    <h2 className="font-semibold text-xl text-white mb-4 flex items-center gap-2">
-      <span className="bg-blue-500/20 text-blue-300 p-2 rounded-lg border border-blue-500/30">
-        <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
-          <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-        </svg>
-      </span>
-      Tabla de Dotación (Usuarios)
-    </h2>
-    
-    {/* ✅ BOTÓN DE DESCARGA CSV (ÚNICO) */}
-    <div className="flex flex-wrap items-center gap-3 mb-4">
-      <button
-        onClick={descargarCSV}
-        disabled={loading || totalFiltrados === 0}
-        className="px-4 py-2 bg-green-600 hover:bg-green-500 text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 shadow-md"
-      >
-        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-        </svg>
-        Descargar CSV ({totalFiltrados})
-      </button>
-      
-      <div className="text-xs text-gray-400 ml-auto">
-        Mostrando {usuariosPaginados.length} de {totalFiltrados} usuarios
-      </div>
-    </div>
-    
-    <div className="flex flex-wrap items-center gap-4 mb-6">
-      <div>
-        <label className="block text-xs font-medium text-gray-300 mb-1">Filtrar por Grupo</label>
-        <select
-          value={filtroGrupo}
-          onChange={(e) => {
-            setFiltroGrupo(e.target.value);
-            setPaginaActual(1);
-          }}
-          className="bg-white/10 border border-white/20 text-white rounded-lg px-2 py-1.5 text-xs focus:ring-2 focus:ring-purple-400 focus:border-transparent"
-        >
-          <option value="todos" className="bg-slate-800">Todos los grupos</option>
-          {gruposDisponibles.map(grupo => (
-            <option key={grupo} value={grupo} className="bg-slate-800">{grupo}</option>
-          ))}
-        </select>
-      </div>
-      
-      <div>
-        <label className="block text-xs font-medium text-gray-300 mb-1">Filtrar por Estado</label>
-        <select
-          value={filtroEstado}
-          onChange={(e) => {
-            setFiltroEstado(e.target.value);
-            setPaginaActual(1);
-          }}
-          className="bg-white/10 border border-white/20 text-white rounded-lg px-2 py-1.5 text-xs focus:ring-2 focus:ring-purple-400 focus:border-transparent"
-        >
-          <option value="todos" className="bg-slate-800">Todos los estados</option>
-          <option value="Activo" className="bg-slate-800">Activo</option>
-          <option value="Inactivo" className="bg-slate-800">Inactivo</option>
-        </select>
-      </div>
-      
-      <div className="flex-1 min-w-[250px]">
-        <label className="block text-xs font-medium text-gray-300 mb-1">Buscar por nombre o usuario</label>
-        <input
-          type="text"
-          value={busqueda}
-          onChange={(e) => {
-            setBusqueda(e.target.value);
-            setPaginaActual(1);
-          }}
-          placeholder="Ej: Juan Pérez o jperz123"
-          className="w-full bg-white/10 border border-white/20 text-white rounded-lg px-2 py-1.5 text-xs focus:ring-2 focus:ring-purple-400 focus:border-transparent placeholder-gray-400"
-        />
-      </div>
-    </div>
-    
-    {loading && !usuariosDotacion.length ? (
-      <div className="text-center py-12">
-        <div className="animate-spin w-6 h-6 border-2 border-purple-400 border-t-transparent rounded-full mx-auto mb-3"></div>
-        <p className="text-gray-400 text-xs">Cargando dotación...</p>
-      </div>
-    ) : (
-      <>
-        <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-white/10 text-xs">
-            <thead>
-              <tr>
-                <th className="px-2 py-2 text-left text-[10px] font-medium text-gray-300 uppercase tracking-wider">Nombre</th>
-                <th className="px-2 py-2 text-left text-[10px] font-medium text-gray-300 uppercase tracking-wider">Usuario</th>
-                <th className="px-2 py-2 text-left text-[10px] font-medium text-gray-300 uppercase tracking-wider">Rol</th>
-                <th className="px-2 py-2 text-left text-[10px] font-medium text-gray-300 uppercase tracking-wider">Grupo</th>
-                <th className="px-2 py-2 text-left text-[10px] font-medium text-gray-300 uppercase tracking-wider">Estado</th>
-                <th className="px-2 py-2 text-center text-[10px] font-medium text-gray-300 uppercase tracking-wider">Seg. Prefiltro</th>
-                
-                {[1,2,3,4,5,6].map(d => (
-                  <th key={d} className="px-2 py-2 text-center text-[10px] font-medium text-gray-300 uppercase tracking-wider">Día {d}</th>
-                ))}
-                
-                <th className="px-2 py-2 text-center text-[10px] font-medium text-gray-300 uppercase tracking-wider">Certifica</th>
-                <th className="px-2 py-2 text-center text-[10px] font-medium text-gray-300 uppercase tracking-wider">Seg. Certificado</th>
-                <th className="px-2 py-2 text-center text-[10px] font-medium text-gray-300 uppercase tracking-wider">Fecha Baja</th>
-                <th className="px-2 py-2 text-center text-[10px] font-medium text-gray-300 uppercase tracking-wider">Motivo Baja</th>
-                <th className="px-2 py-2 text-left text-[10px] font-medium text-gray-300 uppercase tracking-wider">Acción</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-white/5">
-              {usuariosPaginados.length > 0 ? (
-                usuariosPaginados.map((u) => (
-                  <tr key={u.id} className="hover:bg-white/5 transition-colors">
-                    <td className="px-2 py-2 whitespace-nowrap text-xs text-gray-100">{u.nombre}</td>
-                    <td className="px-2 py-2 whitespace-nowrap text-xs text-gray-200">{u.usuario}</td>
-                    <td className="px-2 py-2 whitespace-nowrap">
-                      <span className={`inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-medium ${
-                        u.rol === 'Administrador' ? 'bg-purple-500/20 text-purple-300' :
-                        u.rol === 'Formador' ? 'bg-green-500/20 text-green-300' :
-                        'bg-blue-500/20 text-blue-300'
-                      }`}>
-                        {u.rol}
-                      </span>
-                    </td>
-                    <td className="px-2 py-2 whitespace-nowrap text-xs text-gray-200">{u.grupo_nombre || '-'}</td>
-                    <td className="px-2 py-2 whitespace-nowrap">
-                      <span className={`inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-medium ${
-                        u.estado === 'Activo' ? 'bg-green-500/20 text-green-300' : 'bg-red-500/20 text-red-300'
-                      }`}>
-                        {u.estado}
-                      </span>
-                    </td>
-                    
-                    {/* segmento_prefiltro */}
-                    <td className="px-2 py-2 whitespace-nowrap text-center">
-                      {filaEditando === u.id ? (
-                        <select
-                          value={valoresEditables.segmento_prefiltro || ""}
-                          onChange={(e) => handleInputChange("segmento_prefiltro", e.target.value)}
-                          className="w-full bg-white/10 border border-white/20 text-white text-[10px] rounded px-1 py-0.5 focus:ring-1 focus:ring-purple-400 focus:border-transparent"
-                        >
-                          <option value="">—</option>
-                          {['A', 'B', 'C'].map(op => (
-                            <option key={op} value={op} className="bg-slate-800">{op}</option>
-                          ))}
-                        </select>
-                      ) : (
-                        <span className="text-gray-300 text-xs">{u.segmento_prefiltro || "—"}</span>
-                      )}
-                    </td>
-                    
-                    {/* Días */}
-                    {[1,2,3,4,5,6].map(d => {
-                      const key = `dia_${d}`;
-                      const esEditable = filaEditando === u.id;
-                      return (
-                        <td key={key} className="px-2 py-2 whitespace-nowrap text-center">
-                          {esEditable ? (
-                            <select
-                              value={valoresEditables[key] || ""}
-                              onChange={(e) => handleInputChange(key, e.target.value)}
-                              className="w-full bg-white/10 border border-white/20 text-white text-[10px] rounded px-1 py-0.5 focus:ring-1 focus:ring-purple-400 focus:border-transparent"
-                            >
-                              <option value="">—</option>
-                              {OPCIONES_ASISTENCIA.map(op => (
-                                <option key={op} value={op} className="bg-slate-800">{op}</option>
-                              ))}
-                            </select>
-                          ) : (
-                            <div className="flex justify-center">
-                              {renderBadgeAsistencia(u[key])}
-                            </div>
-                          )}
-                        </td>
-                      );
-                    })}
-                    
-                    {/* certifica */}
-                    <td className="px-2 py-2 whitespace-nowrap text-center">
-                      {filaEditando === u.id ? (
-                        <select
-                          value={valoresEditables.certifica || ""}
-                          onChange={(e) => handleInputChange("certifica", e.target.value)}
-                          className="w-full bg-white/10 border border-white/20 text-white text-[10px] rounded px-1 py-0.5 focus:ring-1 focus:ring-purple-400 focus:border-transparent"
-                        >
-                          <option value="">—</option>
-                          {['SI', 'NO'].map(op => (
-                            <option key={op} value={op} className="bg-slate-800">{op}</option>
-                          ))}
-                        </select>
-                      ) : (
-                        <span className="text-gray-300 text-xs">{u.certifica || "—"}</span>
-                      )}
-                    </td>
-                    
-                    {/* segmento_certificado */}
-                    <td className="px-2 py-2 whitespace-nowrap text-center">
-                      {filaEditando === u.id ? (
-                        <select
-                          value={valoresEditables.segmento_certificado || ""}
-                          onChange={(e) => handleInputChange("segmento_certificado", e.target.value)}
-                          className="w-full bg-white/10 border border-white/20 text-white text-[10px] rounded px-1 py-0.5 focus:ring-1 focus:ring-purple-400 focus:border-transparent"
-                        >
-                          <option value="">—</option>
-                          {['A', 'B', 'C'].map(op => (
-                            <option key={op} value={op} className="bg-slate-800">{op}</option>
-                          ))}
-                        </select>
-                      ) : (
-                        <span className="text-gray-300 text-xs">{u.segmento_certificado || "—"}</span>
-                      )}
-                    </td>
-                    
-                    {/* Fecha y motivo baja */}
-                    <td className="px-2 py-2 whitespace-nowrap text-center">
-                      {filaEditando === u.id ? (
-                        <input
-                          type="date"
-                          value={valoresEditables.fecha_baja || ""}
-                          onChange={(e) => handleInputChange("fecha_baja", e.target.value)}
-                          className="w-full bg-white/10 border border-white/20 text-white text-[10px] rounded px-1 py-0.5 focus:ring-1 focus:ring-purple-400"
-                        />
-                      ) : (
-                        <span className="text-gray-300 text-xs">{u.fecha_baja || "—"}</span>
-                      )}
-                    </td>
-                    
-{/* Motivo Baja - CAMBIADO A SELECT CON OPCIONES */}
-<td className="px-2 py-2 whitespace-nowrap text-center">
-{filaEditando === u.id ? (
-<select
-value={valoresEditables.motivo_baja || ""}
-onChange={(e) => handleInputChange("motivo_baja", e.target.value)}
-className="w-full bg-white/10 border border-white/20 text-gray-800  text-[10px] rounded px-1 py-0.5 focus:ring-1 focus:ring-purple-400 focus:border-transparent"
->
-<option value="">— Seleccionar motivo —</option>
-<optgroup label="← DESERCIÓN →">
-<option value="DISTANCIA AL SITE">DISTANCIA AL SITE</option>
-<option value="ENFERMEDAD FAMILIAR">ENFERMEDAD FAMILIAR</option>
-<option value="ENFERMEDAD PROPIA">ENFERMEDAD PROPIA</option>
-<option value="HORARIOS">HORARIOS</option>
-<option value="MEJOR OFERTA LABORAL">MEJOR OFERTA LABORAL</option>
-<option value="MOTIVOS PERSONALES - NO ESPECIFICA">MOTIVOS PERSONALES - NO ESPECIFICA</option>
-<option value="NO LE GUSTA EL PRODUCTO">NO LE GUSTA EL PRODUCTO</option>
-<option value="NO ES LO QUE DESEA">NO ES LO QUE DESEA</option>
-<option value="SIN RESPUESTA">SIN RESPUESTA</option>
-</optgroup>
-<optgroup label="← RETIRO →">
-<option value="USUARIOS BLOQUEADOS">USUARIOS BLOQUEADOS</option>
-<option value="NO TIENE HABILIDAD COMERCIAL">NO TIENE HABILIDAD COMERCIAL</option>
-<option value="PROBLEMAS DE ACTITUD">PROBLEMAS DE ACTITUD</option>
-<option value="BLACK LIST SALESLAND">BLACK LIST SALESLAND</option>
-</optgroup>
-</select>
-) : (
-<span className="text-gray-300 text-xs">{u.motivo_baja || "—"}</span>
-)}
-</td>
-                    
-                    {/* Acciones */}
-                    <td className="px-2 py-2 whitespace-nowrap">
-                      {filaEditando === u.id ? (
-                        <div className="flex gap-1">
-                          <button
-                            onClick={() => guardarCambiosFila(u.id)}
-                            disabled={loading}
-                            className="px-1.5 py-0.5 bg-green-500/20 text-green-300 rounded text-[10px] hover:bg-green-500/30 disabled:opacity-50"
-                          >
-                            Guardar
-                          </button>
-                          <button
-                            onClick={cancelarEdicion}
-                            className="px-1.5 py-0.5 bg-gray-500/20 text-gray-300 rounded text-[10px] hover:bg-gray-500/30"
-                          >
-                            Cancelar
-                          </button>
-                        </div>
-                      ) : (
-                        <div className="flex gap-1">
-                          <button
-                            onClick={() => iniciarEdicion(u)}
-                            className="px-1.5 py-0.5 bg-blue-500/20 text-blue-300 rounded text-[10px] hover:bg-blue-500/30"
-                          >
-                            Editar
-                          </button>
-                          <button
-                            onClick={() => actualizarEstadoUsuario(u.id, u.estado === 'Activo' ? 'Inactivo' : 'Activo')}
-                            disabled={loading}
-                            className={`px-1.5 py-0.5 rounded text-[10px] font-medium transition-colors ${
-                              u.estado === 'Activo'
-                                ? 'bg-red-500/20 text-red-300 hover:bg-red-500/30'
-                                : 'bg-green-500/20 text-green-300 hover:bg-green-500/30'
-                            } disabled:opacity-50`}
-                          >
-                            {u.estado === 'Activo' ? 'Inact.' : 'Activo'}
-                          </button>
-                        </div>
-                      )}
-                    </td>
-                  </tr>
-                ))
-              ) : (
-                <tr>
-                  <td colSpan="17" className="px-4 py-6 text-center text-gray-400 text-xs">
-                    No se encontraron usuarios con ese filtro.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-        
-        {totalPaginas > 1 && (
-          <div className="flex items-center justify-between mt-4">
-            <button
-              onClick={() => setPaginaActual(p => Math.max(1, p - 1))}
-              disabled={paginaActual === 1 || loading}
-              className="px-3 py-1.5 bg-white/10 text-white rounded text-xs disabled:opacity-50 disabled:cursor-not-allowed hover:bg-white/20 transition"
-            >
-              ← Anterior
-            </button>
-            <span className="text-gray-300 text-xs">Página {paginaActual} de {totalPaginas}</span>
-            <button
-              onClick={() => setPaginaActual(p => Math.min(totalPaginas, p + 1))}
-              disabled={paginaActual === totalPaginas || loading}
-              className="px-3 py-1.5 bg-white/10 text-white rounded text-xs disabled:opacity-50 disabled:cursor-not-allowed hover:bg-white/20 transition"
-            >
-              Siguiente →
-            </button>
-          </div>
-        )}
-      </>
-    )}
-  </div>
-</div>
-      
-      {/* SECCIÓN: MALLA DE CAPACITACIÓN CON PESTAÑAS */}
+
+      {/* Malla de Capacitación */}
       <div className="max-w-[95vw] mx-auto px-4 md:px-8 py-6">
         <div className="bg-white/10 backdrop-blur-md rounded-2xl border border-white/20 shadow-xl shadow-purple-500/5 p-6">
           <h2 className="font-semibold text-xl text-white mb-4 flex items-center gap-2">
@@ -1613,8 +708,6 @@ className="w-full bg-white/10 border border-white/20 text-gray-800  text-[10px] 
             </span>
             Malla de Capacitación
           </h2>
-          
-          {/* PESTAÑAS */}
           <div className="flex space-x-2 mb-4 border-b border-white/20 pb-2 overflow-x-auto hide-scrollbar">
             {Object.keys(mallasDeCapacitacion).map((nombreMalla) => (
               <button
@@ -1630,8 +723,6 @@ className="w-full bg-white/10 border border-white/20 text-gray-800  text-[10px] 
               </button>
             ))}
           </div>
-          
-          {/* CONTENIDO DE LA MALLA */}
           <div className="flex overflow-x-auto gap-6 pb-4 hide-scrollbar" style={{ scrollSnapType: 'x mandatory' }}>
             {[1, 2, 3, 4].map(dia => (
               <div
@@ -1663,16 +754,11 @@ className="w-full bg-white/10 border border-white/20 text-gray-800  text-[10px] 
               </div>
             ))}
           </div>
-          
           <div className="text-center mt-2">
             <p className="text-xs text-gray-500">Desliza horizontalmente para ver más días</p>
           </div>
         </div>
       </div>
-      
-      {/* Elementos ocultos para QR */}
-      <video ref={videoRef} style={{ display: 'none' }} />
-      <canvas ref={canvasRef} style={{ display: 'none' }} />
     </div>
   );
 }
