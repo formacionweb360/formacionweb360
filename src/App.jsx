@@ -6,7 +6,7 @@ import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router-d
 import LoginForm from "./components/LoginForm";
 import AdminPage from "./pages/AdminPage";
 import FormadorPage from "./pages/FormadorPage";
-import { supabase } from "../services/supabaseClient";  // ✅ Ruta relativa correcta
+import FormadorAsistencia from "./pages/FormadorAsistencia";  // ✅ Ruta relativa correcta
 import AsesorDashboard from "./pages/AsesorDashboard";
 import CursoViewPage from "./pages/CursoViewPage";
 
