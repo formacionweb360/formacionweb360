@@ -1,4 +1,3 @@
-
 // src/pages/FormadorAsistencia.jsx
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "../services/supabaseClient";
@@ -41,6 +40,42 @@ const OPCIONES_MOTIVO_BAJA = {
   ]
 };
 
+// ✅ FUNCIÓN PARA FORMATEAR FECHA SIN PROBLEMAS DE ZONA HORARIA
+const formatearFecha = (fechaString) => {
+  if (!fechaString) return "—";
+  
+  // Si ya es un objeto Date
+  if (fechaString instanceof Date) {
+    return fechaString.toLocaleDateString('es-PE', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric'
+    });
+  }
+  
+  // Parsear string YYYY-MM-DD o DD/MM/YYYY
+  let fecha;
+  if (fechaString.includes('-')) {
+    // Formato YYYY-MM-DD (ISO)
+    const [year, month, day] = fechaString.split('-');
+    fecha = new Date(year, month - 1, day);
+  } else if (fechaString.includes('/')) {
+    // Formato DD/MM/YYYY
+    const [day, month, year] = fechaString.split('/');
+    fecha = new Date(year, month - 1, day);
+  } else {
+    fecha = new Date(fechaString);
+  }
+  
+  if (isNaN(fecha.getTime())) return "—";
+  
+  return fecha.toLocaleDateString('es-PE', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric'
+  });
+};
+
 export default function FormadorAsistencia({ user, onLogout }) {
   // Estados principales
   const [registros, setRegistros] = useState([]);
@@ -65,6 +100,7 @@ export default function FormadorAsistencia({ user, onLogout }) {
   // Listas para filtros dinámicos
   const [campanasUnicas, setCampanasUnicas] = useState([]);
   const [gruposUnicos, setGruposUnicos] = useState([]);
+  const [gruposPorCampana, setGruposPorCampana] = useState({}); // ✅ NUEVO: grupos organizados por campaña
   
   const fechaHoyFormateada = new Date().toLocaleDateString('es-PE', {
     weekday: 'long',
@@ -78,6 +114,11 @@ export default function FormadorAsistencia({ user, onLogout }) {
     cargarRegistros();
     cargarFiltrosDinamicos();
   }, []);
+
+  // ✅ Cuando cambia la campaña, resetear filtro de grupo
+  useEffect(() => {
+    setFiltroGrupo("todos");
+  }, [filtroCampana]);
 
   // Mostrar mensaje temporal
   const mostrarMensaje = (tipo, texto) => {
@@ -139,18 +180,51 @@ export default function FormadorAsistencia({ user, onLogout }) {
         setCampanasUnicas(unicas);
       }
       
-      // Grupos únicos
-      const { data: grupos } = await supabase
+      // ✅ Grupos únicos organizados por campaña
+      const { data: gruposData } = await supabase
         .from("formacion_seguimiento")
-        .select("grupo_nombre")
-        .not("grupo_nombre", "is", null);
-      if (grupos) {
-        const unicos = [...new Set(grupos.map(g => g.grupo_nombre).filter(Boolean))].sort();
-        setGruposUnicos(unicos);
+        .select("campaña, grupo_nombre")
+        .not("grupo_nombre", "is", null)
+        .not("campaña", "is", null);
+      
+      if (gruposData) {
+        // Organizar grupos por campaña
+        const gruposPorCamp = {};
+        gruposData.forEach(item => {
+          const campana = item.campaña?.trim();
+          const grupo = item.grupo_nombre?.trim();
+          if (campana && grupo) {
+            if (!gruposPorCamp[campana]) {
+              gruposPorCamp[campana] = [];
+            }
+            if (!gruposPorCamp[campana].includes(grupo)) {
+              gruposPorCamp[campana].push(grupo);
+            }
+          }
+        });
+        
+        // Ordenar grupos alfabéticamente
+        Object.keys(gruposPorCamp).forEach(campana => {
+          gruposPorCamp[campana].sort();
+        });
+        
+        setGruposPorCampana(gruposPorCamp);
+        
+        // Grupos únicos globales (para cuando no hay campaña seleccionada)
+        const todosLosGrupos = [...new Set(gruposData.map(g => g.grupo_nombre).filter(Boolean))].sort();
+        setGruposUnicos(todosLosGrupos);
       }
     } catch (err) {
       console.error("Error al cargar filtros:", err);
     }
+  };
+
+  // ✅ Obtener grupos disponibles según la campaña seleccionada
+  const getGruposDisponibles = () => {
+    if (filtroCampana && gruposPorCampana[filtroCampana]) {
+      return gruposPorCampana[filtroCampana];
+    }
+    return gruposUnicos;
   };
 
   // Actualizar un campo específico de un registro
@@ -479,12 +553,16 @@ export default function FormadorAsistencia({ user, onLogout }) {
                   setPaginaActual(1);
                 }}
                 className="bg-white/10 border border-white/20 text-white rounded-lg px-2 py-1.5 text-xs focus:ring-2 focus:ring-purple-400 focus:border-transparent"
+                disabled={!!filtroCampana && getGruposDisponibles().length === 0}
               >
                 <option value="todos" className="bg-slate-800">Todos</option>
-                {gruposUnicos.map(g => (
+                {getGruposDisponibles().map(g => (
                   <option key={g} value={g} className="bg-slate-800">{g}</option>
                 ))}
               </select>
+              {filtroCampana && getGruposDisponibles().length === 0 && (
+                <p className="text-[10px] text-gray-400 mt-1">No hay grupos para esta campaña</p>
+              )}
             </div>
             <div>
               <label className="block text-xs font-medium text-gray-300 mb-1">Estado</label>
@@ -681,18 +759,18 @@ export default function FormadorAsistencia({ user, onLogout }) {
                             )}
                           </td>
                           
-                          {/* Fecha Baja */}
+                          {/* Fecha Baja - ✅ CORREGIDO */}
                           <td className="px-2 py-2 whitespace-nowrap text-center">
                             {filaEditando === r.id ? (
                               <input
                                 type="date"
-                                value={valoresEditables.fecha_baja || ""}
+                                value={valoresEditables.fecha_baja ? valoresEditables.fecha_baja.slice(0, 10) : ""}
                                 onChange={(e) => handleInputChange("fecha_baja", e.target.value)}
                                 className="w-full bg-white/10 border border-white/20 text-white text-[10px] rounded px-1 py-0.5 focus:ring-1 focus:ring-purple-400"
                               />
                             ) : (
                               <span className="text-gray-300 text-xs">
-                                {r.fecha_baja ? new Date(r.fecha_baja).toLocaleDateString('es-PE') : "—"}
+                                {formatearFecha(r.fecha_baja)}
                               </span>
                             )}
                           </td>
