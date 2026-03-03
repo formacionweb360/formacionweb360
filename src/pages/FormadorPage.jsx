@@ -4,7 +4,7 @@ import { useNavigate } from "react-router-dom"; // ✅ IMPORTAR useNavigate
 import { supabase } from "../services/supabaseClient";
 
 export default function FormadorPage({ user, onLogout }) {
-  const navigate = useNavigate(); // ✅ Hook para navegación
+  const navigate = useNavigate(); // ✅ Hook para navegaci
   
   const [campañas, setCampañas] = useState([]);
   const [grupos, setGrupos] = useState([]);
