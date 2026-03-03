@@ -6,7 +6,7 @@ import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router-d
 import LoginForm from "./components/LoginForm";
 import AdminPage from "./pages/AdminPage";
 import FormadorPage from "./pages/FormadorPage";
-//import FormadorAsistencia from "./pages/FormadorAsistencia";  // ✅ Ruta relativa correcta
+import FormadorAsistencia from "./pages/FormadorAsistencia"; // ✅ Importado
 import AsesorDashboard from "./pages/AsesorDashboard";
 import CursoViewPage from "./pages/CursoViewPage";
 
@@ -89,7 +89,7 @@ export default function App() {
 
         {/* ===== RUTAS DE FORMADOR ===== */}
         
-        {/* Panel principal del formador (activar cursos, malla, QR) */}
+        {/* Panel principal del formador */}
         <Route
           path="/formador"
           element={
