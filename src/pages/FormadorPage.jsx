@@ -1,8 +1,11 @@
 // src/pages/FormadorPage.jsx
 import { useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom"; // ✅ IMPORTAR useNavigate
 import { supabase } from "../services/supabaseClient";
 
 export default function FormadorPage({ user, onLogout }) {
+  const navigate = useNavigate(); // ✅ Hook para navegación
+  
   const [campañas, setCampañas] = useState([]);
   const [grupos, setGrupos] = useState([]);
   const [cursos, setCursos] = useState([]);
@@ -442,6 +445,18 @@ export default function FormadorPage({ user, onLogout }) {
             <p className="text-xs text-blue-200">📅 {fechaHoyFormateada}</p>
           </div>
           <div className="flex items-center gap-4">
+            {/* ✅ BOTÓN PARA IR A ASISTENCIA */}
+            <button
+              onClick={() => navigate("/formador/asistencia")}
+              className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-sm font-medium transition-colors flex items-center gap-2 shadow-md"
+              title="Gestionar asistencia de formadores"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+              </svg>
+              <span className="hidden sm:inline">Asistencia</span>
+            </button>
+
             <div className="flex items-center gap-2 text-xs text-blue-100">
               <span className="w-2 h-2 bg-teal-300 rounded-full animate-pulse"></span>
               <span>{user?.name || "Formador"}</span>
