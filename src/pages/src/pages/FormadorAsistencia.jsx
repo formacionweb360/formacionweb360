@@ -1,5 +1,6 @@
 // src/pages/FormadorAsistencia.jsx
 import { useEffect, useMemo, useState } from "react";
+import { useParams, useNavigate } from "react-router-dom";
 import { supabase } from "../services/supabaseClient";
 
 // Opciones para los campos de asistencia (día 1-6)
