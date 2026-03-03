@@ -1,9 +1,12 @@
+// src/App.jsx
 import { useState, useEffect } from "react";
 import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router-dom";
+
+// ✅ Componentes
 import LoginForm from "./components/LoginForm";
 import AdminPage from "./pages/AdminPage";
 import FormadorPage from "./pages/FormadorPage";
-import FormadorAsistencia from './pages/FormadorAsistencia'; // ✅ Importar el nuevo componente
+import FormadorAsistencia from "./pages/FormadorAsistencia"; // ✅ Asistencia (tabla formacion_seguimiento)
 import AsesorDashboard from "./pages/AsesorDashboard";
 import CursoViewPage from "./pages/CursoViewPage";
 
@@ -31,11 +34,11 @@ export default function App() {
     localStorage.setItem("user", JSON.stringify(userData));
   };
 
-  // ✅ Función para cerrar sesión con redirección a raíz
+  // Función para cerrar sesión con redirección a raíz
   const handleLogout = () => {
     setUser(null);
     localStorage.removeItem("user");
-    window.location.href = "/"; // 👈 Fuerza volver a la página principal
+    window.location.href = "/";
   };
 
   // Mostrar loading mientras se verifica la sesión
@@ -72,7 +75,7 @@ export default function App() {
           }
         />
 
-        {/* Rutas por rol */}
+        {/* ===== RUTAS DE ADMINISTRADOR ===== */}
         <Route
           path="/admin"
           element={
@@ -84,6 +87,9 @@ export default function App() {
           }
         />
 
+        {/* ===== RUTAS DE FORMADOR ===== */}
+        
+        {/* Panel principal del formador (activar cursos, malla, QR) */}
         <Route
           path="/formador"
           element={
@@ -95,18 +101,21 @@ export default function App() {
           }
         />
 
-        {/* ✅ Nueva ruta para gestión de usuarios */}
+        {/* ✅ Gestión de asistencia (tabla formacion_seguimiento) */}
         <Route
-          path="/formador/usuarios"
+          path="/formador/asistencia"
           element={
             user.rol === "Formador" ? (
-              <FormadorUsuariosPage user={user} onLogout={handleLogout} />
+              <FormadorAsistencia user={user} onLogout={handleLogout} />
             ) : (
               <Navigate to="/" replace />
             )
           }
         />
 
+        {/* ===== RUTAS DE ASESOR/USUARIO ===== */}
+        
+        {/* Dashboard del asesor */}
         <Route
           path="/dashboard"
           element={
@@ -118,7 +127,7 @@ export default function App() {
           }
         />
 
-        {/* Ruta del curso - accesible solo para usuarios */}
+        {/* Vista de curso individual */}
         <Route
           path="/curso/:id"
           element={
