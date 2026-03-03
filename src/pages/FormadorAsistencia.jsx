@@ -1,5 +1,6 @@
 // src/pages/FormadorAsistencia.jsx
 import { useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom"; // ✅ IMPORTAR useNavigate
 import { supabase } from "../services/supabaseClient";
 
 // Opciones para los campos de asistencia (día 1-6)
@@ -77,6 +78,8 @@ const formatearFecha = (fechaString) => {
 };
 
 export default function FormadorAsistencia({ user, onLogout }) {
+  const navigate = useNavigate(); // ✅ Hook para navegación
+  
   // Estados principales
   const [registros, setRegistros] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -475,10 +478,25 @@ export default function FormadorAsistencia({ user, onLogout }) {
       {/* Header */}
       <header className="bg-gradient-to-r from-slate-600 via-blue-900 to-teal-700 shadow-sm sticky top-0 z-50">
         <div className="max-w-[95vw] mx-auto px-4 md:px-8 py-6 flex items-center justify-between">
-          <div>
-            <h1 className="text-3xl font-bold text-white mb-1">Seguimiento de Formación</h1>
-            <p className="text-xs text-blue-200">📅 {fechaHoyFormateada}</p>
+          <div className="flex items-center gap-4">
+            {/* ✅ BOTÓN DE REGRESO */}
+            <button
+              onClick={() => navigate("/formador")}
+              className="px-3 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-sm font-medium transition-colors flex items-center gap-2 shadow-md"
+              title="Volver al Panel del Formador"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+              </svg>
+              <span className="hidden sm:inline">Volver</span>
+            </button>
+            
+            <div>
+              <h1 className="text-3xl font-bold text-white mb-1">Seguimiento de Formación</h1>
+              <p className="text-xs text-blue-200">📅 {fechaHoyFormateada}</p>
+            </div>
           </div>
+          
           <div className="flex items-center gap-4">
             <div className="flex items-center gap-2 text-xs text-blue-100">
               <span className="w-2 h-2 bg-teal-300 rounded-full animate-pulse"></span>
