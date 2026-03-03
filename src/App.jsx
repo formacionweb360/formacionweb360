@@ -3,7 +3,7 @@ import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router-d
 import LoginForm from "./components/LoginForm";
 import AdminPage from "./pages/AdminPage";
 import FormadorPage from "./pages/FormadorPage";
-import FormadorUsuariosPage from "./pages/FormadorUsuariosPage"; // ✅ Importar el nuevo componente
+import FormadorAsistencia from './pages/FormadorAsistencia'; // ✅ Importar el nuevo componente
 import AsesorDashboard from "./pages/AsesorDashboard";
 import CursoViewPage from "./pages/CursoViewPage";
 
