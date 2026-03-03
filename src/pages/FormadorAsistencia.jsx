@@ -1,4 +1,3 @@
-
 // src/pages/FormadorAsistencia.jsx
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
@@ -38,6 +37,7 @@ const BULK_FIELDS = [
   { key: 'segmento_certificado', label: 'Segmento Certificado', type: 'select', options: OPCIONES_SEGMENTO },
   { key: 'fecha_baja', label: 'Fecha Baja', type: 'date' },
   { key: 'motivo_baja', label: 'Motivo Baja', type: 'motivo_baja' },
+  { key: 'telefono', label: 'Teléfono', type: 'text', placeholder: 'Ej: 987654321' },
   // Días 1-6 de asistencia
   ...[1,2,3,4,5,6].map(d => ({
     key: `dia_${d}`,
@@ -65,6 +65,16 @@ const formatearFecha = (fechaString) => {
   }
   if (isNaN(fecha.getTime())) return "—";
   return fecha.toLocaleDateString('es-PE', { day: '2-digit', month: '2-digit', year: 'numeric' });
+};
+
+// ✅ FUNCIÓN PARA FORMATEAR TELÉFONO
+const formatearTelefono = (telefono) => {
+  if (!telefono) return "—";
+  const limpio = String(telefono).replace(/\D/g, '');
+  if (limpio.length === 9) {
+    return `${limpio.slice(0,3)} ${limpio.slice(3,6)} ${limpio.slice(6)}`;
+  }
+  return telefono;
 };
 
 export default function FormadorAsistencia({ user, onLogout }) {
@@ -138,7 +148,8 @@ export default function FormadorAsistencia({ user, onLogout }) {
         .select(`
           id, dni, nombre, campaña, grupo_nombre, estado, fecha_inicio, fecha_termino,
           segmento_prefiltro, dia_1, dia_2, dia_3, dia_4, dia_5, dia_6,
-          certifica, segmento_certificado, fecha_baja, motivo_baja, created_at, updated_at
+          certifica, segmento_certificado, fecha_baja, motivo_baja, telefono,
+          created_at, updated_at
         `)
         .order("nombre", { ascending: true });
       if (error) throw error;
@@ -194,8 +205,6 @@ export default function FormadorAsistencia({ user, onLogout }) {
   // ──────────────────────────────────────────────────────────────────────────────
   // FUNCIONES DE EDICIÓN MASIVA CON MODAL
   // ──────────────────────────────────────────────────────────────────────────────
-
-  // Abrir modal de edición masiva
   const openBulkModal = () => {
     if (selectedItems.length === 0) {
       mostrarMensaje("warning", "⚠️ Selecciona al menos un registro para editar");
@@ -206,25 +215,21 @@ export default function FormadorAsistencia({ user, onLogout }) {
     setIsBulkModalOpen(true);
   };
 
-  // Cerrar modal
   const closeBulkModal = () => {
     setIsBulkModalOpen(false);
     setSelectedItems([]);
   };
 
-  // Actualizar valor de campo en el formulario del modal
   const setBulkField = (key, value) => {
     setBulkForm(prev => ({ ...prev, [key]: value }));
   };
 
-  // Toggle checkbox "Aplicar" para un campo
   const toggleBulkApply = (key, checked) => {
     setBulkApply(prev => ({ ...prev, [key]: checked }));
   };
 
   // Guardar cambios masivos
   const saveBulkModal = async () => {
-    // Validar que haya al menos un campo marcado para aplicar
     const camposParaAplicar = Object.entries(bulkApply).filter(([_, v]) => v);
     if (camposParaAplicar.length === 0) {
       mostrarMensaje("warning", "⚠️ Marca 'Aplicar' en al menos un campo para guardar");
@@ -233,58 +238,36 @@ export default function FormadorAsistencia({ user, onLogout }) {
 
     setIsSavingBulk(true);
     try {
-      // 1. Obtener registros actuales para calcular diffs
       const { data: currentRecords, error: fetchError } = await supabase
         .from("formacion_seguimiento")
         .select("*")
         .in("id", selectedItems);
       if (fetchError) throw fetchError;
 
-      // 2. Construir payload solo con campos marcados como "Aplicar"
       const payload = {};
       BULK_FIELDS.forEach(field => {
         if (bulkApply[field.key]) {
           let value = bulkForm[field.key];
-          if (value === '' && ['segmento_prefiltro', 'certifica', 'segmento_certificado', 'fecha_baja', 'motivo_baja', ...[1,2,3,4,5,6].map(d => `dia_${d}`)].includes(field.key)) {
+          if (value === '' && ['segmento_prefiltro', 'certifica', 'segmento_certificado', 'fecha_baja', 'motivo_baja', 'telefono', ...[1,2,3,4,5,6].map(d => `dia_${d}`)].includes(field.key)) {
             value = null;
           }
           payload[field.key] = value;
         }
       });
 
-      // 3. Actualizar registros en Supabase
       const { error: updateError } = await supabase
         .from("formacion_seguimiento")
         .update(payload)
         .in("id", selectedItems);
       if (updateError) throw updateError;
 
-      // 4. Calcular diffs para logging (opcional)
-      const diffs = (currentRecords || []).map(rec => {
-        const changes = {};
-        Object.keys(payload).forEach(field => {
-          const oldValue = rec[field];
-          const newValue = payload[field];
-          if (oldValue !== newValue) {
-            changes[field] = { from: oldValue, to: newValue };
-          }
-        });
-        if (Object.keys(changes).length > 0) {
-          return { record_id: rec.id?.substring(0, 8), nombre: rec.nombre, changes };
-        }
-        return null;
-      }).filter(d => d !== null);
-      // console.log(diffs);
-
-      // 5. Actualizar estado local y mostrar mensaje de éxito
       setRegistros(prev =>
         prev.map(r => selectedItems.includes(r.id) ? { ...r, ...payload } : r)
       );
       
       mostrarMensaje("success", `✅ Cambios aplicados a ${selectedItems.length} registro(s)`);
       closeBulkModal();
-      await cargarRegistros(); // Recargar para asegurar consistencia
-
+      await cargarRegistros();
     } catch (err) {
       console.error("Error en edición masiva:", err);
       mostrarMensaje("error", `❌ Error al guardar: ${err.message}`);
@@ -294,9 +277,8 @@ export default function FormadorAsistencia({ user, onLogout }) {
   };
 
   // ──────────────────────────────────────────────────────────────────────────────
-  // FUNCIONES DE EDICIÓN INDIVIDUAL POR FILA (EXISTENTES)
+  // FUNCIONES DE EDICIÓN INDIVIDUAL POR FILA
   // ──────────────────────────────────────────────────────────────────────────────
-
   const iniciarEdicion = (registro) => {
     const campos = {};
     for (let i = 1; i <= 6; i++) campos[`dia_${i}`] = registro[`dia_${i}`] || "";
@@ -305,6 +287,7 @@ export default function FormadorAsistencia({ user, onLogout }) {
     campos.segmento_certificado = registro.segmento_certificado || "";
     campos.fecha_baja = registro.fecha_baja || "";
     campos.motivo_baja = registro.motivo_baja || "";
+    campos.telefono = registro.telefono || ""; // ✅ NUEVO
     setValoresEditables(campos);
     setFilaEditando(registro.id);
   };
@@ -326,7 +309,7 @@ export default function FormadorAsistencia({ user, onLogout }) {
         const key = `dia_${i}`;
         if (valoresEditables[key] !== undefined) cambios[key] = valoresEditables[key] === "" ? null : valoresEditables[key];
       }
-      ['segmento_prefiltro', 'certifica', 'segmento_certificado', 'fecha_baja', 'motivo_baja'].forEach(campo => {
+      ['segmento_prefiltro', 'certifica', 'segmento_certificado', 'fecha_baja', 'motivo_baja', 'telefono'].forEach(campo => {
         if (valoresEditables[campo] !== undefined) cambios[campo] = valoresEditables[campo] === "" ? null : valoresEditables[campo];
       });
       const { error } = await supabase.from("formacion_seguimiento").update(cambios).eq("id", registroId);
@@ -343,7 +326,7 @@ export default function FormadorAsistencia({ user, onLogout }) {
     }
   };
 
-  // Badges — versión minimalista / enterprise
+  // Badges
   const renderBadgeAsistencia = (estado) => {
     if (!estado) return <span className="text-gray-400 text-xs">—</span>;
     const config = {
@@ -399,7 +382,7 @@ export default function FormadorAsistencia({ user, onLogout }) {
       return;
     }
     const headers = [
-      "DNI", "Nombre", "Campaña", "Grupo", "Estado", "Fecha Inicio", "Fecha Término",
+      "DNI", "Nombre", "Campaña", "Grupo", "Estado", "Teléfono", "Fecha Inicio", "Fecha Término",
       "Segmento Prefiltro", "Día 1", "Día 2", "Día 3", "Día 4", "Día 5", "Día 6",
       "Certifica", "Segmento Certificado", "Fecha Baja", "Motivo Baja"
     ];
@@ -407,7 +390,7 @@ export default function FormadorAsistencia({ user, onLogout }) {
     registrosPaginados.forEach(r => {
       const row = [
         `"${r.dni || ''}"`, `"${r.nombre || ''}"`, r.campaña || '', r.grupo_nombre || '', r.estado || '',
-        r.fecha_inicio || '', r.fecha_termino || '', r.segmento_prefiltro || '',
+        `"${r.telefono || ''}"`, r.fecha_inicio || '', r.fecha_termino || '', r.segmento_prefiltro || '',
         r.dia_1 || '', r.dia_2 || '', r.dia_3 || '', r.dia_4 || '', r.dia_5 || '', r.dia_6 || '',
         r.certifica || '', r.segmento_certificado || '', r.fecha_baja || '', `"${r.motivo_baja || ''}"`
       ];
@@ -427,7 +410,7 @@ export default function FormadorAsistencia({ user, onLogout }) {
     mostrarMensaje("success", `✅ Descargado ${registrosPaginados.length} registros`);
   };
 
-  // Actualizar estado del registro (Activo/Inactivo)
+  // Actualizar estado del registro
   const toggleEstadoRegistro = async (registroId, estadoActual) => {
     const nuevoEstado = estadoActual === 'Activo' ? 'Inactivo' : 'Activo';
     setLoading(true);
@@ -469,7 +452,6 @@ export default function FormadorAsistencia({ user, onLogout }) {
       <header className="bg-white border-b border-gray-200 shadow-sm sticky top-0 z-50">
         <div className="max-w-[95vw] mx-auto px-4 md:px-8 py-4 flex items-center justify-between">
           <div className="flex items-center gap-4">
-            {/* ✅ BOTÓN DE REGRESO */}
             <button
               onClick={() => navigate("/formador")}
               className="px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium transition-colors flex items-center gap-2"
@@ -503,15 +485,11 @@ export default function FormadorAsistencia({ user, onLogout }) {
       {/* Mensajes */}
       {mensaje.texto && (
         <div className="max-w-[95vw] mx-auto px-4 md:px-8 pt-4">
-          <div
-            className={`p-3 rounded-md shadow-sm border-l-4 ${
-              mensaje.tipo === "success"
-                ? "bg-green-50 border-l-green-500 text-green-800"
-                : mensaje.tipo === "error"
-                ? "bg-red-50 border-l-red-500 text-red-800"
-                : "bg-blue-50 border-l-blue-500 text-blue-800"
-            }`}
-          >
+          <div className={`p-3 rounded-md shadow-sm border-l-4 ${
+            mensaje.tipo === "success" ? "bg-green-50 border-l-green-500 text-green-800" :
+            mensaje.tipo === "error" ? "bg-red-50 border-l-red-500 text-red-800" :
+            "bg-blue-50 border-l-blue-500 text-blue-800"
+          }`}>
             <p className="text-sm">{mensaje.texto}</p>
           </div>
         </div>
@@ -519,7 +497,6 @@ export default function FormadorAsistencia({ user, onLogout }) {
 
       {/* Contenido principal */}
       <div className="max-w-[95vw] mx-auto px-4 md:px-8 py-6">
-        
         {/* Barra de acciones y filtros */}
         <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6 mb-6">
           <div className="flex flex-wrap items-center justify-between gap-4 mb-4">
@@ -532,7 +509,10 @@ export default function FormadorAsistencia({ user, onLogout }) {
               disabled={loading || totalFiltrados === 0}
               className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
             >
-              📥 Descargar CSV ({totalFiltrados})
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+              </svg>
+              Descargar CSV ({totalFiltrados})
             </button>
           </div>
 
@@ -622,7 +602,6 @@ export default function FormadorAsistencia({ user, onLogout }) {
                 <table className="min-w-full divide-y divide-gray-200 text-xs">
                   <thead className="bg-gray-50">
                     <tr>
-                      {/* Checkbox seleccionar todo */}
                       <th className="px-2 py-2 text-center text-[10px] font-medium text-gray-600 uppercase tracking-wider">
                         <input
                           type="checkbox"
@@ -645,6 +624,7 @@ export default function FormadorAsistencia({ user, onLogout }) {
                       <th className="px-2 py-2 text-center text-[10px] font-medium text-gray-600 uppercase tracking-wider">Seg. Certificado</th>
                       <th className="px-2 py-2 text-center text-[10px] font-medium text-gray-600 uppercase tracking-wider">Fecha Baja</th>
                       <th className="px-2 py-2 text-center text-[10px] font-medium text-gray-600 uppercase tracking-wider">Motivo Baja</th>
+                      <th className="px-2 py-2 text-center text-[10px] font-medium text-gray-600 uppercase tracking-wider">Teléfono</th>
                       <th className="px-2 py-2 text-left text-[10px] font-medium text-gray-600 uppercase tracking-wider">Acción</th>
                     </tr>
                   </thead>
@@ -652,7 +632,6 @@ export default function FormadorAsistencia({ user, onLogout }) {
                     {registrosPaginados.length > 0 ? (
                       registrosPaginados.map((r) => (
                         <tr key={r.id} className="hover:bg-gray-50 transition-colors">
-                          {/* Checkbox de selección */}
                           <td className="px-2 py-2 whitespace-nowrap text-center">
                             <input
                               type="checkbox"
@@ -661,17 +640,11 @@ export default function FormadorAsistencia({ user, onLogout }) {
                               className="h-3.5 w-3.5 cursor-pointer text-blue-600 rounded border-gray-300 focus:ring-blue-600"
                             />
                           </td>
-                          {/* DNI */}
                           <td className="px-2 py-2 whitespace-nowrap text-xs text-gray-900 font-mono">{r.dni}</td>
-                          {/* Nombre */}
                           <td className="px-2 py-2 whitespace-nowrap text-xs text-gray-900">{r.nombre}</td>
-                          {/* Campaña */}
                           <td className="px-2 py-2 whitespace-nowrap text-xs text-gray-700">{r.campaña || '-'}</td>
-                          {/* Grupo */}
                           <td className="px-2 py-2 whitespace-nowrap text-xs text-gray-700">{r.grupo_nombre || '-'}</td>
-                          {/* Estado */}
                           <td className="px-2 py-2 whitespace-nowrap">{renderBadgeEstado(r.estado)}</td>
-                          {/* Segmento Prefiltro */}
                           <td className="px-2 py-2 whitespace-nowrap text-center">
                             {filaEditando === r.id ? (
                               <select
@@ -684,7 +657,6 @@ export default function FormadorAsistencia({ user, onLogout }) {
                               </select>
                             ) : <span className="text-gray-700 text-xs">{r.segmento_prefiltro || "—"}</span>}
                           </td>
-                          {/* Días 1-6 */}
                           {[1,2,3,4,5,6].map(d => {
                             const key = `dia_${d}`;
                             const esEditable = filaEditando === r.id;
@@ -703,7 +675,6 @@ export default function FormadorAsistencia({ user, onLogout }) {
                               </td>
                             );
                           })}
-                          {/* Certifica */}
                           <td className="px-2 py-2 whitespace-nowrap text-center">
                             {filaEditando === r.id ? (
                               <select
@@ -715,16 +686,13 @@ export default function FormadorAsistencia({ user, onLogout }) {
                                 {OPCIONES_CERTIFICA.map(op => <option key={op} value={op}>{op}</option>)}
                               </select>
                             ) : (
-                              <span
-                                className={`text-xs font-medium ${
-                                  r.certifica === 'SI' ? 'text-green-700' : r.certifica === 'NO' ? 'text-red-700' : 'text-gray-500'
-                                }`}
-                              >
+                              <span className={`text-xs font-medium ${
+                                r.certifica === 'SI' ? 'text-green-700' : r.certifica === 'NO' ? 'text-red-700' : 'text-gray-500'
+                              }`}>
                                 {r.certifica || "—"}
                               </span>
                             )}
                           </td>
-                          {/* Segmento Certificado */}
                           <td className="px-2 py-2 whitespace-nowrap text-center">
                             {filaEditando === r.id ? (
                               <select
@@ -737,7 +705,6 @@ export default function FormadorAsistencia({ user, onLogout }) {
                               </select>
                             ) : <span className="text-gray-700 text-xs">{r.segmento_certificado || "—"}</span>}
                           </td>
-                          {/* Fecha Baja */}
                           <td className="px-2 py-2 whitespace-nowrap text-center">
                             {filaEditando === r.id ? (
                               <input
@@ -748,7 +715,6 @@ export default function FormadorAsistencia({ user, onLogout }) {
                               />
                             ) : <span className="text-gray-700 text-xs">{formatearFecha(r.fecha_baja)}</span>}
                           </td>
-                          {/* Motivo Baja */}
                           <td className="px-2 py-2 whitespace-nowrap text-center max-w-[150px]">
                             {filaEditando === r.id ? (
                               <select
@@ -765,7 +731,18 @@ export default function FormadorAsistencia({ user, onLogout }) {
                               </select>
                             ) : <span className="text-gray-700 text-xs truncate block" title={r.motivo_baja}>{r.motivo_baja || "—"}</span>}
                           </td>
-                          {/* Acciones */}
+                          {/* ✅ TELÉFONO - NUEVA COLUMNA */}
+                          <td className="px-2 py-2 whitespace-nowrap text-center">
+                            {filaEditando === r.id ? (
+                              <input
+                                type="tel"
+                                value={valoresEditables.telefono || ""}
+                                onChange={(e) => handleInputChange("telefono", e.target.value)}
+                                placeholder="987654321"
+                                className="w-full bg-white border border-gray-300 text-gray-700 text-[10px] rounded px-1 py-0.5 focus:ring-1 focus:ring-blue-600 focus:border-blue-600"
+                              />
+                            ) : <span className="text-gray-700 text-xs">{formatearTelefono(r.telefono)}</span>}
+                          </td>
                           <td className="px-2 py-2 whitespace-nowrap">
                             {filaEditando === r.id ? (
                               <div className="flex gap-1">
@@ -809,7 +786,7 @@ export default function FormadorAsistencia({ user, onLogout }) {
                       ))
                     ) : (
                       <tr>
-                        <td colSpan="19" className="px-4 py-6 text-center text-gray-600 text-xs">
+                        <td colSpan="20" className="px-4 py-6 text-center text-gray-600 text-xs">
                           No se encontraron registros con esos filtros.
                         </td>
                       </tr>
@@ -817,7 +794,7 @@ export default function FormadorAsistencia({ user, onLogout }) {
                   </tbody>
                 </table>
               </div>
-              
+
               {/* Paginación */}
               {totalPaginas > 1 && (
                 <div className="flex items-center justify-between mt-4">
@@ -848,12 +825,8 @@ export default function FormadorAsistencia({ user, onLogout }) {
       {/* ────────────────────────────────────────────────────────────────────────────── */}
       {isBulkModalOpen && (
         <div className="fixed inset-0 z-50 flex items-end md:items-center md:justify-center">
-          {/* Overlay */}
           <div className="absolute inset-0 bg-black/50" onClick={closeBulkModal} />
-
-          {/* Modal */}
           <div className="relative w-full md:max-w-4xl bg-white rounded-t-2xl md:rounded-2xl shadow-2xl border border-gray-200 overflow-hidden max-h-[90vh] flex flex-col">
-            
             {/* Header del modal */}
             <div className="px-4 py-3 bg-white border-b border-gray-200 text-gray-900 flex items-center justify-between flex-shrink-0">
               <div className="flex items-center gap-2">
@@ -864,19 +837,18 @@ export default function FormadorAsistencia({ user, onLogout }) {
               </div>
               <button onClick={closeBulkModal} className="text-gray-500 hover:text-gray-700" title="Cerrar">✕</button>
             </div>
-            
+
             {/* Instrucciones */}
             <div className="px-4 py-2 bg-gray-50 border-b border-gray-200">
               <p className="text-[11px] text-gray-600">
                 💡 <strong>Instrucciones:</strong> Marca la casilla <strong>"Aplicar"</strong> en cada campo que deseas actualizar. Los campos no marcados NO serán modificados.
               </p>
             </div>
-            
+
             {/* Body del modal - Campos editables */}
             <div className="p-4 grid grid-cols-1 md:grid-cols-2 gap-3 overflow-y-auto flex-1">
               {BULK_FIELDS.map((field) => (
                 <div key={field.key} className="flex items-start gap-2 p-2 border border-gray-200 rounded-lg">
-                  {/* Checkbox "Aplicar" */}
                   <input
                     type="checkbox"
                     checked={!!bulkApply[field.key]}
@@ -884,11 +856,8 @@ export default function FormadorAsistencia({ user, onLogout }) {
                     className="mt-1 h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-600"
                     title="Aplicar este campo"
                   />
-                  
                   <div className="flex-1 min-w-0">
                     <label className="block text-[11px] font-medium text-gray-700 mb-1">{field.label}</label>
-                    
-                    {/* SELECT */}
                     {field.type === 'select' && (
                       <select
                         value={bulkForm[field.key] ?? ''}
@@ -899,8 +868,6 @@ export default function FormadorAsistencia({ user, onLogout }) {
                         {field.options.map(opt => <option key={opt} value={opt}>{opt}</option>)}
                       </select>
                     )}
-                    
-                    {/* TEXT */}
                     {field.type === 'text' && (
                       <input
                         type="text"
@@ -910,8 +877,6 @@ export default function FormadorAsistencia({ user, onLogout }) {
                         className="w-full px-2 py-1.5 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-blue-600 focus:border-blue-600 text-gray-700"
                       />
                     )}
-                    
-                    {/* DATE */}
                     {field.type === 'date' && (
                       <input
                         type="date"
@@ -920,8 +885,6 @@ export default function FormadorAsistencia({ user, onLogout }) {
                         className="w-full px-2 py-1.5 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-blue-600 focus:border-blue-600 text-gray-700"
                       />
                     )}
-                    
-                    {/* MOTIVO_BAJA con optgroup */}
                     {field.type === 'motivo_baja' && (
                       <select
                         value={bulkForm.motivo_baja ?? ''}
@@ -940,7 +903,7 @@ export default function FormadorAsistencia({ user, onLogout }) {
                 </div>
               ))}
             </div>
-            
+
             {/* Footer del modal */}
             <div className="px-4 py-3 bg-gray-50 border-t border-gray-200 flex items-center justify-between flex-shrink-0">
               <div className="text-[11px] text-gray-600">
@@ -981,9 +944,6 @@ export default function FormadorAsistencia({ user, onLogout }) {
           </div>
         </div>
       )}
-      {/* ────────────────────────────────────────────────────────────────────────────── */}
-      {/* FIN MODAL DE EDICIÓN MASIVA */}
-      {/* ────────────────────────────────────────────────────────────────────────────── */}
 
       {/* Barra de acciones de selección */}
       {selectedItems.length > 0 && !isBulkModalOpen && (
@@ -1015,4 +975,3 @@ export default function FormadorAsistencia({ user, onLogout }) {
     </div>
   );
 }
-``
