@@ -1,6 +1,6 @@
 // src/pages/FormadorPage.jsx
 import { useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom"; // ✅ IMPORTAR useNavigate
+import { useNavigate } from "react-router-dom"; // ✅ IMPORTAR useNaviga
 import { supabase } from "../services/supabaseClient";
 
 export default function FormadorPage({ user, onLogout }) {
