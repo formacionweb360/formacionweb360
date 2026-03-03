@@ -32,11 +32,7 @@ const OPCIONES_MOTIVO_BAJA = {
 // ✅ EDITABLES: Todos los demás campos de la tabla formacion_seguimiento
 // ──────────────────────────────────────────────────────────────────────────────
 const BULK_FIELDS = [
-  { key: 'campaña', label: 'Campaña', type: 'text' },
-  { key: 'grupo_nombre', label: 'Grupo', type: 'text' },
   { key: 'estado', label: 'Estado', type: 'select', options: ['Activo', 'Inactivo'] },
-  { key: 'fecha_inicio', label: 'Fecha Inicio', type: 'date' },
-  { key: 'fecha_termino', label: 'Fecha Término', type: 'date' },
   { key: 'segmento_prefiltro', label: 'Segmento Prefiltro', type: 'select', options: OPCIONES_SEGMENTO },
   { key: 'certifica', label: 'Certifica', type: 'select', options: OPCIONES_CERTIFICA },
   { key: 'segmento_certificado', label: 'Segmento Certificado', type: 'select', options: OPCIONES_SEGMENTO },
