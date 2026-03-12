@@ -3,9 +3,9 @@ import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "../services/supabaseClient";
 
-// Opciones para los campos de asistencia (día 1-6)
+// Opciones para los campos de asistencia (día 1-7)
 const OPCIONES_ASISTENCIA = [
-  "ASISTIÓ", "FALTA", "DESERTÓ", "TARDANZA", "NO SE PRESENTÓ", "RETIRADO", "NO APROBO ROLE PLAY"
+  "ASISTIÓ", "FALTA", "DESERTÓ", "TARDANZA", "NO SE PRESENTÓ", "RETIRADO", "NO APROBO ROLE PLAY", "INYECTADO"
 ];
 
 // Opciones para segmento y certificación
@@ -38,8 +38,8 @@ const BULK_FIELDS = [
   { key: 'fecha_baja', label: 'Fecha Baja', type: 'date' },
   { key: 'motivo_baja', label: 'Motivo Baja', type: 'motivo_baja' },
   { key: 'telefono', label: 'Teléfono', type: 'text', placeholder: 'Ej: 987654321' },
-  // Días 1-6 de asistencia
-  ...[1,2,3,4,5,6].map(d => ({
+  // Días 1-7 de asistencia
+  ...[1, 2, 3, 4, 5, 6, 7].map(d => ({
     key: `dia_${d}`,
     label: `Día ${d}`,
     type: 'select',
@@ -72,39 +72,39 @@ const formatearTelefono = (telefono) => {
   if (!telefono) return "—";
   const limpio = String(telefono).replace(/\D/g, '');
   if (limpio.length === 9) {
-    return `${limpio.slice(0,3)} ${limpio.slice(3,6)} ${limpio.slice(6)}`;
+    return `${limpio.slice(0, 3)} ${limpio.slice(3, 6)} ${limpio.slice(6)}`;
   }
   return telefono;
 };
 
 export default function FormadorAsistencia({ user, onLogout }) {
   const navigate = useNavigate();
-  
+
   // Estados principales
   const [registros, setRegistros] = useState([]);
   const [loading, setLoading] = useState(false);
   const [mensaje, setMensaje] = useState({ tipo: "", texto: "" });
-  
+
   // Filtros
   const [filtroCampana, setFiltroCampana] = useState("");
   const [filtroGrupo, setFiltroGrupo] = useState("todos");
   const [filtroEstado, setFiltroEstado] = useState("todos");
   const [filtroSegmento, setFiltroSegmento] = useState("todos");
   const [busqueda, setBusqueda] = useState("");
-  
+
   // Paginación
   const [paginaActual, setPaginaActual] = useState(1);
   const REGISTROS_POR_PAGINA = 15;
-  
+
   // Edición por fila
   const [filaEditando, setFilaEditando] = useState(null);
   const [valoresEditables, setValoresEditables] = useState({});
-  
+
   // Listas para filtros dinámicos
   const [campanasUnicas, setCampanasUnicas] = useState([]);
   const [gruposUnicos, setGruposUnicos] = useState([]);
   const [gruposPorCampana, setGruposPorCampana] = useState({});
-  
+
   // ──────────────────────────────────────────────────────────────────────────────
   // ESTADOS PARA EDICIÓN MASIVA CON MODAL
   // ──────────────────────────────────────────────────────────────────────────────
@@ -117,7 +117,7 @@ export default function FormadorAsistencia({ user, onLogout }) {
     Object.fromEntries(BULK_FIELDS.map(f => [f.key, false]))
   );
   const [isSavingBulk, setIsSavingBulk] = useState(false);
-  
+
   const fechaHoyFormateada = new Date().toLocaleDateString('es-PE', {
     weekday: 'long', year: 'numeric', month: 'long', day: 'numeric'
   });
@@ -147,11 +147,12 @@ export default function FormadorAsistencia({ user, onLogout }) {
         .from("formacion_seguimiento")
         .select(`
           id, dni, nombre, campaña, grupo_nombre, estado, fecha_inicio, fecha_termino,
-          segmento_prefiltro, dia_1, dia_2, dia_3, dia_4, dia_5, dia_6,
+          segmento_prefiltro, dia_1, dia_2, dia_3, dia_4, dia_5, dia_6, dia_7,
           certifica, segmento_certificado, fecha_baja, motivo_baja, telefono,
           created_at, updated_at
         `)
         .order("nombre", { ascending: true });
+
       if (error) throw error;
       setRegistros(data || []);
     } catch (err) {
@@ -171,6 +172,7 @@ export default function FormadorAsistencia({ user, onLogout }) {
         const unicas = [...new Set(campanas.map(c => c.campaña).filter(Boolean))].sort();
         setCampanasUnicas(unicas);
       }
+
       const { data: gruposData } = await supabase
         .from("formacion_seguimiento").select("campaña, grupo_nombre")
         .not("grupo_nombre", "is", null).not("campaña", "is", null);
@@ -242,13 +244,14 @@ export default function FormadorAsistencia({ user, onLogout }) {
         .from("formacion_seguimiento")
         .select("*")
         .in("id", selectedItems);
+
       if (fetchError) throw fetchError;
 
       const payload = {};
       BULK_FIELDS.forEach(field => {
         if (bulkApply[field.key]) {
           let value = bulkForm[field.key];
-          if (value === '' && ['segmento_prefiltro', 'certifica', 'segmento_certificado', 'fecha_baja', 'motivo_baja', 'telefono', ...[1,2,3,4,5,6].map(d => `dia_${d}`)].includes(field.key)) {
+          if (value === '' && ['segmento_prefiltro', 'certifica', 'segmento_certificado', 'fecha_baja', 'motivo_baja', 'telefono', ...[1, 2, 3, 4, 5, 6, 7].map(d => `dia_${d}`)].includes(field.key)) {
             value = null;
           }
           payload[field.key] = value;
@@ -259,12 +262,13 @@ export default function FormadorAsistencia({ user, onLogout }) {
         .from("formacion_seguimiento")
         .update(payload)
         .in("id", selectedItems);
+
       if (updateError) throw updateError;
 
       setRegistros(prev =>
         prev.map(r => selectedItems.includes(r.id) ? { ...r, ...payload } : r)
       );
-      
+
       mostrarMensaje("success", `✅ Cambios aplicados a ${selectedItems.length} registro(s)`);
       closeBulkModal();
       await cargarRegistros();
@@ -281,13 +285,13 @@ export default function FormadorAsistencia({ user, onLogout }) {
   // ──────────────────────────────────────────────────────────────────────────────
   const iniciarEdicion = (registro) => {
     const campos = {};
-    for (let i = 1; i <= 6; i++) campos[`dia_${i}`] = registro[`dia_${i}`] || "";
+    for (let i = 1; i <= 7; i++) campos[`dia_${i}`] = registro[`dia_${i}`] || "";
     campos.segmento_prefiltro = registro.segmento_prefiltro || "";
     campos.certifica = registro.certifica || "";
     campos.segmento_certificado = registro.segmento_certificado || "";
     campos.fecha_baja = registro.fecha_baja || "";
     campos.motivo_baja = registro.motivo_baja || "";
-    campos.telefono = registro.telefono || ""; // ✅ NUEVO
+    campos.telefono = registro.telefono || "";
     setValoresEditables(campos);
     setFilaEditando(registro.id);
   };
@@ -305,15 +309,17 @@ export default function FormadorAsistencia({ user, onLogout }) {
     setLoading(true);
     try {
       const cambios = {};
-      for (let i = 1; i <= 6; i++) {
+      for (let i = 1; i <= 7; i++) {
         const key = `dia_${i}`;
         if (valoresEditables[key] !== undefined) cambios[key] = valoresEditables[key] === "" ? null : valoresEditables[key];
       }
       ['segmento_prefiltro', 'certifica', 'segmento_certificado', 'fecha_baja', 'motivo_baja', 'telefono'].forEach(campo => {
         if (valoresEditables[campo] !== undefined) cambios[campo] = valoresEditables[campo] === "" ? null : valoresEditables[campo];
       });
+
       const { error } = await supabase.from("formacion_seguimiento").update(cambios).eq("id", registroId);
       if (error) throw error;
+
       setRegistros(prev => prev.map(r => r.id === registroId ? { ...r, ...cambios } : r));
       setFilaEditando(null);
       setValoresEditables({});
@@ -337,6 +343,7 @@ export default function FormadorAsistencia({ user, onLogout }) {
       "NO SE PRESENTÓ": { icon: "🕳️", color: "bg-gray-50 text-gray-700 border border-gray-200" },
       "RETIRADO": { icon: "🚶‍♂️", color: "bg-orange-50 text-orange-700 border border-orange-200" },
       "NO APROBO ROLE PLAY": { icon: "📉", color: "bg-blue-50 text-blue-700 border border-blue-200" },
+      "INYECTADO": { icon: "💉", color: "bg-purple-50 text-purple-700 border border-purple-200" },
     };
     const { icon, color } = config[estado] || { icon: "?", color: "bg-gray-50 text-gray-700 border border-gray-200" };
     return <span className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[10px] font-medium ${color}`}>{icon}</span>;
@@ -383,7 +390,7 @@ export default function FormadorAsistencia({ user, onLogout }) {
     }
     const headers = [
       "DNI", "Nombre", "Campaña", "Grupo", "Estado", "Teléfono", "Fecha Inicio", "Fecha Término",
-      "Segmento Prefiltro", "Día 1", "Día 2", "Día 3", "Día 4", "Día 5", "Día 6",
+      "Segmento Prefiltro", "Día 1", "Día 2", "Día 3", "Día 4", "Día 5", "Día 6", "Día 7",
       "Certifica", "Segmento Certificado", "Fecha Baja", "Motivo Baja"
     ];
     const csvRows = [headers.join(",")];
@@ -391,7 +398,7 @@ export default function FormadorAsistencia({ user, onLogout }) {
       const row = [
         `"${r.dni || ''}"`, `"${r.nombre || ''}"`, r.campaña || '', r.grupo_nombre || '', r.estado || '',
         `"${r.telefono || ''}"`, r.fecha_inicio || '', r.fecha_termino || '', r.segmento_prefiltro || '',
-        r.dia_1 || '', r.dia_2 || '', r.dia_3 || '', r.dia_4 || '', r.dia_5 || '', r.dia_6 || '',
+        r.dia_1 || '', r.dia_2 || '', r.dia_3 || '', r.dia_4 || '', r.dia_5 || '', r.dia_6 || '', r.dia_7 || '',
         r.certifica || '', r.segmento_certificado || '', r.fecha_baja || '', `"${r.motivo_baja || ''}"`
       ];
       csvRows.push(row.join(","));
@@ -617,7 +624,7 @@ export default function FormadorAsistencia({ user, onLogout }) {
                       <th className="px-2 py-2 text-left text-[10px] font-medium text-gray-600 uppercase tracking-wider">Grupo</th>
                       <th className="px-2 py-2 text-left text-[10px] font-medium text-gray-600 uppercase tracking-wider">Estado</th>
                       <th className="px-2 py-2 text-center text-[10px] font-medium text-gray-600 uppercase tracking-wider">Seg. Prefiltro</th>
-                      {[1,2,3,4,5,6].map(d => (
+                      {[1, 2, 3, 4, 5, 6, 7].map(d => (
                         <th key={d} className="px-2 py-2 text-center text-[10px] font-medium text-gray-600 uppercase tracking-wider">Día {d}</th>
                       ))}
                       <th className="px-2 py-2 text-center text-[10px] font-medium text-gray-600 uppercase tracking-wider">Certifica</th>
@@ -657,7 +664,7 @@ export default function FormadorAsistencia({ user, onLogout }) {
                               </select>
                             ) : <span className="text-gray-700 text-xs">{r.segmento_prefiltro || "—"}</span>}
                           </td>
-                          {[1,2,3,4,5,6].map(d => {
+                          {[1, 2, 3, 4, 5, 6, 7].map(d => {
                             const key = `dia_${d}`;
                             const esEditable = filaEditando === r.id;
                             return (
@@ -731,7 +738,6 @@ export default function FormadorAsistencia({ user, onLogout }) {
                               </select>
                             ) : <span className="text-gray-700 text-xs truncate block" title={r.motivo_baja}>{r.motivo_baja || "—"}</span>}
                           </td>
-                          {/* ✅ TELÉFONO - NUEVA COLUMNA */}
                           <td className="px-2 py-2 whitespace-nowrap text-center">
                             {filaEditando === r.id ? (
                               <input
@@ -786,7 +792,7 @@ export default function FormadorAsistencia({ user, onLogout }) {
                       ))
                     ) : (
                       <tr>
-                        <td colSpan="20" className="px-4 py-6 text-center text-gray-600 text-xs">
+                        <td colSpan="21" className="px-4 py-6 text-center text-gray-600 text-xs">
                           No se encontraron registros con esos filtros.
                         </td>
                       </tr>
