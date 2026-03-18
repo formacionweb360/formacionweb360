@@ -43,13 +43,7 @@ const BULK_FIELDS = [
   }))
 ];
 
-// ✅ FUNCIÓN PARA LIMPIAR STRINGS
-const limpiarString = (str) => {
-  if (!str) return "";
-  return String(str).trim().toUpperCase();
-};
-
-// ✅ FUNCIÓN PARA FORMATEAR FECHA
+// Función para formatear fecha
 const formatearFecha = (fechaString) => {
   if (!fechaString) return "—";
   if (fechaString instanceof Date) {
@@ -69,7 +63,7 @@ const formatearFecha = (fechaString) => {
   return fecha.toLocaleDateString('es-PE', { day: '2-digit', month: '2-digit', year: 'numeric' });
 };
 
-// ✅ FUNCIÓN PARA FORMATEAR TELÉFONO
+// Función para formatear teléfono
 const formatearTelefono = (telefono) => {
   if (!telefono) return "—";
   const limpio = String(telefono).replace(/\D/g, '');
@@ -87,7 +81,7 @@ export default function FormadorAsistencia({ user, onLogout }) {
   const [loading, setLoading] = useState(false);
   const [mensaje, setMensaje] = useState({ tipo: "", texto: "" });
   
-  // ✅ CONTADORES PARA DIAGNÓSTICO
+  // ✅ ESTADOS PARA CONTADORES Y DISCREPANCIA
   const [totalEnBD, setTotalEnBD] = useState(0);
   const [totalCargados, setTotalCargados] = useState(0);
   const [hayDiscrepancia, setHayDiscrepancia] = useState(false);
@@ -99,7 +93,7 @@ export default function FormadorAsistencia({ user, onLogout }) {
   const [filtroSegmento, setFiltroSegmento] = useState("todos");
   const [busqueda, setBusqueda] = useState("");
   
-  // Paginación frontend
+  // Paginación
   const [paginaActual, setPaginaActual] = useState(1);
   const REGISTROS_POR_PAGINA = 15;
   
@@ -145,11 +139,11 @@ export default function FormadorAsistencia({ user, onLogout }) {
     setTimeout(() => setMensaje({ tipo: "", texto: "" }), 4000);
   };
 
-  // ✅ CARGAR REGISTROS - CON LÍMITE EXPLÍCITO PARA TRAER TODOS
+  // ✅ CARGAR REGISTROS - CON LÍMITE EXPLÍCITO DE 10000
   const cargarRegistros = async () => {
     setLoading(true);
     try {
-      // ✅ 1. OBTENER COUNT TOTAL REAL EN BD
+      // 1. Obtener count total real en BD
       const { count, error: countError } = await supabase
         .from("formacion_seguimiento")
         .select("*", { count: "exact", head: true });
@@ -160,8 +154,7 @@ export default function FormadorAsistencia({ user, onLogout }) {
         setTotalEnBD(count || 0);
       }
 
-      // ✅ 2. OBTENER TODOS LOS REGISTROS CON LÍMITE EXPLÍCITO
-      // Supabase por defecto limita a 1000, debemos especificar más
+      // 2. Obtener todos los registros con límite explícito de 10000
       const { data, error } = await supabase
         .from("formacion_seguimiento")
         .select(`
@@ -169,40 +162,25 @@ export default function FormadorAsistencia({ user, onLogout }) {
           segmento_prefiltro, dia_1, dia_2, dia_3, dia_4, dia_5, dia_6, dia_7,
           certifica, segmento_certificado, fecha_baja, motivo_baja, telefono,
           created_at, updated_at
-        `, { count: "exact" })
-        .limit(10000) // ✅ LÍMITE EXPLÍCITO PARA TRAER MÁS DE 1000
+        `)
+        .limit(10000)  // ✅ LÍMITE EXPLÍCITO - Sin esto solo trae 1000
         .order("nombre", { ascending: true });
       
       if (error) throw error;
       
-      // ✅ 3. NORMALIZAR DATOS
-      const datosNormalizados = (data || []).map(r => ({
-        ...r,
-        campaña: r.campaña?.trim() || "",
-        grupo_nombre: r.grupo_nombre?.trim() || "",
-        estado: r.estado?.trim() || "Inactivo",
-        segmento_prefiltro: r.segmento_prefiltro?.trim() || "",
-        certifica: r.certifica?.trim() || "",
-        segmento_certificado: r.segmento_certificado?.trim() || "",
-        motivo_baja: r.motivo_baja?.trim() || "",
-        telefono: r.telefono?.trim() || "",
-      }));
+      setRegistros(data || []);
+      setTotalCargados(data?.length || 0);
       
-      setRegistros(datosNormalizados);
-      setTotalCargados(datosNormalizados.length);
-      
-      // ✅ 4. VERIFICAR DISCREPANCIA
-      const discrepancia = (count || 0) > datosNormalizados.length;
+      // 3. Verificar si hay discrepancia
+      const discrepancia = (count || 0) > (data?.length || 0);
       setHayDiscrepancia(discrepancia);
       
       if (discrepancia) {
         mostrarMensaje(
           "warning",
-          `⚠️ Hay ${count} registros en BD pero solo ${datosNormalizados.length} cargados. 
-           Verifica límites de consulta o políticas RLS.`
+          `⚠️ Hay ${count} registros en BD pero solo ${data?.length || 0} cargados. 
+           Verifica políticas RLS en Supabase.`
         );
-      } else {
-        mostrarMensaje("success", `✅ ${datosNormalizados.length} registros cargados correctamente`);
       }
     } catch (err) {
       console.error("Error al cargar registros:", err);
@@ -212,29 +190,26 @@ export default function FormadorAsistencia({ user, onLogout }) {
     }
   };
 
-  // ✅ CARGAR FILTROS - SIN EXCLUIR NULLS
+  // ✅ CARGAR FILTROS - CON LÍMITE EXPLÍCITO
   const cargarFiltrosDinamicos = async () => {
     try {
-      // ✅ CAMPAÑAS
-      const {  campanas } = await supabase
+      const { data: campanas } = await supabase
         .from("formacion_seguimiento")
         .select("campaña")
-        .limit(10000);
+        .not("campaña", "is", null)
+        .limit(10000);  // ✅ AGREGAR LÍMITE
       
       if (campanas) {
-        const unicas = [...new Set(
-          campanas
-            .map(c => c.campaña?.trim())
-            .filter(Boolean)
-        )].sort();
+        const unicas = [...new Set(campanas.map(c => c.campaña).filter(Boolean))].sort();
         setCampanasUnicas(unicas);
       }
 
-      // ✅ GRUPOS
-      const {  gruposData } = await supabase
+      const { data: gruposData } = await supabase
         .from("formacion_seguimiento")
         .select("campaña, grupo_nombre")
-        .limit(10000);
+        .not("grupo_nombre", "is", null)
+        .not("campaña", "is", null)
+        .limit(10000);  // ✅ AGREGAR LÍMITE
       
       if (gruposData) {
         const gruposPorCamp = {};
@@ -243,21 +218,14 @@ export default function FormadorAsistencia({ user, onLogout }) {
           const grupo = item.grupo_nombre?.trim();
           if (campana && grupo) {
             if (!gruposPorCamp[campana]) gruposPorCamp[campana] = [];
-            if (!gruposPorCamp[campana].includes(grupo)) {
-              gruposPorCamp[campana].push(grupo);
-            }
+            if (!gruposPorCamp[campana].includes(grupo)) gruposPorCamp[campana].push(grupo);
           }
         });
         
-        Object.keys(gruposPorCamp).forEach(campana => {
-          gruposPorCamp[campana].sort();
-        });
-        
+        Object.keys(gruposPorCamp).forEach(campana => gruposPorCamp[campana].sort());
         setGruposPorCampana(gruposPorCamp);
         
-        const todosLosGrupos = [...new Set(
-          gruposData.map(g => g.grupo_nombre?.trim()).filter(Boolean)
-        )].sort();
+        const todosLosGrupos = [...new Set(gruposData.map(g => g.grupo_nombre).filter(Boolean))].sort();
         setGruposUnicos(todosLosGrupos);
       }
     } catch (err) {
@@ -273,9 +241,7 @@ export default function FormadorAsistencia({ user, onLogout }) {
     return gruposUnicos;
   };
 
-  // ──────────────────────────────────────────────────────────────────────────────
-  // FUNCIONES DE EDICIÓN MASIVA
-  // ──────────────────────────────────────────────────────────────────────────────
+  // Funciones de edición masiva
   const openBulkModal = () => {
     if (selectedItems.length === 0) {
       mostrarMensaje("warning", "⚠️ Selecciona al menos un registro para editar");
@@ -345,9 +311,7 @@ export default function FormadorAsistencia({ user, onLogout }) {
     }
   };
 
-  // ──────────────────────────────────────────────────────────────────────────────
-  // FUNCIONES DE EDICIÓN INDIVIDUAL
-  // ──────────────────────────────────────────────────────────────────────────────
+  // Funciones de edición individual
   const iniciarEdicion = (registro) => {
     const campos = {};
     for (let i = 1; i <= 7; i++) campos[`dia_${i}`] = registro[`dia_${i}`] || "";
@@ -439,27 +403,19 @@ export default function FormadorAsistencia({ user, onLogout }) {
     let filtrados = [...registros];
     
     if (filtroCampana) {
-      filtrados = filtrados.filter(r => 
-        limpiarString(r.campaña) === limpiarString(filtroCampana)
-      );
+      filtrados = filtrados.filter(r => r.campaña === filtroCampana);
     }
     
     if (filtroGrupo !== "todos") {
-      filtrados = filtrados.filter(r => 
-        limpiarString(r.grupo_nombre) === limpiarString(filtroGrupo)
-      );
+      filtrados = filtrados.filter(r => r.grupo_nombre === filtroGrupo);
     }
     
     if (filtroEstado !== "todos") {
-      filtrados = filtrados.filter(r => 
-        limpiarString(r.estado) === limpiarString(filtroEstado)
-      );
+      filtrados = filtrados.filter(r => r.estado === filtroEstado);
     }
     
     if (filtroSegmento !== "todos") {
-      filtrados = filtrados.filter(r => 
-        limpiarString(r.segmento_prefiltro) === limpiarString(filtroSegmento)
-      );
+      filtrados = filtrados.filter(r => r.segmento_prefiltro === filtroSegmento);
     }
     
     if (busqueda.trim() !== "") {
@@ -557,6 +513,7 @@ export default function FormadorAsistencia({ user, onLogout }) {
             <button
               onClick={() => navigate("/formador")}
               className="px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium transition-colors flex items-center gap-2"
+              title="Volver al Panel del Formador"
             >
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
@@ -613,10 +570,20 @@ export default function FormadorAsistencia({ user, onLogout }) {
                 <strong>Faltantes:</strong> {totalEnBD - totalCargados}
               </div>
             </div>
-            <p className="text-xs">
-              Esto puede deberse al límite de 1000 registros de Supabase. 
-              Se ha aplicado un límite de 10000 en la consulta.
+            <p className="text-xs mb-2">
+              <strong>Causas posibles:</strong>
             </p>
+            <ol className="list-decimal list-inside text-xs space-y-1">
+              <li>Límite de consulta de Supabase (solucionado con .limit(10000))</li>
+              <li>Políticas RLS que bloquean registros</li>
+            </ol>
+            <p className="text-xs mt-2 font-medium">
+              Si persiste después de recargar, ejecuta este SQL en Supabase:
+            </p>
+            <div className="mt-2 p-2 bg-gray-100 rounded font-mono text-[10px] overflow-x-auto">
+              CREATE POLICY "Acceso total" ON formacion_seguimiento<br/>
+              FOR ALL TO authenticated USING (true) WITH CHECK (true);
+            </div>
           </div>
         </div>
       )}
@@ -631,7 +598,7 @@ export default function FormadorAsistencia({ user, onLogout }) {
               Gestión de Asistencia y Seguimiento
             </h2>
             <div className="flex items-center gap-4">
-              {/* ✅ CONTADOR CON DIAGNÓSTICO */}
+              {/* ✅ CONTADOR ACTUALIZADO */}
               <div className="text-xs text-gray-600 bg-gray-100 px-3 py-1.5 rounded-lg">
                 <span className="font-medium">{totalFiltrados}</span> mostrados de{" "}
                 <span className={`font-medium ${hayDiscrepancia ? 'text-red-600' : 'text-blue-600'}`}>
@@ -675,6 +642,9 @@ export default function FormadorAsistencia({ user, onLogout }) {
                 <option value="todos">Todos</option>
                 {getGruposDisponibles().map(g => <option key={g} value={g}>{g}</option>)}
               </select>
+              {filtroCampana && getGruposDisponibles().length === 0 && (
+                <p className="text-[10px] text-gray-500 mt-1">No hay grupos para esta campaña</p>
+              )}
             </div>
             <div>
               <label className="block text-xs font-medium text-gray-700 mb-1">Estado</label>
@@ -740,6 +710,7 @@ export default function FormadorAsistencia({ user, onLogout }) {
                           checked={selectedItems.length === registrosPaginados.length && registrosPaginados.length > 0}
                           onChange={(e) => toggleSelectAll(e.target.checked)}
                           className="h-3.5 w-3.5 cursor-pointer text-blue-600 rounded border-gray-300 focus:ring-blue-600"
+                          title="Seleccionar todos en esta página"
                         />
                       </th>
                       <th className="px-2 py-2 text-left text-[10px] font-medium text-gray-600 uppercase tracking-wider">DNI</th>
