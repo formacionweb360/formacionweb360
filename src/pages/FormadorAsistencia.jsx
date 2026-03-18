@@ -5,7 +5,8 @@ import { supabase } from "../services/supabaseClient";
 
 // Opciones para los campos de asistencia (día 1-7)
 const OPCIONES_ASISTENCIA = [
-  "ASISTIÓ", "FALTA", "DESERTÓ", "TARDANZA", "NO SE PRESENTÓ", "RETIRADO", "NO APROBO ROLE PLAY", "INYECTADO"
+  "ASISTIÓ", "FALTA", "DESERTÓ", "TARDANZA", "NO SE PRESENTÓ", 
+  "RETIRADO", "NO APROBO ROLE PLAY", "INYECTADO"
 ];
 
 // Opciones para segmento y certificación
@@ -27,8 +28,6 @@ const OPCIONES_MOTIVO_BAJA = {
 
 // ──────────────────────────────────────────────────────────────────────────────
 // CAMPOS EDITABLES EN EL MODAL DE EDICIÓN MASIVA
-// ❌ NO EDITABLES: dni, nombre (identificadores únicos)
-// ✅ EDITABLES: Todos los demás campos de la tabla formacion_seguimiento
 // ──────────────────────────────────────────────────────────────────────────────
 const BULK_FIELDS = [
   { key: 'estado', label: 'Estado', type: 'select', options: ['Activo', 'Inactivo'] },
@@ -38,7 +37,6 @@ const BULK_FIELDS = [
   { key: 'fecha_baja', label: 'Fecha Baja', type: 'date' },
   { key: 'motivo_baja', label: 'Motivo Baja', type: 'motivo_baja' },
   { key: 'telefono', label: 'Teléfono', type: 'text', placeholder: 'Ej: 987654321' },
-  // Días 1-7 de asistencia
   ...[1, 2, 3, 4, 5, 6, 7].map(d => ({
     key: `dia_${d}`,
     label: `Día ${d}`,
@@ -77,34 +75,46 @@ const formatearTelefono = (telefono) => {
   return telefono;
 };
 
+// ✅ FUNCIÓN PARA LIMPIAR STRINGS (TRIM Y NORMALIZAR)
+const limpiarString = (str) => {
+  if (!str) return "";
+  return String(str).trim().toUpperCase();
+};
+
 export default function FormadorAsistencia({ user, onLogout }) {
   const navigate = useNavigate();
-
+  
   // Estados principales
   const [registros, setRegistros] = useState([]);
   const [loading, setLoading] = useState(false);
   const [mensaje, setMensaje] = useState({ tipo: "", texto: "" });
-
-  // Filtros
+  
+  // Filtros - ✅ VALORES INICIALES CORREGIDOS PARA MOSTRAR TODO
   const [filtroCampana, setFiltroCampana] = useState("");
   const [filtroGrupo, setFiltroGrupo] = useState("todos");
   const [filtroEstado, setFiltroEstado] = useState("todos");
   const [filtroSegmento, setFiltroSegmento] = useState("todos");
   const [busqueda, setBusqueda] = useState("");
-
+  
+  // ✅ CONTADOR DE REGISTROS TOTALES VS FILTRADOS
+  const [totalRegistrosBD, setTotalRegistrosBD] = useState(0);
+  
   // Paginación
   const [paginaActual, setPaginaActual] = useState(1);
   const REGISTROS_POR_PAGINA = 15;
-
+  
   // Edición por fila
   const [filaEditando, setFilaEditando] = useState(null);
   const [valoresEditables, setValoresEditables] = useState({});
-
+  
   // Listas para filtros dinámicos
   const [campanasUnicas, setCampanasUnicas] = useState([]);
   const [gruposUnicos, setGruposUnicos] = useState([]);
   const [gruposPorCampana, setGruposPorCampana] = useState({});
-
+  
+  // ✅ ESTADO PARA CARGA INICIAL COMPLETA
+  const [cargaInicialCompleta, setCargaInicialCompleta] = useState(false);
+  
   // ──────────────────────────────────────────────────────────────────────────────
   // ESTADOS PARA EDICIÓN MASIVA CON MODAL
   // ──────────────────────────────────────────────────────────────────────────────
@@ -117,7 +127,7 @@ export default function FormadorAsistencia({ user, onLogout }) {
     Object.fromEntries(BULK_FIELDS.map(f => [f.key, false]))
   );
   const [isSavingBulk, setIsSavingBulk] = useState(false);
-
+  
   const fechaHoyFormateada = new Date().toLocaleDateString('es-PE', {
     weekday: 'long', year: 'numeric', month: 'long', day: 'numeric'
   });
@@ -131,6 +141,7 @@ export default function FormadorAsistencia({ user, onLogout }) {
   // ✅ Cuando cambia la campaña, resetear filtro de grupo
   useEffect(() => {
     setFiltroGrupo("todos");
+    setPaginaActual(1);
   }, [filtroCampana]);
 
   // Mostrar mensaje temporal
@@ -139,10 +150,22 @@ export default function FormadorAsistencia({ user, onLogout }) {
     setTimeout(() => setMensaje({ tipo: "", texto: "" }), 4000);
   };
 
-  // Cargar registros de formacion_seguimiento
+  // ✅ CARGAR REGISTROS - CORREGIDO PARA OBTENER TODOS LOS DATOS
   const cargarRegistros = async () => {
     setLoading(true);
     try {
+      // ✅ PRIMERO OBTENER EL COUNT TOTAL
+      const { count, error: countError } = await supabase
+        .from("formacion_seguimiento")
+        .select("*", { count: "exact", head: true });
+      
+      if (countError) {
+        console.error("Error al obtener count:", countError);
+      } else {
+        setTotalRegistrosBD(count || 0);
+      }
+
+      // ✅ LUEGO OBTENER TODOS LOS REGISTROS SIN LIMITES
       const { data, error } = await supabase
         .from("formacion_seguimiento")
         .select(`
@@ -152,30 +175,62 @@ export default function FormadorAsistencia({ user, onLogout }) {
           created_at, updated_at
         `)
         .order("nombre", { ascending: true });
-
+      
       if (error) throw error;
-      setRegistros(data || []);
+      
+      // ✅ NORMALIZAR DATOS (TRIM EN STRINGS)
+      const datosNormalizados = (data || []).map(r => ({
+        ...r,
+        campaña: r.campaña?.trim() || "",
+        grupo_nombre: r.grupo_nombre?.trim() || "",
+        estado: r.estado?.trim() || "Inactivo",
+        segmento_prefiltro: r.segmento_prefiltro?.trim() || "",
+        certifica: r.certifica?.trim() || "",
+        segmento_certificado: r.segmento_certificado?.trim() || "",
+        motivo_baja: r.motivo_baja?.trim() || "",
+        telefono: r.telefono?.trim() || "",
+      }));
+      
+      setRegistros(datosNormalizados);
+      setCargaInicialCompleta(true);
+      
+      // ✅ MOSTRAR MENSAJE INFORMATIVO
+      if (datosNormalizados.length < (count || 0)) {
+        mostrarMensaje("warning", 
+          `⚠️ Mostrando ${datosNormalizados.length} de ${count} registros. 
+           Verifica políticas RLS en Supabase.`
+        );
+      }
     } catch (err) {
       console.error("Error al cargar registros:", err);
-      mostrarMensaje("error", "❌ Error al cargar datos");
+      mostrarMensaje("error", `❌ Error al cargar datos: ${err.message}`);
     } finally {
       setLoading(false);
     }
   };
 
-  // Cargar valores únicos para filtros
+  // ✅ CARGAR VALORES ÚNICOS PARA FILTROS - CORREGIDO
   const cargarFiltrosDinamicos = async () => {
     try {
+      // ✅ CAMPAÑAS - INCLUIR VALORES NULL/VACÍOS
       const { data: campanas } = await supabase
-        .from("formacion_seguimiento").select("campaña").not("campaña", "is", null);
+        .from("formacion_seguimiento")
+        .select("campaña");
+      
       if (campanas) {
-        const unicas = [...new Set(campanas.map(c => c.campaña).filter(Boolean))].sort();
+        const unicas = [...new Set(
+          campanas
+            .map(c => c.campaña?.trim())
+            .filter(Boolean)
+        )].sort();
         setCampanasUnicas(unicas);
       }
 
+      // ✅ GRUPOS - AGRUPAR POR CAMPAÑA
       const { data: gruposData } = await supabase
-        .from("formacion_seguimiento").select("campaña, grupo_nombre")
-        .not("grupo_nombre", "is", null).not("campaña", "is", null);
+        .from("formacion_seguimiento")
+        .select("campaña, grupo_nombre");
+      
       if (gruposData) {
         const gruposPorCamp = {};
         gruposData.forEach(item => {
@@ -183,12 +238,21 @@ export default function FormadorAsistencia({ user, onLogout }) {
           const grupo = item.grupo_nombre?.trim();
           if (campana && grupo) {
             if (!gruposPorCamp[campana]) gruposPorCamp[campana] = [];
-            if (!gruposPorCamp[campana].includes(grupo)) gruposPorCamp[campana].push(grupo);
+            if (!gruposPorCamp[campana].includes(grupo)) {
+              gruposPorCamp[campana].push(grupo);
+            }
           }
         });
-        Object.keys(gruposPorCamp).forEach(campana => gruposPorCamp[campana].sort());
+        
+        Object.keys(gruposPorCamp).forEach(campana => {
+          gruposPorCamp[campana].sort();
+        });
+        
         setGruposPorCampana(gruposPorCamp);
-        const todosLosGrupos = [...new Set(gruposData.map(g => g.grupo_nombre).filter(Boolean))].sort();
+        
+        const todosLosGrupos = [...new Set(
+          gruposData.map(g => g.grupo_nombre?.trim()).filter(Boolean)
+        )].sort();
         setGruposUnicos(todosLosGrupos);
       }
     } catch (err) {
@@ -196,7 +260,7 @@ export default function FormadorAsistencia({ user, onLogout }) {
     }
   };
 
-  // ✅ Obtener grupos disponibles según la campaña seleccionada
+  // ✅ OBTENER GRUPOS DISPONIBLES SEGÚN LA CAMPAÑA SELECCIONADA
   const getGruposDisponibles = () => {
     if (filtroCampana && gruposPorCampana[filtroCampana]) {
       return gruposPorCampana[filtroCampana];
@@ -237,21 +301,18 @@ export default function FormadorAsistencia({ user, onLogout }) {
       mostrarMensaje("warning", "⚠️ Marca 'Aplicar' en al menos un campo para guardar");
       return;
     }
-
+    
     setIsSavingBulk(true);
     try {
-      const { data: currentRecords, error: fetchError } = await supabase
-        .from("formacion_seguimiento")
-        .select("*")
-        .in("id", selectedItems);
-
-      if (fetchError) throw fetchError;
-
       const payload = {};
       BULK_FIELDS.forEach(field => {
         if (bulkApply[field.key]) {
           let value = bulkForm[field.key];
-          if (value === '' && ['segmento_prefiltro', 'certifica', 'segmento_certificado', 'fecha_baja', 'motivo_baja', 'telefono', ...[1, 2, 3, 4, 5, 6, 7].map(d => `dia_${d}`)].includes(field.key)) {
+          if (value === '' && [
+            'segmento_prefiltro', 'certifica', 'segmento_certificado', 
+            'fecha_baja', 'motivo_baja', 'telefono', 
+            ...[1, 2, 3, 4, 5, 6, 7].map(d => `dia_${d}`)
+          ].includes(field.key)) {
             value = null;
           }
           payload[field.key] = value;
@@ -262,13 +323,13 @@ export default function FormadorAsistencia({ user, onLogout }) {
         .from("formacion_seguimiento")
         .update(payload)
         .in("id", selectedItems);
-
+      
       if (updateError) throw updateError;
-
+      
       setRegistros(prev =>
         prev.map(r => selectedItems.includes(r.id) ? { ...r, ...payload } : r)
       );
-
+      
       mostrarMensaje("success", `✅ Cambios aplicados a ${selectedItems.length} registro(s)`);
       closeBulkModal();
       await cargarRegistros();
@@ -311,15 +372,24 @@ export default function FormadorAsistencia({ user, onLogout }) {
       const cambios = {};
       for (let i = 1; i <= 7; i++) {
         const key = `dia_${i}`;
-        if (valoresEditables[key] !== undefined) cambios[key] = valoresEditables[key] === "" ? null : valoresEditables[key];
+        if (valoresEditables[key] !== undefined) {
+          cambios[key] = valoresEditables[key] === "" ? null : valoresEditables[key];
+        }
       }
-      ['segmento_prefiltro', 'certifica', 'segmento_certificado', 'fecha_baja', 'motivo_baja', 'telefono'].forEach(campo => {
-        if (valoresEditables[campo] !== undefined) cambios[campo] = valoresEditables[campo] === "" ? null : valoresEditables[campo];
-      });
+      ['segmento_prefiltro', 'certifica', 'segmento_certificado', 'fecha_baja', 'motivo_baja', 'telefono']
+        .forEach(campo => {
+          if (valoresEditables[campo] !== undefined) {
+            cambios[campo] = valoresEditables[campo] === "" ? null : valoresEditables[campo];
+          }
+        });
 
-      const { error } = await supabase.from("formacion_seguimiento").update(cambios).eq("id", registroId);
+      const { error } = await supabase
+        .from("formacion_seguimiento")
+        .update(cambios)
+        .eq("id", registroId);
+      
       if (error) throw error;
-
+      
       setRegistros(prev => prev.map(r => r.id === registroId ? { ...r, ...cambios } : r));
       setFilaEditando(null);
       setValoresEditables({});
@@ -360,25 +430,53 @@ export default function FormadorAsistencia({ user, onLogout }) {
     );
   };
 
-  // Filtrar y paginar registros
+  // ✅ FILTRAR Y PAGINAR REGISTROS - CORREGIDO PARA COMPARACIÓN NORMALIZADA
   const { registrosPaginados, totalPaginas, totalFiltrados } = useMemo(() => {
     let filtrados = [...registros];
-    if (filtroCampana) filtrados = filtrados.filter(r => r.campaña === filtroCampana);
-    if (filtroGrupo !== "todos") filtrados = filtrados.filter(r => r.grupo_nombre === filtroGrupo);
-    if (filtroEstado !== "todos") filtrados = filtrados.filter(r => r.estado === filtroEstado);
-    if (filtroSegmento !== "todos") filtrados = filtrados.filter(r => r.segmento_prefiltro === filtroSegmento);
+    
+    // ✅ FILTRO CAMPAÑA - COMPARACIÓN NORMALIZADA
+    if (filtroCampana) {
+      filtrados = filtrados.filter(r => 
+        limpiarString(r.campaña) === limpiarString(filtroCampana)
+      );
+    }
+    
+    // ✅ FILTRO GRUPO - COMPARACIÓN NORMALIZADA
+    if (filtroGrupo !== "todos") {
+      filtrados = filtrados.filter(r => 
+        limpiarString(r.grupo_nombre) === limpiarString(filtroGrupo)
+      );
+    }
+    
+    // ✅ FILTRO ESTADO
+    if (filtroEstado !== "todos") {
+      filtrados = filtrados.filter(r => 
+        limpiarString(r.estado) === limpiarString(filtroEstado)
+      );
+    }
+    
+    // ✅ FILTRO SEGMENTO
+    if (filtroSegmento !== "todos") {
+      filtrados = filtrados.filter(r => 
+        limpiarString(r.segmento_prefiltro) === limpiarString(filtroSegmento)
+      );
+    }
+    
+    // ✅ BÚSQUEDA POR NOMBRE O DNI
     if (busqueda.trim() !== "") {
       const termino = busqueda.toLowerCase().trim();
       filtrados = filtrados.filter(r =>
         (r.nombre && r.nombre.toLowerCase().includes(termino)) ||
-        (r.dni && r.dni.toLowerCase().includes(termino))
+        (r.dni && String(r.dni).includes(termino))
       );
     }
+    
     const total = filtrados.length;
     const desde = (paginaActual - 1) * REGISTROS_POR_PAGINA;
     const hasta = desde + REGISTROS_POR_PAGINA;
     const pagina = filtrados.slice(desde, hasta);
     const totalPag = Math.ceil(total / REGISTROS_POR_PAGINA) || 1;
+    
     return { registrosPaginados: pagina, totalPaginas: totalPag, totalFiltrados: total };
   }, [registros, filtroCampana, filtroGrupo, filtroEstado, filtroSegmento, busqueda, paginaActual]);
 
@@ -511,16 +609,23 @@ export default function FormadorAsistencia({ user, onLogout }) {
               <span className="text-blue-600">📋</span>
               Gestión de Asistencia y Seguimiento
             </h2>
-            <button
-              onClick={descargarCSV}
-              disabled={loading || totalFiltrados === 0}
-              className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-            >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-              </svg>
-              Descargar CSV ({totalFiltrados})
-            </button>
+            <div className="flex items-center gap-4">
+              {/* ✅ CONTADOR DE REGISTROS TOTALES VS FILTRADOS */}
+              <div className="text-xs text-gray-600 bg-gray-100 px-3 py-1.5 rounded-lg">
+                <span className="font-medium">{totalFiltrados}</span> mostrados de{" "}
+                <span className="font-medium text-blue-600">{totalRegistrosBD}</span> en BD
+              </div>
+              <button
+                onClick={descargarCSV}
+                disabled={loading || totalFiltrados === 0}
+                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                </svg>
+                Descargar CSV ({totalFiltrados})
+              </button>
+            </div>
           </div>
 
           {/* Filtros */}
@@ -605,6 +710,13 @@ export default function FormadorAsistencia({ user, onLogout }) {
             </div>
           ) : (
             <>
+              {/* ✅ INDICADOR DE CARGA COMPLETA */}
+              {!cargaInicialCompleta && (
+                <div className="mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg text-xs text-yellow-800">
+                  ⏳ Cargando datos completos, por favor espere...
+                </div>
+              )}
+              
               <div className="overflow-x-auto">
                 <table className="min-w-full divide-y divide-gray-200 text-xs">
                   <thead className="bg-gray-50">
@@ -793,7 +905,9 @@ export default function FormadorAsistencia({ user, onLogout }) {
                     ) : (
                       <tr>
                         <td colSpan="21" className="px-4 py-6 text-center text-gray-600 text-xs">
-                          No se encontraron registros con esos filtros.
+                          {cargaInicialCompleta 
+                            ? "No se encontraron registros con esos filtros." 
+                            : "Cargando datos..."}
                         </td>
                       </tr>
                     )}
@@ -843,14 +957,12 @@ export default function FormadorAsistencia({ user, onLogout }) {
               </div>
               <button onClick={closeBulkModal} className="text-gray-500 hover:text-gray-700" title="Cerrar">✕</button>
             </div>
-
             {/* Instrucciones */}
             <div className="px-4 py-2 bg-gray-50 border-b border-gray-200">
               <p className="text-[11px] text-gray-600">
                 💡 <strong>Instrucciones:</strong> Marca la casilla <strong>"Aplicar"</strong> en cada campo que deseas actualizar. Los campos no marcados NO serán modificados.
               </p>
             </div>
-
             {/* Body del modal - Campos editables */}
             <div className="p-4 grid grid-cols-1 md:grid-cols-2 gap-3 overflow-y-auto flex-1">
               {BULK_FIELDS.map((field) => (
@@ -909,7 +1021,6 @@ export default function FormadorAsistencia({ user, onLogout }) {
                 </div>
               ))}
             </div>
-
             {/* Footer del modal */}
             <div className="px-4 py-3 bg-gray-50 border-t border-gray-200 flex items-center justify-between flex-shrink-0">
               <div className="text-[11px] text-gray-600">
