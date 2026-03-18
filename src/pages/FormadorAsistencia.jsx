@@ -26,9 +26,7 @@ const OPCIONES_MOTIVO_BAJA = {
   ]
 };
 
-// ──────────────────────────────────────────────────────────────────────────────
-// CAMPOS EDITABLES EN EL MODAL DE EDICIÓN MASIVA
-// ──────────────────────────────────────────────────────────────────────────────
+// Campos editables en edición masiva
 const BULK_FIELDS = [
   { key: 'estado', label: 'Estado', type: 'select', options: ['Activo', 'Inactivo'] },
   { key: 'segmento_prefiltro', label: 'Segmento Prefiltro', type: 'select', options: OPCIONES_SEGMENTO },
@@ -45,7 +43,13 @@ const BULK_FIELDS = [
   }))
 ];
 
-// ✅ FUNCIÓN PARA FORMATEAR FECHA SIN PROBLEMAS DE ZONA HORARIA
+// ✅ FUNCIÓN PARA LIMPIAR STRINGS (TRIM Y NORMALIZAR)
+const limpiarString = (str) => {
+  if (!str) return "";
+  return String(str).trim().toUpperCase();
+};
+
+// ✅ FUNCIÓN PARA FORMATEAR FECHA
 const formatearFecha = (fechaString) => {
   if (!fechaString) return "—";
   if (fechaString instanceof Date) {
@@ -75,12 +79,6 @@ const formatearTelefono = (telefono) => {
   return telefono;
 };
 
-// ✅ FUNCIÓN PARA LIMPIAR STRINGS (TRIM Y NORMALIZAR)
-const limpiarString = (str) => {
-  if (!str) return "";
-  return String(str).trim().toUpperCase();
-};
-
 export default function FormadorAsistencia({ user, onLogout }) {
   const navigate = useNavigate();
   
@@ -89,15 +87,17 @@ export default function FormadorAsistencia({ user, onLogout }) {
   const [loading, setLoading] = useState(false);
   const [mensaje, setMensaje] = useState({ tipo: "", texto: "" });
   
-  // Filtros - ✅ VALORES INICIALES CORREGIDOS PARA MOSTRAR TODO
+  // ✅ CONTADORES PARA DIAGNÓSTICO
+  const [totalEnBD, setTotalEnBD] = useState(0);
+  const [totalCargados, setTotalCargados] = useState(0);
+  const [hayDiscrepancia, setHayDiscrepancia] = useState(false);
+  
+  // Filtros
   const [filtroCampana, setFiltroCampana] = useState("");
   const [filtroGrupo, setFiltroGrupo] = useState("todos");
   const [filtroEstado, setFiltroEstado] = useState("todos");
   const [filtroSegmento, setFiltroSegmento] = useState("todos");
   const [busqueda, setBusqueda] = useState("");
-  
-  // ✅ CONTADOR DE REGISTROS TOTALES VS FILTRADOS
-  const [totalRegistrosBD, setTotalRegistrosBD] = useState(0);
   
   // Paginación
   const [paginaActual, setPaginaActual] = useState(1);
@@ -112,12 +112,7 @@ export default function FormadorAsistencia({ user, onLogout }) {
   const [gruposUnicos, setGruposUnicos] = useState([]);
   const [gruposPorCampana, setGruposPorCampana] = useState({});
   
-  // ✅ ESTADO PARA CARGA INICIAL COMPLETA
-  const [cargaInicialCompleta, setCargaInicialCompleta] = useState(false);
-  
-  // ──────────────────────────────────────────────────────────────────────────────
-  // ESTADOS PARA EDICIÓN MASIVA CON MODAL
-  // ──────────────────────────────────────────────────────────────────────────────
+  // Estados para edición masiva
   const [selectedItems, setSelectedItems] = useState([]);
   const [isBulkModalOpen, setIsBulkModalOpen] = useState(false);
   const [bulkForm, setBulkForm] = useState(() =>
@@ -138,7 +133,7 @@ export default function FormadorAsistencia({ user, onLogout }) {
     cargarFiltrosDinamicos();
   }, []);
 
-  // ✅ Cuando cambia la campaña, resetear filtro de grupo
+  // Cuando cambia la campaña, resetear filtro de grupo
   useEffect(() => {
     setFiltroGrupo("todos");
     setPaginaActual(1);
@@ -150,11 +145,11 @@ export default function FormadorAsistencia({ user, onLogout }) {
     setTimeout(() => setMensaje({ tipo: "", texto: "" }), 4000);
   };
 
-  // ✅ CARGAR REGISTROS - CORREGIDO PARA OBTENER TODOS LOS DATOS
+  // ✅ CARGAR REGISTROS - CON COUNT PARA DIAGNÓSTICO
   const cargarRegistros = async () => {
     setLoading(true);
     try {
-      // ✅ PRIMERO OBTENER EL COUNT TOTAL
+      // ✅ 1. OBTENER COUNT TOTAL REAL EN BD
       const { count, error: countError } = await supabase
         .from("formacion_seguimiento")
         .select("*", { count: "exact", head: true });
@@ -162,10 +157,10 @@ export default function FormadorAsistencia({ user, onLogout }) {
       if (countError) {
         console.error("Error al obtener count:", countError);
       } else {
-        setTotalRegistrosBD(count || 0);
+        setTotalEnBD(count || 0);
       }
 
-      // ✅ LUEGO OBTENER TODOS LOS REGISTROS SIN LIMITES
+      // ✅ 2. OBTENER TODOS LOS REGISTROS (SIN FILTROS EXCLUYENTES)
       const { data, error } = await supabase
         .from("formacion_seguimiento")
         .select(`
@@ -178,7 +173,7 @@ export default function FormadorAsistencia({ user, onLogout }) {
       
       if (error) throw error;
       
-      // ✅ NORMALIZAR DATOS (TRIM EN STRINGS)
+      // ✅ 3. NORMALIZAR DATOS
       const datosNormalizados = (data || []).map(r => ({
         ...r,
         campaña: r.campaña?.trim() || "",
@@ -192,13 +187,17 @@ export default function FormadorAsistencia({ user, onLogout }) {
       }));
       
       setRegistros(datosNormalizados);
-      setCargaInicialCompleta(true);
+      setTotalCargados(datosNormalizados.length);
       
-      // ✅ MOSTRAR MENSAJE INFORMATIVO
-      if (datosNormalizados.length < (count || 0)) {
-        mostrarMensaje("warning", 
-          `⚠️ Mostrando ${datosNormalizados.length} de ${count} registros. 
-           Verifica políticas RLS en Supabase.`
+      // ✅ 4. VERIFICAR DISCREPANCIA
+      const discrepancia = (count || 0) > datosNormalizados.length;
+      setHayDiscrepancia(discrepancia);
+      
+      if (discrepancia) {
+        mostrarMensaje(
+          "warning",
+          `⚠️ Hay ${count} registros en BD pero solo se cargaron ${datosNormalizados.length}. 
+           Verifica las políticas RLS en Supabase.`
         );
       }
     } catch (err) {
@@ -209,10 +208,10 @@ export default function FormadorAsistencia({ user, onLogout }) {
     }
   };
 
-  // ✅ CARGAR VALORES ÚNICOS PARA FILTROS - CORREGIDO
+  // ✅ CARGAR FILTROS - SIN EXCLUIR NULLS
   const cargarFiltrosDinamicos = async () => {
     try {
-      // ✅ CAMPAÑAS - INCLUIR VALORES NULL/VACÍOS
+      // ✅ CAMPAÑAS - SIN .not() PARA INCLUIR TODOS
       const { data: campanas } = await supabase
         .from("formacion_seguimiento")
         .select("campaña");
@@ -226,7 +225,7 @@ export default function FormadorAsistencia({ user, onLogout }) {
         setCampanasUnicas(unicas);
       }
 
-      // ✅ GRUPOS - AGRUPAR POR CAMPAÑA
+      // ✅ GRUPOS - SIN .not() PARA INCLUIR TODOS
       const { data: gruposData } = await supabase
         .from("formacion_seguimiento")
         .select("campaña, grupo_nombre");
@@ -260,7 +259,7 @@ export default function FormadorAsistencia({ user, onLogout }) {
     }
   };
 
-  // ✅ OBTENER GRUPOS DISPONIBLES SEGÚN LA CAMPAÑA SELECCIONADA
+  // Obtener grupos disponibles según la campaña seleccionada
   const getGruposDisponibles = () => {
     if (filtroCampana && gruposPorCampana[filtroCampana]) {
       return gruposPorCampana[filtroCampana];
@@ -269,7 +268,7 @@ export default function FormadorAsistencia({ user, onLogout }) {
   };
 
   // ──────────────────────────────────────────────────────────────────────────────
-  // FUNCIONES DE EDICIÓN MASIVA CON MODAL
+  // FUNCIONES DE EDICIÓN MASIVA
   // ──────────────────────────────────────────────────────────────────────────────
   const openBulkModal = () => {
     if (selectedItems.length === 0) {
@@ -294,7 +293,6 @@ export default function FormadorAsistencia({ user, onLogout }) {
     setBulkApply(prev => ({ ...prev, [key]: checked }));
   };
 
-  // Guardar cambios masivos
   const saveBulkModal = async () => {
     const camposParaAplicar = Object.entries(bulkApply).filter(([_, v]) => v);
     if (camposParaAplicar.length === 0) {
@@ -342,7 +340,7 @@ export default function FormadorAsistencia({ user, onLogout }) {
   };
 
   // ──────────────────────────────────────────────────────────────────────────────
-  // FUNCIONES DE EDICIÓN INDIVIDUAL POR FILA
+  // FUNCIONES DE EDICIÓN INDIVIDUAL
   // ──────────────────────────────────────────────────────────────────────────────
   const iniciarEdicion = (registro) => {
     const campos = {};
@@ -430,39 +428,34 @@ export default function FormadorAsistencia({ user, onLogout }) {
     );
   };
 
-  // ✅ FILTRAR Y PAGINAR REGISTROS - CORREGIDO PARA COMPARACIÓN NORMALIZADA
+  // Filtrar y paginar registros
   const { registrosPaginados, totalPaginas, totalFiltrados } = useMemo(() => {
     let filtrados = [...registros];
     
-    // ✅ FILTRO CAMPAÑA - COMPARACIÓN NORMALIZADA
     if (filtroCampana) {
       filtrados = filtrados.filter(r => 
         limpiarString(r.campaña) === limpiarString(filtroCampana)
       );
     }
     
-    // ✅ FILTRO GRUPO - COMPARACIÓN NORMALIZADA
     if (filtroGrupo !== "todos") {
       filtrados = filtrados.filter(r => 
         limpiarString(r.grupo_nombre) === limpiarString(filtroGrupo)
       );
     }
     
-    // ✅ FILTRO ESTADO
     if (filtroEstado !== "todos") {
       filtrados = filtrados.filter(r => 
         limpiarString(r.estado) === limpiarString(filtroEstado)
       );
     }
     
-    // ✅ FILTRO SEGMENTO
     if (filtroSegmento !== "todos") {
       filtrados = filtrados.filter(r => 
         limpiarString(r.segmento_prefiltro) === limpiarString(filtroSegmento)
       );
     }
     
-    // ✅ BÚSQUEDA POR NOMBRE O DNI
     if (busqueda.trim() !== "") {
       const termino = busqueda.toLowerCase().trim();
       filtrados = filtrados.filter(r =>
@@ -535,9 +528,7 @@ export default function FormadorAsistencia({ user, onLogout }) {
     }
   };
 
-  // ──────────────────────────────────────────────────────────────────────────────
-  // SELECCIÓN DE FILAS PARA EDICIÓN MASIVA
-  // ──────────────────────────────────────────────────────────────────────────────
+  // Selección de filas
   const toggleSelectAll = (checked) => {
     if (checked) {
       const allIds = registrosPaginados.map(item => item.id);
@@ -560,7 +551,6 @@ export default function FormadorAsistencia({ user, onLogout }) {
             <button
               onClick={() => navigate("/formador")}
               className="px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium transition-colors flex items-center gap-2"
-              title="Volver al Panel del Formador"
             >
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
@@ -593,9 +583,27 @@ export default function FormadorAsistencia({ user, onLogout }) {
           <div className={`p-3 rounded-md shadow-sm border-l-4 ${
             mensaje.tipo === "success" ? "bg-green-50 border-l-green-500 text-green-800" :
             mensaje.tipo === "error" ? "bg-red-50 border-l-red-500 text-red-800" :
+            mensaje.tipo === "warning" ? "bg-yellow-50 border-l-yellow-500 text-yellow-800" :
             "bg-blue-50 border-l-blue-500 text-blue-800"
           }`}>
             <p className="text-sm">{mensaje.texto}</p>
+          </div>
+        </div>
+      )}
+
+      {/* ✅ ALERTA DE DISCREPANCIA */}
+      {hayDiscrepancia && (
+        <div className="max-w-[95vw] mx-auto px-4 md:px-8 pt-4">
+          <div className="p-4 rounded-lg bg-red-50 border-2 border-red-300 text-red-800">
+            <h3 className="font-bold text-sm mb-2">🚨 DISCREPANCIA DETECTADA</h3>
+            <p className="text-xs mb-2">
+              <strong>En Base de Datos:</strong> {totalEnBD} registros<br/>
+              <strong>Cargados en Front:</strong> {totalCargados} registros<br/>
+              <strong>Faltantes:</strong> {totalEnBD - totalCargados} registros
+            </p>
+            <p className="text-xs font-medium">
+              Esto se debe a Políticas RLS en Supabase. Contacta al administrador para verificar permisos.
+            </p>
           </div>
         </div>
       )}
@@ -610,10 +618,12 @@ export default function FormadorAsistencia({ user, onLogout }) {
               Gestión de Asistencia y Seguimiento
             </h2>
             <div className="flex items-center gap-4">
-              {/* ✅ CONTADOR DE REGISTROS TOTALES VS FILTRADOS */}
+              {/* ✅ CONTADOR CON DIAGNÓSTICO */}
               <div className="text-xs text-gray-600 bg-gray-100 px-3 py-1.5 rounded-lg">
                 <span className="font-medium">{totalFiltrados}</span> mostrados de{" "}
-                <span className="font-medium text-blue-600">{totalRegistrosBD}</span> en BD
+                <span className={`font-medium ${hayDiscrepancia ? 'text-red-600' : 'text-blue-600'}`}>
+                  {totalCargados}
+                </span> cargados ({totalEnBD} en BD)
               </div>
               <button
                 onClick={descargarCSV}
@@ -652,9 +662,6 @@ export default function FormadorAsistencia({ user, onLogout }) {
                 <option value="todos">Todos</option>
                 {getGruposDisponibles().map(g => <option key={g} value={g}>{g}</option>)}
               </select>
-              {filtroCampana && getGruposDisponibles().length === 0 && (
-                <p className="text-[10px] text-gray-500 mt-1">No hay grupos para esta campaña</p>
-              )}
             </div>
             <div>
               <label className="block text-xs font-medium text-gray-700 mb-1">Estado</label>
@@ -710,13 +717,6 @@ export default function FormadorAsistencia({ user, onLogout }) {
             </div>
           ) : (
             <>
-              {/* ✅ INDICADOR DE CARGA COMPLETA */}
-              {!cargaInicialCompleta && (
-                <div className="mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg text-xs text-yellow-800">
-                  ⏳ Cargando datos completos, por favor espere...
-                </div>
-              )}
-              
               <div className="overflow-x-auto">
                 <table className="min-w-full divide-y divide-gray-200 text-xs">
                   <thead className="bg-gray-50">
@@ -727,7 +727,6 @@ export default function FormadorAsistencia({ user, onLogout }) {
                           checked={selectedItems.length === registrosPaginados.length && registrosPaginados.length > 0}
                           onChange={(e) => toggleSelectAll(e.target.checked)}
                           className="h-3.5 w-3.5 cursor-pointer text-blue-600 rounded border-gray-300 focus:ring-blue-600"
-                          title="Seleccionar todos en esta página"
                         />
                       </th>
                       <th className="px-2 py-2 text-left text-[10px] font-medium text-gray-600 uppercase tracking-wider">DNI</th>
@@ -905,9 +904,7 @@ export default function FormadorAsistencia({ user, onLogout }) {
                     ) : (
                       <tr>
                         <td colSpan="21" className="px-4 py-6 text-center text-gray-600 text-xs">
-                          {cargaInicialCompleta 
-                            ? "No se encontraron registros con esos filtros." 
-                            : "Cargando datos..."}
+                          No se encontraron registros con esos filtros.
                         </td>
                       </tr>
                     )}
@@ -940,30 +937,25 @@ export default function FormadorAsistencia({ user, onLogout }) {
         </div>
       </div>
 
-      {/* ────────────────────────────────────────────────────────────────────────────── */}
       {/* MODAL DE EDICIÓN MASIVA */}
-      {/* ────────────────────────────────────────────────────────────────────────────── */}
       {isBulkModalOpen && (
         <div className="fixed inset-0 z-50 flex items-end md:items-center md:justify-center">
           <div className="absolute inset-0 bg-black/50" onClick={closeBulkModal} />
           <div className="relative w-full md:max-w-4xl bg-white rounded-t-2xl md:rounded-2xl shadow-2xl border border-gray-200 overflow-hidden max-h-[90vh] flex flex-col">
-            {/* Header del modal */}
             <div className="px-4 py-3 bg-white border-b border-gray-200 text-gray-900 flex items-center justify-between flex-shrink-0">
               <div className="flex items-center gap-2">
                 <svg className="h-5 w-5 text-gray-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5M16 3l5 5M4 13l6 6M14 3l7 7" />
                 </svg>
-                <h3 className="font-semibold">Edición Masiva • {selectedItems.length} registro(s) seleccionado(s)</h3>
+                <h3 className="font-semibold">Edición Masiva • {selectedItems.length} registro(s)</h3>
               </div>
-              <button onClick={closeBulkModal} className="text-gray-500 hover:text-gray-700" title="Cerrar">✕</button>
+              <button onClick={closeBulkModal} className="text-gray-500 hover:text-gray-700">✕</button>
             </div>
-            {/* Instrucciones */}
             <div className="px-4 py-2 bg-gray-50 border-b border-gray-200">
               <p className="text-[11px] text-gray-600">
-                💡 <strong>Instrucciones:</strong> Marca la casilla <strong>"Aplicar"</strong> en cada campo que deseas actualizar. Los campos no marcados NO serán modificados.
+                💡 Marca <strong>"Aplicar"</strong> en cada campo que deseas actualizar.
               </p>
             </div>
-            {/* Body del modal - Campos editables */}
             <div className="p-4 grid grid-cols-1 md:grid-cols-2 gap-3 overflow-y-auto flex-1">
               {BULK_FIELDS.map((field) => (
                 <div key={field.key} className="flex items-start gap-2 p-2 border border-gray-200 rounded-lg">
@@ -972,7 +964,6 @@ export default function FormadorAsistencia({ user, onLogout }) {
                     checked={!!bulkApply[field.key]}
                     onChange={(e) => toggleBulkApply(field.key, e.target.checked)}
                     className="mt-1 h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-600"
-                    title="Aplicar este campo"
                   />
                   <div className="flex-1 min-w-0">
                     <label className="block text-[11px] font-medium text-gray-700 mb-1">{field.label}</label>
@@ -1021,10 +1012,9 @@ export default function FormadorAsistencia({ user, onLogout }) {
                 </div>
               ))}
             </div>
-            {/* Footer del modal */}
             <div className="px-4 py-3 bg-gray-50 border-t border-gray-200 flex items-center justify-between flex-shrink-0">
               <div className="text-[11px] text-gray-600">
-                Campos marcados como <strong>Aplicar</strong> serán actualizados en <strong>{selectedItems.length}</strong> registro(s).
+                Se actualizarán <strong>{selectedItems.length}</strong> registro(s)
               </div>
               <div className="flex gap-2">
                 <button
@@ -1082,7 +1072,6 @@ export default function FormadorAsistencia({ user, onLogout }) {
             <button
               onClick={() => setSelectedItems([])}
               className="px-3 py-2 text-xs text-gray-500 hover:text-gray-700"
-              title="Deseleccionar"
             >
               ✕
             </button>
