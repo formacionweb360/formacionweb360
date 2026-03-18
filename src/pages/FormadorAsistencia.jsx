@@ -1,10 +1,13 @@
+// src/pages/FormadorAsistencia.jsx
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "../services/supabaseClient";
 
+// ... (OPCIONES_ASISTENCIA, OPCIONES_SEGMENTO, etc. se mantienen igual)
+
 const OPCIONES_ASISTENCIA = [
-  "ASISTIÓ", "FALTA", "DESERTÓ", "TARDANZA",
-  "NO SE PRESENTÓ", "RETIRADO", "NO APROBO ROLE PLAY", "INYECTADO"
+  "ASISTIÓ", "FALTA", "DESERTÓ", "TARDANZA", "NO SE PRESENTÓ", 
+  "RETIRADO", "NO APROBO ROLE PLAY", "INYECTADO"
 ];
 
 const OPCIONES_SEGMENTO = ["A", "B", "C"];
@@ -23,138 +26,223 @@ const OPCIONES_MOTIVO_BAJA = {
 };
 
 const BULK_FIELDS = [
-  { key: "estado", label: "Estado", type: "select", options: ["Activo", "Inactivo"] },
-  { key: "segmento_prefiltro", label: "Segmento Prefiltro", type: "select", options: OPCIONES_SEGMENTO },
-  { key: "certifica", label: "Certifica", type: "select", options: OPCIONES_CERTIFICA },
-  { key: "segmento_certificado", label: "Segmento Certificado", type: "select", options: OPCIONES_SEGMENTO },
-  { key: "fecha_baja", label: "Fecha Baja", type: "date" },
-  { key: "motivo_baja", label: "Motivo Baja", type: "motivo_baja" },
-  { key: "telefono", label: "Teléfono", type: "text" },
-  ...[1, 2, 3, 4, 5, 6, 7].map((d) => ({
+  { key: 'estado', label: 'Estado', type: 'select', options: ['Activo', 'Inactivo'] },
+  { key: 'segmento_prefiltro', label: 'Segmento Prefiltro', type: 'select', options: OPCIONES_SEGMENTO },
+  { key: 'certifica', label: 'Certifica', type: 'select', options: OPCIONES_CERTIFICA },
+  { key: 'segmento_certificado', label: 'Segmento Certificado', type: 'select', options: OPCIONES_SEGMENTO },
+  { key: 'fecha_baja', label: 'Fecha Baja', type: 'date' },
+  { key: 'motivo_baja', label: 'Motivo Baja', type: 'motivo_baja' },
+  { key: 'telefono', label: 'Teléfono', type: 'text', placeholder: 'Ej: 987654321' },
+  ...[1, 2, 3, 4, 5, 6, 7].map(d => ({
     key: `dia_${d}`,
     label: `Día ${d}`,
-    type: "select",
+    type: 'select',
     options: OPCIONES_ASISTENCIA
   }))
 ];
 
 const formatearFecha = (fechaString) => {
   if (!fechaString) return "—";
+  if (fechaString instanceof Date) {
+    return fechaString.toLocaleDateString('es-PE', { day: '2-digit', month: '2-digit', year: 'numeric' });
+  }
   let fecha;
-  if (fechaString.includes("-")) {
-    const [y, m, d] = fechaString.split("-");
-    fecha = new Date(y, m - 1, d);
-  } else if (fechaString.includes("/")) {
-    const [d, m, y] = fechaString.split("/");
-    fecha = new Date(y, m - 1, d);
-  } else fecha = new Date(fechaString);
-  return isNaN(fecha.getTime()) ? "—" : fecha.toLocaleDateString("es-PE");
+  if (fechaString.includes('-')) {
+    const [year, month, day] = fechaString.split('-');
+    fecha = new Date(year, month - 1, day);
+  } else if (fechaString.includes('/')) {
+    const [day, month, year] = fechaString.split('/');
+    fecha = new Date(year, month - 1, day);
+  } else {
+    fecha = new Date(fechaString);
+  }
+  if (isNaN(fecha.getTime())) return "—";
+  return fecha.toLocaleDateString('es-PE', { day: '2-digit', month: '2-digit', year: 'numeric' });
 };
 
-const formatearTelefono = (t) => {
-  if (!t) return "—";
-  const n = String(t).replace(/\D/g, "");
-  return n.length === 9 ? `${n.slice(0, 3)} ${n.slice(3, 6)} ${n.slice(6)}` : t;
+const formatearTelefono = (telefono) => {
+  if (!telefono) return "—";
+  const limpio = String(telefono).replace(/\D/g, '');
+  if (limpio.length === 9) {
+    return `${limpio.slice(0, 3)} ${limpio.slice(3, 6)} ${limpio.slice(6)}`;
+  }
+  return telefono;
 };
 
 export default function FormadorAsistencia({ user, onLogout }) {
   const navigate = useNavigate();
-
+  
+  // Estados principales
   const [registros, setRegistros] = useState([]);
   const [loading, setLoading] = useState(false);
   const [mensaje, setMensaje] = useState({ tipo: "", texto: "" });
-
+  
+  // ✅ NUEVO: Estado para saber si ya se cargaron datos
+  const [datosCargados, setDatosCargados] = useState(false);
+  
+  // Filtros
   const [filtroCampana, setFiltroCampana] = useState("");
   const [filtroGrupo, setFiltroGrupo] = useState("todos");
   const [filtroEstado, setFiltroEstado] = useState("todos");
   const [filtroSegmento, setFiltroSegmento] = useState("todos");
   const [busqueda, setBusqueda] = useState("");
-
+  
+  // Paginación
   const [paginaActual, setPaginaActual] = useState(1);
   const REGISTROS_POR_PAGINA = 15;
-
+  
+  // Edición por fila
   const [filaEditando, setFilaEditando] = useState(null);
   const [valoresEditables, setValoresEditables] = useState({});
-
+  
+  // Listas para filtros dinámicos
   const [campanasUnicas, setCampanasUnicas] = useState([]);
   const [gruposUnicos, setGruposUnicos] = useState([]);
   const [gruposPorCampana, setGruposPorCampana] = useState({});
-
+  
+  // Estados para edición masiva
   const [selectedItems, setSelectedItems] = useState([]);
   const [isBulkModalOpen, setIsBulkModalOpen] = useState(false);
-  const [bulkForm, setBulkForm] = useState(() => Object.fromEntries(BULK_FIELDS.map((f) => [f.key, ""])));
-  const [bulkApply, setBulkApply] = useState(() => Object.fromEntries(BULK_FIELDS.map((f) => [f.key, false])));
+  const [bulkForm, setBulkForm] = useState(() =>
+    Object.fromEntries(BULK_FIELDS.map(f => [f.key, '']))
+  );
+  const [bulkApply, setBulkApply] = useState(() =>
+    Object.fromEntries(BULK_FIELDS.map(f => [f.key, false]))
+  );
   const [isSavingBulk, setIsSavingBulk] = useState(false);
-
-  const fechaHoyFormateada = new Date().toLocaleDateString("es-PE", {
-    weekday: "long", year: "numeric", month: "long", day: "numeric"
+  
+  const fechaHoyFormateada = new Date().toLocaleDateString('es-PE', {
+    weekday: 'long', year: 'numeric', month: 'long', day: 'numeric'
   });
 
+  // Cargar filtros dinámicos al montar (solo campañas y grupos)
   useEffect(() => {
-    cargarRegistros();
     cargarFiltrosDinamicos();
   }, []);
 
-  useEffect(() => setFiltroGrupo("todos"), [filtroCampana]);
+  // Cuando cambia la campaña, resetear filtro de grupo
+  useEffect(() => {
+    setFiltroGrupo("todos");
+  }, [filtroCampana]);
 
+  // Mostrar mensaje temporal
   const mostrarMensaje = (tipo, texto) => {
     setMensaje({ tipo, texto });
     setTimeout(() => setMensaje({ tipo: "", texto: "" }), 4000);
   };
 
-  const cargarRegistros = async () => {
-    setLoading(true);
-    try {
-      const { data, error } = await supabase
-        .from("formacion_seguimiento")
-        .select(`
-          id, dni, nombre, campaña, grupo_nombre, estado, fecha_inicio,
-          fecha_termino, segmento_prefiltro, dia_1, dia_2, dia_3, dia_4,
-          dia_5, dia_6, dia_7, certifica, segmento_certificado, fecha_baja,
-          motivo_baja, telefono, created_at, updated_at
-        `)
-        .range(0, 9999)
-        .order("nombre", { ascending: true });
-
-      if (error) throw error;
-      setRegistros(data || []);
-    } catch (err) {
-      mostrarMensaje("error", "Error al cargar datos");
-    } finally {
-      setLoading(false);
-    }
-  };
-
+  // ✅ CARGAR FILTROS DINÁMICOS (campañas y grupos disponibles)
   const cargarFiltrosDinamicos = async () => {
     try {
       const { data: campanas } = await supabase
         .from("formacion_seguimiento")
         .select("campaña")
-        .range(0, 9999);
+        .not("campaña", "is", null)
+        .limit(1000);
+      
+      if (campanas) {
+        const unicas = [...new Set(campanas.map(c => c.campaña).filter(Boolean))].sort();
+        setCampanasUnicas(unicas);
+      }
 
-      setCampanasUnicas(
-        [...new Set(campanas.map((c) => c.campaña).filter(Boolean))].sort()
-      );
-
-      const { data: grupos } = await supabase
+      const { data: gruposData } = await supabase
         .from("formacion_seguimiento")
         .select("campaña, grupo_nombre")
-        .range(0, 9999);
-
-      const map = {};
-      grupos.forEach((g) => {
-        const camp = g.campaña?.trim();
-        const grp = g.grupo_nombre?.trim();
-        if (!camp || !grp) return;
-        if (!map[camp]) map[camp] = [];
-        if (!map[camp].includes(grp)) map[camp].push(grp);
-      });
-
-      Object.keys(map).forEach((c) => map[c].sort());
-      setGruposPorCampana(map);
-      setGruposUnicos([...new Set(grupos.map((g) => g.grupo_nombre).filter(Boolean))].sort());
-    } catch (err) {}
+        .not("grupo_nombre", "is", null)
+        .not("campaña", "is", null)
+        .limit(1000);
+      
+      if (gruposData) {
+        const gruposPorCamp = {};
+        gruposData.forEach(item => {
+          const campana = item.campaña?.trim();
+          const grupo = item.grupo_nombre?.trim();
+          if (campana && grupo) {
+            if (!gruposPorCamp[campana]) gruposPorCamp[campana] = [];
+            if (!gruposPorCamp[campana].includes(grupo)) gruposPorCamp[campana].push(grupo);
+          }
+        });
+        
+        Object.keys(gruposPorCamp).forEach(campana => gruposPorCamp[campana].sort());
+        setGruposPorCampana(gruposPorCamp);
+        
+        const todosLosGrupos = [...new Set(gruposData.map(g => g.grupo_nombre).filter(Boolean))].sort();
+        setGruposUnicos(todosLosGrupos);
+      }
+    } catch (err) {
+      console.error("Error al cargar filtros:", err);
+    }
   };
+
+  // ✅ NUEVA FUNCIÓN: Cargar datos con filtros aplicados
+  const aplicarFiltrosYCargar = async () => {
+    setLoading(true);
+    setDatosCargados(true);
+    setPaginaActual(1); // Resetear a página 1
+    
+    try {
+      // Construir query con filtros
+      let query = supabase
+        .from("formacion_seguimiento")
+        .select(`
+          id, dni, nombre, campaña, grupo_nombre, estado, fecha_inicio, fecha_termino,
+          segmento_prefiltro, dia_1, dia_2, dia_3, dia_4, dia_5, dia_6, dia_7,
+          certifica, segmento_certificado, fecha_baja, motivo_baja, telefono,
+          created_at, updated_at
+        `, { count: "exact" });
+
+      // ✅ Aplicar filtros server-side
+      if (filtroCampana) {
+        query = query.eq("campaña", filtroCampana);
+      }
+      
+      if (filtroGrupo !== "todos") {
+        query = query.eq("grupo_nombre", filtroGrupo);
+      }
+      
+      if (filtroEstado !== "todos") {
+        query = query.eq("estado", filtroEstado);
+      }
+      
+      if (filtroSegmento !== "todos") {
+        query = query.eq("segmento_prefiltro", filtroSegmento);
+      }
+      
+      // Búsqueda por nombre o DNI (ilike es case-insensitive)
+      if (busqueda.trim() !== "") {
+        const termino = `%${busqueda.trim()}%`;
+        query = query.or(`nombre.ilike.${termino},dni.ilike.${termino}`);
+      }
+
+      // Ordenar y limitar
+      const { data, error, count } = await query
+        .order("nombre", { ascending: true })
+        .limit(1000); // Límite máximo por seguridad
+      
+      if (error) throw error;
+      
+      setRegistros(data || []);
+      
+      if (count > 1000) {
+        mostrarMensaje(
+          "warning",
+          `⚠️ Se encontraron ${count} registros pero se muestran solo los primeros 1000. 
+           Refina tus filtros para ver más resultados específicos.`
+        );
+      } else if (data.length === 0) {
+        mostrarMensaje("info", "ℹ️ No se encontraron registros con esos filtros");
+      } else {
+        mostrarMensaje("success", `✅ Se cargaron ${data.length} registros`);
+      }
+    } catch (err) {
+      console.error("Error al cargar registros:", err);
+      mostrarMensaje("error", `❌ Error al cargar datos: ${err.message}`);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // ✅ Obtener grupos disponibles según la campaña seleccionada
   const getGruposDisponibles = () => {
     if (filtroCampana && gruposPorCampana[filtroCampana]) {
       return gruposPorCampana[filtroCampana];
@@ -162,13 +250,15 @@ export default function FormadorAsistencia({ user, onLogout }) {
     return gruposUnicos;
   };
 
+  // ... (resto de funciones: openBulkModal, closeBulkModal, etc. se mantienen igual)
+  
   const openBulkModal = () => {
     if (selectedItems.length === 0) {
-      mostrarMensaje("warning", "Selecciona al menos un registro");
+      mostrarMensaje("warning", "⚠️ Selecciona al menos un registro para editar");
       return;
     }
-    setBulkForm(Object.fromEntries(BULK_FIELDS.map((f) => [f.key, ""])));
-    setBulkApply(Object.fromEntries(BULK_FIELDS.map((f) => [f.key, false])));
+    setBulkForm(Object.fromEntries(BULK_FIELDS.map(f => [f.key, ''])));
+    setBulkApply(Object.fromEntries(BULK_FIELDS.map(f => [f.key, false])));
     setIsBulkModalOpen(true);
   };
 
@@ -177,62 +267,70 @@ export default function FormadorAsistencia({ user, onLogout }) {
     setSelectedItems([]);
   };
 
-  const setBulkField = (key, value) =>
-    setBulkForm((prev) => ({ ...prev, [key]: value }));
+  const setBulkField = (key, value) => {
+    setBulkForm(prev => ({ ...prev, [key]: value }));
+  };
 
-  const toggleBulkApply = (key, checked) =>
-    setBulkApply((prev) => ({ ...prev, [key]: checked }));
+  const toggleBulkApply = (key, checked) => {
+    setBulkApply(prev => ({ ...prev, [key]: checked }));
+  };
 
   const saveBulkModal = async () => {
-    const aplicar = Object.entries(bulkApply).filter(([, v]) => v);
-    if (aplicar.length === 0) {
-      mostrarMensaje("warning", "Activa al menos un campo para aplicar");
+    const camposParaAplicar = Object.entries(bulkApply).filter(([_, v]) => v);
+    if (camposParaAplicar.length === 0) {
+      mostrarMensaje("warning", "⚠️ Marca 'Aplicar' en al menos un campo para guardar");
       return;
     }
+    
     setIsSavingBulk(true);
     try {
       const payload = {};
-      BULK_FIELDS.forEach((f) => {
-        if (bulkApply[f.key]) {
-          const v = bulkForm[f.key];
-          payload[f.key] = v === "" ? null : v;
+      BULK_FIELDS.forEach(field => {
+        if (bulkApply[field.key]) {
+          let value = bulkForm[field.key];
+          if (value === '' && [
+            'segmento_prefiltro', 'certifica', 'segmento_certificado', 
+            'fecha_baja', 'motivo_baja', 'telefono', 
+            ...[1, 2, 3, 4, 5, 6, 7].map(d => `dia_${d}`)
+          ].includes(field.key)) {
+            value = null;
+          }
+          payload[field.key] = value;
         }
       });
 
-      const { error } = await supabase
+      const { error: updateError } = await supabase
         .from("formacion_seguimiento")
         .update(payload)
         .in("id", selectedItems);
-
-      if (error) throw error;
-
-      setRegistros((prev) =>
-        prev.map((r) =>
-          selectedItems.includes(r.id) ? { ...r, ...payload } : r
-        )
+      
+      if (updateError) throw updateError;
+      
+      setRegistros(prev =>
+        prev.map(r => selectedItems.includes(r.id) ? { ...r, ...payload } : r)
       );
-
-      mostrarMensaje("success", "Cambios aplicados");
+      
+      mostrarMensaje("success", `✅ Cambios aplicados a ${selectedItems.length} registro(s)`);
       closeBulkModal();
-      cargarRegistros();
     } catch (err) {
-      mostrarMensaje("error", "Error guardando cambios");
+      console.error("Error en edición masiva:", err);
+      mostrarMensaje("error", `❌ Error al guardar: ${err.message}`);
     } finally {
       setIsSavingBulk(false);
     }
   };
 
-  const iniciarEdicion = (r) => {
+  const iniciarEdicion = (registro) => {
     const campos = {};
-    for (let i = 1; i <= 7; i++) campos[`dia_${i}`] = r[`dia_${i}`] || "";
-    campos.segmento_prefiltro = r.segmento_prefiltro || "";
-    campos.certifica = r.certifica || "";
-    campos.segmento_certificado = r.segmento_certificado || "";
-    campos.fecha_baja = r.fecha_baja || "";
-    campos.motivo_baja = r.motivo_baja || "";
-    campos.telefono = r.telefono || "";
+    for (let i = 1; i <= 7; i++) campos[`dia_${i}`] = registro[`dia_${i}`] || "";
+    campos.segmento_prefiltro = registro.segmento_prefiltro || "";
+    campos.certifica = registro.certifica || "";
+    campos.segmento_certificado = registro.segmento_certificado || "";
+    campos.fecha_baja = registro.fecha_baja || "";
+    campos.motivo_baja = registro.motivo_baja || "";
+    campos.telefono = registro.telefono || "";
     setValoresEditables(campos);
-    setFilaEditando(r.id);
+    setFilaEditando(registro.id);
   };
 
   const cancelarEdicion = () => {
@@ -240,205 +338,163 @@ export default function FormadorAsistencia({ user, onLogout }) {
     setValoresEditables({});
   };
 
-  const handleInputChange = (campo, valor) =>
-    setValoresEditables((prev) => ({ ...prev, [campo]: valor }));
+  const handleInputChange = (campo, valor) => {
+    setValoresEditables(prev => ({ ...prev, [campo]: valor }));
+  };
 
-  const guardarCambiosFila = async (id) => {
+  const guardarCambiosFila = async (registroId) => {
     setLoading(true);
     try {
       const cambios = {};
       for (let i = 1; i <= 7; i++) {
         const key = `dia_${i}`;
-        cambios[key] = valoresEditables[key] || null;
+        if (valoresEditables[key] !== undefined) {
+          cambios[key] = valoresEditables[key] === "" ? null : valoresEditables[key];
+        }
       }
-      [
-        "segmento_prefiltro",
-        "certifica",
-        "segmento_certificado",
-        "fecha_baja",
-        "motivo_baja",
-        "telefono",
-      ].forEach((c) => {
-        cambios[c] = valoresEditables[c] || null;
-      });
+      ['segmento_prefiltro', 'certifica', 'segmento_certificado', 'fecha_baja', 'motivo_baja', 'telefono']
+        .forEach(campo => {
+          if (valoresEditables[campo] !== undefined) {
+            cambios[campo] = valoresEditables[campo] === "" ? null : valoresEditables[campo];
+          }
+        });
 
       const { error } = await supabase
         .from("formacion_seguimiento")
         .update(cambios)
-        .eq("id", id);
-
+        .eq("id", registroId);
+      
       if (error) throw error;
-
-      setRegistros((prev) =>
-        prev.map((r) => (r.id === id ? { ...r, ...cambios } : r))
-      );
-      cancelarEdicion();
-      mostrarMensaje("success", "Guardado");
+      
+      setRegistros(prev => prev.map(r => r.id === registroId ? { ...r, ...cambios } : r));
+      setFilaEditando(null);
+      setValoresEditables({});
+      mostrarMensaje("success", "✅ Cambios guardados");
     } catch (err) {
-      mostrarMensaje("error", "Error guardando");
+      console.error("Error al guardar cambios:", err);
+      mostrarMensaje("error", "❌ Error al guardar");
     } finally {
       setLoading(false);
     }
   };
 
   const renderBadgeAsistencia = (estado) => {
-    if (!estado)
-      return <span className="text-gray-400 text-xs">—</span>;
-    const map = {
-      ASISTIÓ: "✔️",
-      FALTA: "✖️",
-      DESERTÓ: "🚪",
-      TARDANZA: "⏱️",
-      "NO SE PRESENTÓ": "🕳️",
-      RETIRADO: "🚶‍♂️",
-      "NO APROBO ROLE PLAY": "📉",
-      INYECTADO: "💉",
+    if (!estado) return <span className="text-gray-400 text-xs">—</span>;
+    const config = {
+      "ASISTIÓ": { icon: "✔️", color: "bg-green-50 text-green-700 border border-green-200" },
+      "FALTA": { icon: "✖️", color: "bg-red-50 text-red-700 border border-red-200" },
+      "TARDANZA": { icon: "⏱️", color: "bg-yellow-50 text-yellow-700 border border-yellow-200" },
+      "DESERTÓ": { icon: "🚪", color: "bg-gray-50 text-gray-700 border border-gray-200" },
+      "NO SE PRESENTÓ": { icon: "🕳️", color: "bg-gray-50 text-gray-700 border border-gray-200" },
+      "RETIRADO": { icon: "🚶‍♂️", color: "bg-orange-50 text-orange-700 border border-orange-200" },
+      "NO APROBO ROLE PLAY": { icon: "📉", color: "bg-blue-50 text-blue-700 border border-blue-200" },
+      "INYECTADO": { icon: "💉", color: "bg-purple-50 text-purple-700 border border-purple-200" },
     };
+    const { icon, color } = config[estado] || { icon: "?", color: "bg-gray-50 text-gray-700 border border-gray-200" };
+    return <span className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[10px] font-medium ${color}`}>{icon}</span>;
+  };
+
+  const renderBadgeEstado = (estado) => {
+    const isActive = estado === 'Activo';
     return (
-      <span className="inline-flex px-1.5 py-0.5 text-[10px]">
-        {map[estado] || "?"}
+      <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium border ${
+        isActive ? 'bg-green-50 text-green-700 border-green-200' : 'bg-red-50 text-red-700 border-red-200'
+      }`}>
+        {estado || 'Inactivo'}
       </span>
     );
   };
 
-  const renderBadgeEstado = (estado) => (
-    <span
-      className={`inline-flex px-2 py-0.5 rounded-full text-[10px] border ${
-        estado === "Activo"
-          ? "bg-green-50 text-green-700 border-green-200"
-          : "bg-red-50 text-red-700 border-red-200"
-      }`}
-    >
-      {estado || "Inactivo"}
-    </span>
-  );
-
+  // Filtrar y paginar registros (client-side para paginación)
   const { registrosPaginados, totalPaginas, totalFiltrados } = useMemo(() => {
-    let lista = [...registros];
-
-    if (filtroCampana)
-      lista = lista.filter((r) => r.campaña === filtroCampana);
-    if (filtroGrupo !== "todos")
-      lista = lista.filter((r) => r.grupo_nombre === filtroGrupo);
-    if (filtroEstado !== "todos")
-      lista = lista.filter((r) => r.estado === filtroEstado);
-    if (filtroSegmento !== "todos")
-      lista = lista.filter((r) => r.segmento_prefiltro === filtroSegmento);
-
-    if (busqueda.trim()) {
-      const s = busqueda.toLowerCase().trim();
-      lista = lista.filter(
-        (r) =>
-          r.nombre?.toLowerCase().includes(s) ||
-          String(r.dni).includes(s)
-      );
-    }
-
-    const total = lista.length;
+    const total = registros.length;
     const desde = (paginaActual - 1) * REGISTROS_POR_PAGINA;
     const hasta = desde + REGISTROS_POR_PAGINA;
+    const pagina = registros.slice(desde, hasta);
+    const totalPag = Math.ceil(total / REGISTROS_POR_PAGINA) || 1;
+    
+    return { registrosPaginados: pagina, totalPaginas: totalPag, totalFiltrados: total };
+  }, [registros, paginaActual]);
 
-    return {
-      registrosPaginados: lista.slice(desde, hasta),
-      totalPaginas: Math.ceil(total / REGISTROS_POR_PAGINA),
-      totalFiltrados: total,
-    };
-  }, [
-    registros,
-    filtroCampana,
-    filtroGrupo,
-    filtroEstado,
-    filtroSegmento,
-    busqueda,
-    paginaActual,
-  ]);
-
+  // Exportar CSV
   const descargarCSV = () => {
-    const rows = registrosPaginados;
-    if (rows.length === 0) {
-      mostrarMensaje("warning", "No hay datos");
+    if (registros.length === 0) {
+      mostrarMensaje("warning", "⚠️ No hay datos para descargar");
       return;
     }
-
     const headers = [
-      "DNI","Nombre","Campaña","Grupo","Estado","Teléfono",
-      "Fecha Inicio","Fecha Término","Segmento Prefiltro",
-      "Día 1","Día 2","Día 3","Día 4","Día 5","Día 6","Día 7",
-      "Certifica","Segmento Certificado","Fecha Baja","Motivo Baja"
+      "DNI", "Nombre", "Campaña", "Grupo", "Estado", "Teléfono", "Fecha Inicio", "Fecha Término",
+      "Segmento Prefiltro", "Día 1", "Día 2", "Día 3", "Día 4", "Día 5", "Día 6", "Día 7",
+      "Certifica", "Segmento Certificado", "Fecha Baja", "Motivo Baja"
     ];
-
-    const csv = [
-      headers.join(","),
-      ...rows.map((r) =>
-        [
-          r.dni, r.nombre, r.campaña, r.grupo_nombre, r.estado,
-          r.telefono, r.fecha_inicio, r.fecha_termino, r.segmento_prefiltro,
-          r.dia_1, r.dia_2, r.dia_3, r.dia_4, r.dia_5, r.dia_6, r.dia_7,
-          r.certifica, r.segmento_certificado, r.fecha_baja,
-          r.motivo_baja
-        ]
-          .map((v) => `"${v || ""}"`)
-          .join(",")
-      )
-    ].join("\n");
-
-    const blob = new Blob([csv], { type: "text/csv" });
+    const csvRows = [headers.join(",")];
+    registros.forEach(r => {
+      const row = [
+        `"${r.dni || ''}"`, `"${r.nombre || ''}"`, r.campaña || '', r.grupo_nombre || '', r.estado || '',
+        `"${r.telefono || ''}"`, r.fecha_inicio || '', r.fecha_termino || '', r.segmento_prefiltro || '',
+        r.dia_1 || '', r.dia_2 || '', r.dia_3 || '', r.dia_4 || '', r.dia_5 || '', r.dia_6 || '', r.dia_7 || '',
+        r.certifica || '', r.segmento_certificado || '', r.fecha_baja || '', `"${r.motivo_baja || ''}"`
+      ];
+      csvRows.push(row.join(","));
+    });
+    const csvContent = csvRows.join("\n");
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-
-    a.href = url;
-    a.download = `formacion_${new Date().toISOString().slice(0, 10)}.csv`;
-    a.click();
-
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute("download", `formacion_seguimiento_${new Date().toISOString().split('T')[0]}.csv`);
+    link.style.visibility = "hidden";
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
     URL.revokeObjectURL(url);
+    mostrarMensaje("success", `✅ Descargado ${registros.length} registros`);
   };
 
-  const toggleEstadoRegistro = async (id, estado) => {
-    const nuevo = estado === "Activo" ? "Inactivo" : "Activo";
+  const toggleEstadoRegistro = async (registroId, estadoActual) => {
+    const nuevoEstado = estadoActual === 'Activo' ? 'Inactivo' : 'Activo';
     setLoading(true);
     try {
       const { error } = await supabase
         .from("formacion_seguimiento")
-        .update({ estado: nuevo })
-        .eq("id", id);
-
+        .update({ estado: nuevoEstado })
+        .eq("id", registroId);
       if (error) throw error;
-
-      setRegistros((prev) =>
-        prev.map((r) => (r.id === id ? { ...r, estado: nuevo } : r))
-      );
-      mostrarMensaje("success", "Estado actualizado");
+      setRegistros(prev => prev.map(r => r.id === registroId ? { ...r, estado: nuevoEstado } : r));
+      mostrarMensaje("success", `✅ Estado cambiado a ${nuevoEstado}`);
     } catch (err) {
-      mostrarMensaje("error", "No se pudo cambiar el estado");
+      console.error("Error al cambiar estado:", err);
+      mostrarMensaje("error", "❌ Error al cambiar estado");
     } finally {
       setLoading(false);
     }
   };
 
   const toggleSelectAll = (checked) => {
-    setSelectedItems(
-      checked ? registrosPaginados.map((r) => r.id) : []
-    );
+    if (checked) {
+      const allIds = registrosPaginados.map(item => item.id);
+      setSelectedItems(allIds);
+    } else {
+      setSelectedItems([]);
+    }
   };
 
   const handleSelectItem = (id) => {
-    setSelectedItems((prev) =>
-      prev.includes(id)
-        ? prev.filter((x) => x !== id)
-        : [...prev, id]
-    );
+    setSelectedItems(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
   };
+
   return (
     <div className="min-h-screen bg-[#F7F8FA] overflow-hidden">
+      {/* Header */}
       <header className="bg-white border-b border-gray-200 shadow-sm sticky top-0 z-50">
         <div className="max-w-[95vw] mx-auto px-4 md:px-8 py-4 flex items-center justify-between">
           <div className="flex items-center gap-4">
             <button
               onClick={() => navigate("/formador")}
-              className="px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm flex items-center gap-2"
+              className="px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium transition-colors flex items-center gap-2"
             >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor">
-                <path strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" d="M10 19l-7-7m0 0l7-7m-7 7h18"/>
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
               </svg>
               <span className="hidden sm:inline">Volver</span>
             </button>
@@ -454,7 +510,7 @@ export default function FormadorAsistencia({ user, onLogout }) {
             </div>
             <button
               onClick={onLogout}
-              className="px-3 py-1.5 text-xs border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50"
+              className="px-3 py-1.5 text-xs font-semibold border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition"
             >
               Cerrar sesión
             </button>
@@ -462,480 +518,457 @@ export default function FormadorAsistencia({ user, onLogout }) {
         </div>
       </header>
 
+      {/* Mensajes */}
       {mensaje.texto && (
         <div className="max-w-[95vw] mx-auto px-4 md:px-8 pt-4">
-          <div
-            className={`p-3 rounded-md border-l-4 ${
-              mensaje.tipo === "success"
-                ? "bg-green-50 border-green-500 text-green-800"
-                : mensaje.tipo === "error"
-                ? "bg-red-50 border-red-500 text-red-800"
-                : "bg-blue-50 border-blue-500 text-blue-800"
-            }`}
-          >
+          <div className={`p-3 rounded-md shadow-sm border-l-4 ${
+            mensaje.tipo === "success" ? "bg-green-50 border-l-green-500 text-green-800" :
+            mensaje.tipo === "error" ? "bg-red-50 border-l-red-500 text-red-800" :
+            mensaje.tipo === "warning" ? "bg-yellow-50 border-l-yellow-500 text-yellow-800" :
+            "bg-blue-50 border-l-blue-500 text-blue-800"
+          }`}>
             <p className="text-sm">{mensaje.texto}</p>
           </div>
         </div>
       )}
 
+      {/* Contenido principal */}
       <div className="max-w-[95vw] mx-auto px-4 md:px-8 py-6">
+        {/* Barra de filtros */}
         <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6 mb-6">
           <div className="flex flex-wrap items-center justify-between gap-4 mb-4">
             <h2 className="font-semibold text-lg text-gray-900 flex items-center gap-2">
-              <span className="text-blue-600">📋</span> Gestión de Asistencia y Seguimiento
+              <span className="text-blue-600">🔍</span>
+              Filtros de Búsqueda
             </h2>
-
-            <button
-              onClick={descargarCSV}
-              disabled={loading || totalFiltrados === 0}
-              className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm disabled:opacity-50 flex items-center gap-2"
-            >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor">
-                <path strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/>
-              </svg>
-              Descargar CSV ({totalFiltrados})
-            </button>
+            {!datosCargados && (
+              <div className="text-xs text-gray-500 bg-gray-100 px-3 py-1.5 rounded-lg">
+                💡 Aplica filtros y haz clic en "Cargar Datos"
+              </div>
+            )}
           </div>
 
+          {/* Filtros */}
           <div className="flex flex-wrap items-end gap-4">
             <div>
-              <label className="block text-xs text-gray-700 mb-1">Campaña</label>
+              <label className="block text-xs font-medium text-gray-700 mb-1">Campaña</label>
               <select
                 value={filtroCampana}
-                onChange={(e) => {
-                  setFiltroCampana(e.target.value);
-                  setPaginaActual(1);
-                }}
-                className="border-gray-300 rounded-lg px-2 py-1.5 text-xs"
+                onChange={(e) => setFiltroCampana(e.target.value)}
+                className="bg-white border border-gray-300 text-gray-700 rounded-lg px-2 py-1.5 text-xs focus:ring-2 focus:ring-blue-600 focus:border-blue-600"
               >
                 <option value="">Todas</option>
-                {campanasUnicas.map((c) => (
-                  <option key={c}>{c}</option>
-                ))}
+                {campanasUnicas.map(c => <option key={c} value={c}>{c}</option>)}
               </select>
             </div>
-
             <div>
-              <label className="block text-xs text-gray-700 mb-1">Grupo</label>
+              <label className="block text-xs font-medium text-gray-700 mb-1">Grupo</label>
               <select
                 value={filtroGrupo}
-                onChange={(e) => {
-                  setFiltroGrupo(e.target.value);
-                  setPaginaActual(1);
-                }}
-                className="border-gray-300 rounded-lg px-2 py-1.5 text-xs"
+                onChange={(e) => setFiltroGrupo(e.target.value)}
+                className="bg-white border border-gray-300 text-gray-700 rounded-lg px-2 py-1.5 text-xs focus:ring-2 focus:ring-blue-600 focus:border-blue-600 disabled:opacity-60"
+                disabled={!!filtroCampana && getGruposDisponibles().length === 0}
               >
                 <option value="todos">Todos</option>
-                {getGruposDisponibles().map((g) => (
-                  <option key={g}>{g}</option>
-                ))}
+                {getGruposDisponibles().map(g => <option key={g} value={g}>{g}</option>)}
               </select>
             </div>
-
             <div>
-              <label className="block text-xs text-gray-700 mb-1">Estado</label>
+              <label className="block text-xs font-medium text-gray-700 mb-1">Estado</label>
               <select
                 value={filtroEstado}
-                onChange={(e) => {
-                  setFiltroEstado(e.target.value);
-                  setPaginaActual(1);
-                }}
-                className="border-gray-300 rounded-lg px-2 py-1.5 text-xs"
+                onChange={(e) => setFiltroEstado(e.target.value)}
+                className="bg-white border border-gray-300 text-gray-700 rounded-lg px-2 py-1.5 text-xs focus:ring-2 focus:ring-blue-600 focus:border-blue-600"
               >
                 <option value="todos">Todos</option>
                 <option value="Activo">Activo</option>
                 <option value="Inactivo">Inactivo</option>
               </select>
             </div>
-
             <div>
-              <label className="block text-xs text-gray-700 mb-1">Segmento</label>
+              <label className="block text-xs font-medium text-gray-700 mb-1">Segmento</label>
               <select
                 value={filtroSegmento}
-                onChange={(e) => {
-                  setFiltroSegmento(e.target.value);
-                  setPaginaActual(1);
-                }}
-                className="border-gray-300 rounded-lg px-2 py-1.5 text-xs"
+                onChange={(e) => setFiltroSegmento(e.target.value)}
+                className="bg-white border border-gray-300 text-gray-700 rounded-lg px-2 py-1.5 text-xs focus:ring-2 focus:ring-blue-600 focus:border-blue-600"
               >
                 <option value="todos">Todos</option>
-                {OPCIONES_SEGMENTO.map((s) => (
-                  <option key={s}>{s}</option>
-                ))}
+                {OPCIONES_SEGMENTO.map(s => <option key={s} value={s}>{s}</option>)}
               </select>
             </div>
-
             <div className="flex-1 min-w-[250px]">
-              <label className="block text-xs text-gray-700 mb-1">Buscar</label>
+              <label className="block text-xs font-medium text-gray-700 mb-1">Buscar por nombre o DNI</label>
               <input
+                type="text"
                 value={busqueda}
-                onChange={(e) => {
-                  setBusqueda(e.target.value);
-                  setPaginaActual(1);
-                }}
-                className="border-gray-300 w-full rounded-lg px-2 py-1.5 text-xs"
-                placeholder="Nombre o DNI"
+                onChange={(e) => setBusqueda(e.target.value)}
+                placeholder="Ej: Juan Pérez o 75834921"
+                className="w-full bg-white border border-gray-300 text-gray-700 rounded-lg px-2 py-1.5 text-xs focus:ring-2 focus:ring-blue-600 focus:border-blue-600 placeholder-gray-400"
               />
             </div>
-
-            <button
-              onClick={() => {
-                setFiltroCampana("");
-                setFiltroGrupo("todos");
-                setFiltroEstado("todos");
-                setFiltroSegmento("todos");
-                setBusqueda("");
-                setPaginaActual(1);
-              }}
-              className="px-3 py-1.5 text-xs border border-gray-300 rounded-lg"
-            >
-              Limpiar filtros
-            </button>
-          </div>
-        </div>
-
-        <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6">
-          <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-200 text-xs">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="px-2 py-2 text-center">
-                    <input
-                      type="checkbox"
-                      checked={
-                        selectedItems.length === registrosPaginados.length &&
-                        registrosPaginados.length > 0
-                      }
-                      onChange={(e) => toggleSelectAll(e.target.checked)}
-                      className="h-3.5 w-3.5"
-                    />
-                  </th>
-                  <th className="px-2 py-2">DNI</th>
-                  <th className="px-2 py-2">Nombre</th>
-                  <th className="px-2 py-2">Campaña</th>
-                  <th className="px-2 py-2">Grupo</th>
-                  <th className="px-2 py-2">Estado</th>
-                  <th className="px-2 py-2 text-center">Seg. Prefiltro</th>
-
-                  {[1, 2, 3, 4, 5, 6, 7].map((d) => (
-                    <th key={d} className="px-2 py-2 text-center">Día {d}</th>
-                  ))}
-
-                  <th className="px-2 py-2 text-center">Certifica</th>
-                  <th className="px-2 py-2 text-center">Seg. Certificado</th>
-                  <th className="px-2 py-2 text-center">Fecha Baja</th>
-                  <th className="px-2 py-2 text-center">Motivo Baja</th>
-                  <th className="px-2 py-2 text-center">Teléfono</th>
-                  <th className="px-2 py-2">Acción</th>
-                </tr>
-              </thead>
-
-              <tbody className="divide-y divide-gray-200">
-                {registrosPaginados.length === 0 ? (
-                  <tr>
-                    <td colSpan="21" className="text-center py-6 text-gray-500">
-                      No hay registros
-                    </td>
-                  </tr>
+            
+            {/* ✅ BOTONES DE ACCIÓN */}
+            <div className="flex gap-2">
+              <button
+                onClick={aplicarFiltrosYCargar}
+                disabled={loading}
+                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50 flex items-center gap-2"
+              >
+                {loading ? (
+                  <>
+                    <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    Cargando...
+                  </>
                 ) : (
-                  registrosPaginados.map((r) => (
-                    <tr key={r.id} className="hover:bg-gray-50">
-                      <td className="px-2 py-2 text-center">
-                        <input
-                          type="checkbox"
-                          checked={selectedItems.includes(r.id)}
-                          onChange={() => handleSelectItem(r.id)}
-                          className="h-3.5 w-3.5"
-                        />
-                      </td>
-
-                      <td className="px-2 py-2">{r.dni}</td>
-                      <td className="px-2 py-2">{r.nombre}</td>
-                      <td className="px-2 py-2">{r.campaña}</td>
-                      <td className="px-2 py-2">{r.grupo_nombre}</td>
-                      <td className="px-2 py-2">{renderBadgeEstado(r.estado)}</td>
-
-                      <td className="px-2 py-2 text-center">
-                        {filaEditando === r.id ? (
-                          <select
-                            value={valoresEditables.segmento_prefiltro}
-                            onChange={(e) =>
-                              handleInputChange("segmento_prefiltro", e.target.value)
-                            }
-                            className="border-gray-300 rounded px-1 py-0.5 text-[10px]"
-                          >
-                            <option value="">—</option>
-                            {OPCIONES_SEGMENTO.map((o) => (
-                              <option key={o}>{o}</option>
-                            ))}
-                          </select>
-                        ) : (
-                          r.segmento_prefiltro || "—"
-                        )}
-                      </td>
-
-                      {[1, 2, 3, 4, 5, 6, 7].map((d) => {
-                        const key = `dia_${d}`;
-                        return (
-                          <td key={key} className="px-2 py-2 text-center">
-                            {filaEditando === r.id ? (
-                              <select
-                                value={valoresEditables[key]}
-                                onChange={(e) =>
-                                  handleInputChange(key, e.target.value)
-                                }
-                                className="border-gray-300 rounded px-1 py-0.5 text-[10px]"
-                              >
-                                <option value="">—</option>
-                                {OPCIONES_ASISTENCIA.map((o) => (
-                                  <option key={o}>{o}</option>
-                                ))}
-                              </select>
-                            ) : (
-                              <div className="flex justify-center">
-                                {renderBadgeAsistencia(r[key])}
-                              </div>
-                            )}
-                          </td>
-                        );
-                      })}
-
-                      <td className="px-2 py-2 text-center">
-                        {filaEditando === r.id ? (
-                          <select
-                            value={valoresEditables.certifica}
-                            onChange={(e) =>
-                              handleInputChange("certifica", e.target.value)
-                            }
-                            className="border-gray-300 rounded px-1 py-0.5 text-[10px]"
-                          >
-                            <option value="">—</option>
-                            {OPCIONES_CERTIFICA.map((o) => (
-                              <option key={o}>{o}</option>
-                            ))}
-                          </select>
-                        ) : (
-                          r.certifica || "—"
-                        )}
-                      </td>
-
-                      <td className="px-2 py-2 text-center">
-                        {filaEditando === r.id ? (
-                          <select
-                            value={valoresEditables.segmento_certificado}
-                            onChange={(e) =>
-                              handleInputChange("segmento_certificado", e.target.value)
-                            }
-                            className="border-gray-300 rounded px-1 py-0.5 text-[10px]"
-                          >
-                            <option value="">—</option>
-                            {OPCIONES_SEGMENTO.map((o) => (
-                              <option key={o}>{o}</option>
-                            ))}
-                          </select>
-                        ) : (
-                          r.segmento_certificado || "—"
-                        )}
-                      </td>
-
-                      <td className="px-2 py-2 text-center">
-                        {filaEditando === r.id ? (
-                          <input
-                            type="date"
-                            value={valoresEditables.fecha_baja || ""}
-                            onChange={(e) =>
-                              handleInputChange("fecha_baja", e.target.value)
-                            }
-                            className="border-gray-300 rounded px-1 py-0.5 text-[10px]"
-                          />
-                        ) : (
-                          formatearFecha(r.fecha_baja)
-                        )}
-                      </td>
-
-                      <td className="px-2 py-2 text-center">
-                        {filaEditando === r.id ? (
-                          <select
-                            value={valoresEditables.motivo_baja}
-                            onChange={(e) =>
-                              handleInputChange("motivo_baja", e.target.value)
-                            }
-                            className="border-gray-300 rounded px-1 py-0.5 text-[10px]"
-                          >
-                            <option value="">—</option>
-                            {Object.entries(OPCIONES_MOTIVO_BAJA).map(([grupo, opts]) => (
-                              <optgroup key={grupo} label={grupo}>
-                                {opts.map((o) => (
-                                  <option key={o}>{o}</option>
-                                ))}
-                              </optgroup>
-                            ))}
-                          </select>
-                        ) : (
-                          r.motivo_baja || "—"
-                        )}
-                      </td>
-
-                      <td className="px-2 py-2 text-center">
-                        {filaEditando === r.id ? (
-                          <input
-                            value={valoresEditables.telefono}
-                            onChange={(e) =>
-                              handleInputChange("telefono", e.target.value)
-                            }
-                            className="border-gray-300 rounded px-1 py-0.5 text-[10px]"
-                          />
-                        ) : (
-                          formatearTelefono(r.telefono)
-                        )}
-                      </td>
-
-                      <td className="px-2 py-2">
-                        {filaEditando === r.id ? (
-                          <div className="flex gap-1">
-                            <button
-                              onClick={() => guardarCambiosFila(r.id)}
-                              className="px-2 py-1 bg-blue-600 text-white text-[10px] rounded"
-                            >
-                              Guardar
-                            </button>
-                            <button
-                              onClick={cancelarEdicion}
-                              className="px-2 py-1 border border-gray-300 text-[10px] rounded"
-                            >
-                              Cancelar
-                            </button>
-                          </div>
-                        ) : (
-                          <div className="flex gap-1">
-                            <button
-                              onClick={() => iniciarEdicion(r)}
-                              className="px-2 py-1 border border-gray-300 text-[10px] rounded"
-                            >
-                              Editar
-                            </button>
-                            <button
-                              onClick={() => toggleEstadoRegistro(r.id, r.estado)}
-                              className={`px-2 py-1 text-[10px] rounded border ${
-                                r.estado === "Activo"
-                                  ? "border-red-300 text-red-700"
-                                  : "border-green-300 text-green-700"
-                              }`}
-                            >
-                              {r.estado === "Activo" ? "Inact." : "Activo"}
-                            </button>
-                          </div>
-                        )}
-                      </td>
-                    </tr>
-                  ))
+                  <>
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                    </svg>
+                    Cargar Datos
+                  </>
                 )}
-              </tbody>
-            </table>
-          </div>
-
-          {totalPaginas > 1 && (
-            <div className="flex items-center justify-between mt-4">
-              <button
-                onClick={() => setPaginaActual((p) => Math.max(1, p - 1))}
-                disabled={paginaActual === 1}
-                className="px-3 py-1.5 border border-gray-300 rounded text-xs disabled:opacity-50"
-              >
-                ← Anterior
               </button>
-
-              <span className="text-xs text-gray-700">
-                Página {paginaActual} de {totalPaginas}
-              </span>
-
+              
               <button
-                onClick={() =>
-                  setPaginaActual((p) => Math.min(totalPaginas, p + 1))
-                }
-                disabled={paginaActual === totalPaginas}
-                className="px-3 py-1.5 border border-gray-300 rounded text-xs disabled:opacity-50"
+                onClick={() => {
+                  setFiltroCampana("");
+                  setFiltroGrupo("todos");
+                  setFiltroEstado("todos");
+                  setFiltroSegmento("todos");
+                  setBusqueda("");
+                  setRegistros([]);
+                  setDatosCargados(false);
+                  setPaginaActual(1);
+                }}
+                className="px-3 py-2 text-xs border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition"
               >
-                Siguiente →
+                Limpiar
               </button>
             </div>
-          )}
+          </div>
         </div>
+
+        {/* Tabla de Registros */}
+        {datosCargados && (
+          <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6">
+            {loading && !registros.length ? (
+              <div className="text-center py-12">
+                <div className="animate-spin w-6 h-6 border-2 border-blue-400 border-t-transparent rounded-full mx-auto mb-3"></div>
+                <p className="text-gray-600 text-xs">Cargando registros...</p>
+              </div>
+            ) : (
+              <>
+                {/* Header de tabla con acciones */}
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="font-semibold text-gray-900">
+                    📋 Resultados ({totalFiltrados} registros)
+                  </h3>
+                  {totalFiltrados > 0 && (
+                    <button
+                      onClick={descargarCSV}
+                      disabled={loading}
+                      className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50 flex items-center gap-2"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                      </svg>
+                      Descargar CSV ({totalFiltrados})
+                    </button>
+                  )}
+                </div>
+
+                {registros.length > 0 ? (
+                  <>
+                    <div className="overflow-x-auto">
+                      <table className="min-w-full divide-y divide-gray-200 text-xs">
+                        <thead className="bg-gray-50">
+                          <tr>
+                            <th className="px-2 py-2 text-center text-[10px] font-medium text-gray-600 uppercase tracking-wider">
+                              <input
+                                type="checkbox"
+                                checked={selectedItems.length === registrosPaginados.length && registrosPaginados.length > 0}
+                                onChange={(e) => toggleSelectAll(e.target.checked)}
+                                className="h-3.5 w-3.5 cursor-pointer text-blue-600 rounded border-gray-300 focus:ring-blue-600"
+                              />
+                            </th>
+                            <th className="px-2 py-2 text-left text-[10px] font-medium text-gray-600 uppercase tracking-wider">DNI</th>
+                            <th className="px-2 py-2 text-left text-[10px] font-medium text-gray-600 uppercase tracking-wider">Nombre</th>
+                            <th className="px-2 py-2 text-left text-[10px] font-medium text-gray-600 uppercase tracking-wider">Campaña</th>
+                            <th className="px-2 py-2 text-left text-[10px] font-medium text-gray-600 uppercase tracking-wider">Grupo</th>
+                            <th className="px-2 py-2 text-left text-[10px] font-medium text-gray-600 uppercase tracking-wider">Estado</th>
+                            <th className="px-2 py-2 text-center text-[10px] font-medium text-gray-600 uppercase tracking-wider">Seg. Prefiltro</th>
+                            {[1, 2, 3, 4, 5, 6, 7].map(d => (
+                              <th key={d} className="px-2 py-2 text-center text-[10px] font-medium text-gray-600 uppercase tracking-wider">Día {d}</th>
+                            ))}
+                            <th className="px-2 py-2 text-center text-[10px] font-medium text-gray-600 uppercase tracking-wider">Certifica</th>
+                            <th className="px-2 py-2 text-center text-[10px] font-medium text-gray-600 uppercase tracking-wider">Seg. Certificado</th>
+                            <th className="px-2 py-2 text-center text-[10px] font-medium text-gray-600 uppercase tracking-wider">Fecha Baja</th>
+                            <th className="px-2 py-2 text-center text-[10px] font-medium text-gray-600 uppercase tracking-wider">Motivo Baja</th>
+                            <th className="px-2 py-2 text-center text-[10px] font-medium text-gray-600 uppercase tracking-wider">Teléfono</th>
+                            <th className="px-2 py-2 text-left text-[10px] font-medium text-gray-600 uppercase tracking-wider">Acción</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-200">
+                          {registrosPaginados.map((r) => (
+                            <tr key={r.id} className="hover:bg-gray-50 transition-colors">
+                              <td className="px-2 py-2 whitespace-nowrap text-center">
+                                <input
+                                  type="checkbox"
+                                  checked={selectedItems.includes(r.id)}
+                                  onChange={() => handleSelectItem(r.id)}
+                                  className="h-3.5 w-3.5 cursor-pointer text-blue-600 rounded border-gray-300 focus:ring-blue-600"
+                                />
+                              </td>
+                              <td className="px-2 py-2 whitespace-nowrap text-xs text-gray-900 font-mono">{r.dni}</td>
+                              <td className="px-2 py-2 whitespace-nowrap text-xs text-gray-900">{r.nombre}</td>
+                              <td className="px-2 py-2 whitespace-nowrap text-xs text-gray-700">{r.campaña || '-'}</td>
+                              <td className="px-2 py-2 whitespace-nowrap text-xs text-gray-700">{r.grupo_nombre || '-'}</td>
+                              <td className="px-2 py-2 whitespace-nowrap">{renderBadgeEstado(r.estado)}</td>
+                              <td className="px-2 py-2 whitespace-nowrap text-center">
+                                {filaEditando === r.id ? (
+                                  <select
+                                    value={valoresEditables.segmento_prefiltro || ""}
+                                    onChange={(e) => handleInputChange("segmento_prefiltro", e.target.value)}
+                                    className="w-full bg-white border border-gray-300 text-gray-700 text-[10px] rounded px-1 py-0.5 focus:ring-1 focus:ring-blue-600 focus:border-blue-600"
+                                  >
+                                    <option value="">—</option>
+                                    {OPCIONES_SEGMENTO.map(op => <option key={op} value={op}>{op}</option>)}
+                                  </select>
+                                ) : <span className="text-gray-700 text-xs">{r.segmento_prefiltro || "—"}</span>}
+                              </td>
+                              {[1, 2, 3, 4, 5, 6, 7].map(d => {
+                                const key = `dia_${d}`;
+                                const esEditable = filaEditando === r.id;
+                                return (
+                                  <td key={key} className="px-2 py-2 whitespace-nowrap text-center">
+                                    {esEditable ? (
+                                      <select
+                                        value={valoresEditables[key] || ""}
+                                        onChange={(e) => handleInputChange(key, e.target.value)}
+                                        className="w-full bg-white border border-gray-300 text-gray-700 text-[10px] rounded px-1 py-0.5 focus:ring-1 focus:ring-blue-600 focus:border-blue-600"
+                                      >
+                                        <option value="">—</option>
+                                        {OPCIONES_ASISTENCIA.map(op => <option key={op} value={op}>{op}</option>)}
+                                      </select>
+                                    ) : <div className="flex justify-center">{renderBadgeAsistencia(r[key])}</div>}
+                                  </td>
+                                );
+                              })}
+                              <td className="px-2 py-2 whitespace-nowrap text-center">
+                                {filaEditando === r.id ? (
+                                  <select
+                                    value={valoresEditables.certifica || ""}
+                                    onChange={(e) => handleInputChange("certifica", e.target.value)}
+                                    className="w-full bg-white border border-gray-300 text-gray-700 text-[10px] rounded px-1 py-0.5 focus:ring-1 focus:ring-blue-600 focus:border-blue-600"
+                                  >
+                                    <option value="">—</option>
+                                    {OPCIONES_CERTIFICA.map(op => <option key={op} value={op}>{op}</option>)}
+                                  </select>
+                                ) : (
+                                  <span className={`text-xs font-medium ${
+                                    r.certifica === 'SI' ? 'text-green-700' : r.certifica === 'NO' ? 'text-red-700' : 'text-gray-500'
+                                  }`}>
+                                    {r.certifica || "—"}
+                                  </span>
+                                )}
+                              </td>
+                              <td className="px-2 py-2 whitespace-nowrap text-center">
+                                {filaEditando === r.id ? (
+                                  <select
+                                    value={valoresEditables.segmento_certificado || ""}
+                                    onChange={(e) => handleInputChange("segmento_certificado", e.target.value)}
+                                    className="w-full bg-white border border-gray-300 text-gray-700 text-[10px] rounded px-1 py-0.5 focus:ring-1 focus:ring-blue-600 focus:border-blue-600"
+                                  >
+                                    <option value="">—</option>
+                                    {OPCIONES_SEGMENTO.map(op => <option key={op} value={op}>{op}</option>)}
+                                  </select>
+                                ) : <span className="text-gray-700 text-xs">{r.segmento_certificado || "—"}</span>}
+                              </td>
+                              <td className="px-2 py-2 whitespace-nowrap text-center">
+                                {filaEditando === r.id ? (
+                                  <input
+                                    type="date"
+                                    value={valoresEditables.fecha_baja ? valoresEditables.fecha_baja.slice(0, 10) : ""}
+                                    onChange={(e) => handleInputChange("fecha_baja", e.target.value)}
+                                    className="w-full bg-white border border-gray-300 text-gray-700 text-[10px] rounded px-1 py-0.5 focus:ring-1 focus:ring-blue-600 focus:border-blue-600"
+                                  />
+                                ) : <span className="text-gray-700 text-xs">{formatearFecha(r.fecha_baja)}</span>}
+                              </td>
+                              <td className="px-2 py-2 whitespace-nowrap text-center max-w-[150px]">
+                                {filaEditando === r.id ? (
+                                  <select
+                                    value={valoresEditables.motivo_baja || ""}
+                                    onChange={(e) => handleInputChange("motivo_baja", e.target.value)}
+                                    className="w-full bg-white border border-gray-300 text-gray-900 text-[10px] rounded px-1 py-0.5 focus:ring-1 focus:ring-blue-600 focus:border-blue-600"
+                                  >
+                                    <option value="">— Seleccionar —</option>
+                                    {Object.entries(OPCIONES_MOTIVO_BAJA).map(([grupo, motivos]) => (
+                                      <optgroup key={grupo} label={grupo}>
+                                        {motivos.map(motivo => <option key={motivo} value={motivo}>{motivo}</option>)}
+                                      </optgroup>
+                                    ))}
+                                  </select>
+                                ) : <span className="text-gray-700 text-xs truncate block" title={r.motivo_baja}>{r.motivo_baja || "—"}</span>}
+                              </td>
+                              <td className="px-2 py-2 whitespace-nowrap text-center">
+                                {filaEditando === r.id ? (
+                                  <input
+                                    type="tel"
+                                    value={valoresEditables.telefono || ""}
+                                    onChange={(e) => handleInputChange("telefono", e.target.value)}
+                                    placeholder="987654321"
+                                    className="w-full bg-white border border-gray-300 text-gray-700 text-[10px] rounded px-1 py-0.5 focus:ring-1 focus:ring-blue-600 focus:border-blue-600"
+                                  />
+                                ) : <span className="text-gray-700 text-xs">{formatearTelefono(r.telefono)}</span>}
+                              </td>
+                              <td className="px-2 py-2 whitespace-nowrap">
+                                {filaEditando === r.id ? (
+                                  <div className="flex gap-1">
+                                    <button
+                                      onClick={() => guardarCambiosFila(r.id)}
+                                      disabled={loading}
+                                      className="px-2 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded text-[10px] disabled:opacity-50"
+                                    >
+                                      Guardar
+                                    </button>
+                                    <button
+                                      onClick={cancelarEdicion}
+                                      className="px-2 py-1 border border-gray-300 text-gray-700 rounded text-[10px] hover:bg-gray-50"
+                                    >
+                                      Cancelar
+                                    </button>
+                                  </div>
+                                ) : (
+                                  <div className="flex gap-1">
+                                    <button
+                                      onClick={() => iniciarEdicion(r)}
+                                      className="px-2 py-1 border border-gray-300 text-gray-700 rounded text-[10px] hover:bg-gray-50"
+                                    >
+                                      Editar
+                                    </button>
+                                    <button
+                                      onClick={() => toggleEstadoRegistro(r.id, r.estado)}
+                                      disabled={loading}
+                                      className={`px-2 py-1 rounded text-[10px] font-medium transition-colors border ${
+                                        r.estado === 'Activo'
+                                          ? 'border-red-300 text-red-700 hover:bg-red-50'
+                                          : 'border-green-300 text-green-700 hover:bg-green-50'
+                                      } disabled:opacity-50`}
+                                    >
+                                      {r.estado === 'Activo' ? 'Inact.' : 'Activo'}
+                                    </button>
+                                  </div>
+                                )}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+
+                    {/* Paginación */}
+                    {totalPaginas > 1 && (
+                      <div className="flex items-center justify-between mt-4">
+                        <button
+                          onClick={() => setPaginaActual(p => Math.max(1, p - 1))}
+                          disabled={paginaActual === 1 || loading}
+                          className="px-3 py-1.5 border border-gray-300 text-gray-700 rounded text-xs disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50 transition"
+                        >
+                          ← Anterior
+                        </button>
+                        <span className="text-gray-700 text-xs">Página {paginaActual} de {totalPaginas}</span>
+                        <button
+                          onClick={() => setPaginaActual(p => Math.min(totalPaginas, p + 1))}
+                          disabled={paginaActual === totalPaginas || loading}
+                          className="px-3 py-1.5 border border-gray-300 text-gray-700 rounded text-xs disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50 transition"
+                        >
+                          Siguiente →
+                        </button>
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  <div className="text-center py-12">
+                    <p className="text-gray-600 text-sm">No se encontraron registros con esos filtros.</p>
+                    <p className="text-gray-500 text-xs mt-1">Intenta ajustar los filtros y haz clic en "Cargar Datos" nuevamente.</p>
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        )}
       </div>
 
+      {/* MODAL DE EDICIÓN MASIVA */}
       {isBulkModalOpen && (
         <div className="fixed inset-0 z-50 flex items-end md:items-center md:justify-center">
-          <div onClick={closeBulkModal} className="absolute inset-0 bg-black/50" />
-
-          <div className="relative w-full md:max-w-4xl bg-white rounded-t-2xl md:rounded-2xl border shadow-2xl max-h-[90vh] flex flex-col">
-            <div className="px-4 py-3 flex justify-between border-b">
-              <h3 className="font-semibold">
-                Edición Masiva • {selectedItems.length} seleccionados
-              </h3>
-              <button onClick={closeBulkModal}>✕</button>
+          <div className="absolute inset-0 bg-black/50" onClick={closeBulkModal} />
+          <div className="relative w-full md:max-w-4xl bg-white rounded-t-2xl md:rounded-2xl shadow-2xl border border-gray-200 overflow-hidden max-h-[90vh] flex flex-col">
+            <div className="px-4 py-3 bg-white border-b border-gray-200 text-gray-900 flex items-center justify-between flex-shrink-0">
+              <div className="flex items-center gap-2">
+                <svg className="h-5 w-5 text-gray-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5M16 3l5 5M4 13l6 6M14 3l7 7" />
+                </svg>
+                <h3 className="font-semibold">Edición Masiva • {selectedItems.length} registro(s)</h3>
+              </div>
+              <button onClick={closeBulkModal} className="text-gray-500 hover:text-gray-700">✕</button>
             </div>
-
-            <div className="px-4 py-2 text-[11px] text-gray-600 border-b">
-              Marca “Aplicar” para cada campo que desees modificar.
+            <div className="px-4 py-2 bg-gray-50 border-b border-gray-200">
+              <p className="text-[11px] text-gray-600">
+                💡 Marca <strong>"Aplicar"</strong> en cada campo que deseas actualizar.
+              </p>
             </div>
-
             <div className="p-4 grid grid-cols-1 md:grid-cols-2 gap-3 overflow-y-auto flex-1">
-              {BULK_FIELDS.map((f) => (
-                <div
-                  key={f.key}
-                  className="flex items-start gap-2 p-2 border rounded-lg"
-                >
+              {BULK_FIELDS.map((field) => (
+                <div key={field.key} className="flex items-start gap-2 p-2 border border-gray-200 rounded-lg">
                   <input
                     type="checkbox"
-                    checked={bulkApply[f.key]}
-                    onChange={(e) => toggleBulkApply(f.key, e.target.checked)}
-                    className="mt-1"
+                    checked={!!bulkApply[field.key]}
+                    onChange={(e) => toggleBulkApply(field.key, e.target.checked)}
+                    className="mt-1 h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-600"
                   />
-
-                  <div className="flex-1">
-                    <label className="block text-[11px] mb-1">{f.label}</label>
-
-                    {f.type === "select" && (
+                  <div className="flex-1 min-w-0">
+                    <label className="block text-[11px] font-medium text-gray-700 mb-1">{field.label}</label>
+                    {field.type === 'select' && (
                       <select
-                        value={bulkForm[f.key]}
-                        onChange={(e) => setBulkField(f.key, e.target.value)}
-                        className="w-full px-2 py-1.5 text-xs border rounded"
+                        value={bulkForm[field.key] ?? ''}
+                        onChange={(e) => setBulkField(field.key, e.target.value)}
+                        className="w-full px-2 py-1.5 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-blue-600 focus:border-blue-600 bg-white text-gray-700"
                       >
-                        <option value="">—</option>
-                        {f.options.map((o) => (
-                          <option key={o}>{o}</option>
-                        ))}
+                        <option value="">--Seleccionar--</option>
+                        {field.options.map(opt => <option key={opt} value={opt}>{opt}</option>)}
                       </select>
                     )}
-
-                    {f.type === "text" && (
+                    {field.type === 'text' && (
                       <input
-                        value={bulkForm[f.key]}
-                        onChange={(e) => setBulkField(f.key, e.target.value)}
-                        className="w-full px-2 py-1.5 text-xs border rounded"
+                        type="text"
+                        value={bulkForm[field.key] ?? ''}
+                        onChange={(e) => setBulkField(field.key, e.target.value)}
+                        placeholder={field.placeholder || ''}
+                        className="w-full px-2 py-1.5 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-blue-600 focus:border-blue-600 text-gray-700"
                       />
                     )}
-
-                    {f.type === "date" && (
+                    {field.type === 'date' && (
                       <input
                         type="date"
-                        value={bulkForm[f.key] || ""}
-                        onChange={(e) => setBulkField(f.key, e.target.value)}
-                        className="w-full px-2 py-1.5 text-xs border rounded"
+                        value={(bulkForm[field.key] ?? '')?.slice(0, 10)}
+                        onChange={(e) => setBulkField(field.key, e.target.value)}
+                        className="w-full px-2 py-1.5 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-blue-600 focus:border-blue-600 text-gray-700"
                       />
                     )}
-
-                    {f.type === "motivo_baja" && (
+                    {field.type === 'motivo_baja' && (
                       <select
-                        value={bulkForm.motivo_baja}
-                        onChange={(e) => setBulkField("motivo_baja", e.target.value)}
-                        className="w-full px-2 py-1.5 text-xs border rounded"
+                        value={bulkForm.motivo_baja ?? ''}
+                        onChange={(e) => setBulkField('motivo_baja', e.target.value)}
+                        className="w-full px-2 py-1.5 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-blue-600 focus:border-blue-600 bg-white text-gray-700"
                       >
-                        <option value="">—</option>
-                        {Object.entries(OPCIONES_MOTIVO_BAJA).map(([grupo, opts]) => (
+                        <option value="">— Seleccionar —</option>
+                        {Object.entries(OPCIONES_MOTIVO_BAJA).map(([grupo, motivos]) => (
                           <optgroup key={grupo} label={grupo}>
-                            {opts.map((o) => (
-                              <option key={o}>{o}</option>
-                            ))}
+                            {motivos.map(motivo => <option key={motivo} value={motivo}>{motivo}</option>)}
                           </optgroup>
                         ))}
                       </select>
@@ -944,26 +977,39 @@ export default function FormadorAsistencia({ user, onLogout }) {
                 </div>
               ))}
             </div>
-
-            <div className="px-4 py-3 flex justify-between border-t">
-              <span className="text-[11px] text-gray-600">
-                Se actualizarán {selectedItems.length} registros
-              </span>
-
+            <div className="px-4 py-3 bg-gray-50 border-t border-gray-200 flex items-center justify-between flex-shrink-0">
+              <div className="text-[11px] text-gray-600">
+                Se actualizarán <strong>{selectedItems.length}</strong> registro(s)
+              </div>
               <div className="flex gap-2">
                 <button
                   onClick={closeBulkModal}
-                  className="px-3 py-1.5 text-xs border rounded"
+                  disabled={isSavingBulk}
+                  className="px-3 py-1.5 text-xs border border-gray-300 rounded-lg text-gray-700 hover:bg-white transition-colors disabled:opacity-50"
                 >
                   Cancelar
                 </button>
-
                 <button
                   onClick={saveBulkModal}
                   disabled={isSavingBulk}
-                  className="px-3 py-1.5 bg-blue-600 text-white text-xs rounded disabled:opacity-50"
+                  className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors text-xs font-medium disabled:opacity-50 flex items-center gap-2"
                 >
-                  {isSavingBulk ? "Guardando..." : "Guardar cambios"}
+                  {isSavingBulk ? (
+                    <>
+                      <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                      </svg>
+                      Guardando...
+                    </>
+                  ) : (
+                    <>
+                      <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                      </svg>
+                      Guardar Cambios
+                    </>
+                  )}
                 </button>
               </div>
             </div>
@@ -971,25 +1017,30 @@ export default function FormadorAsistencia({ user, onLogout }) {
         </div>
       )}
 
+      {/* Barra de acciones de selección */}
       {selectedItems.length > 0 && !isBulkModalOpen && (
-        <div className="fixed bottom-4 right-4 bg-white border shadow-lg rounded-lg p-3 flex items-center gap-3">
-          <span className="text-sm text-gray-700">
-            <strong>{selectedItems.length}</strong> seleccionados
-          </span>
-
-          <button
-            onClick={openBulkModal}
-            className="px-4 py-2 bg-blue-600 text-white text-sm rounded-lg"
-          >
-            Editar Seleccionados
-          </button>
-
-          <button
-            onClick={() => setSelectedItems([])}
-            className="px-3 py-2 text-xs text-gray-500"
-          >
-            ✕
-          </button>
+        <div className="fixed bottom-4 right-4 z-40">
+          <div className="bg-white rounded-lg shadow-lg border border-gray-200 p-3 flex items-center gap-3">
+            <span className="text-sm text-gray-700">
+              <strong>{selectedItems.length}</strong> seleccionado(s)
+            </span>
+            <button
+              onClick={openBulkModal}
+              disabled={loading}
+              className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50 flex items-center gap-2"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+              </svg>
+              Editar Seleccionados
+            </button>
+            <button
+              onClick={() => setSelectedItems([])}
+              className="px-3 py-2 text-xs text-gray-500 hover:text-gray-700"
+            >
+              ✕
+            </button>
+          </div>
         </div>
       )}
     </div>
