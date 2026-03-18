@@ -43,7 +43,7 @@ const BULK_FIELDS = [
   }))
 ];
 
-// ✅ FUNCIÓN PARA LIMPIAR STRINGS (TRIM Y NORMALIZAR)
+// ✅ FUNCIÓN PARA LIMPIAR STRINGS
 const limpiarString = (str) => {
   if (!str) return "";
   return String(str).trim().toUpperCase();
@@ -87,10 +87,11 @@ export default function FormadorAsistencia({ user, onLogout }) {
   const [loading, setLoading] = useState(false);
   const [mensaje, setMensaje] = useState({ tipo: "", texto: "" });
   
-  // ✅ CONTADORES PARA DIAGNÓSTICO
+  // ✅ CONTADORES PARA DIAGNÓSTICO RLS
   const [totalEnBD, setTotalEnBD] = useState(0);
   const [totalCargados, setTotalCargados] = useState(0);
   const [hayDiscrepancia, setHayDiscrepancia] = useState(false);
+  const [rlsVerificado, setRlsVerificado] = useState(false);
   
   // Filtros
   const [filtroCampana, setFiltroCampana] = useState("");
@@ -145,11 +146,11 @@ export default function FormadorAsistencia({ user, onLogout }) {
     setTimeout(() => setMensaje({ tipo: "", texto: "" }), 4000);
   };
 
-  // ✅ CARGAR REGISTROS - CON COUNT PARA DIAGNÓSTICO
+  // ✅ CARGAR REGISTROS - CON VERIFICACIÓN RLS
   const cargarRegistros = async () => {
     setLoading(true);
     try {
-      // ✅ 1. OBTENER COUNT TOTAL REAL EN BD
+      // ✅ 1. OBTENER COUNT TOTAL REAL EN BD (sin RLS afecta count)
       const { count, error: countError } = await supabase
         .from("formacion_seguimiento")
         .select("*", { count: "exact", head: true });
@@ -160,7 +161,7 @@ export default function FormadorAsistencia({ user, onLogout }) {
         setTotalEnBD(count || 0);
       }
 
-      // ✅ 2. OBTENER TODOS LOS REGISTROS (SIN FILTROS EXCLUYENTES)
+      // ✅ 2. OBTENER TODOS LOS REGISTROS
       const { data, error } = await supabase
         .from("formacion_seguimiento")
         .select(`
@@ -189,15 +190,16 @@ export default function FormadorAsistencia({ user, onLogout }) {
       setRegistros(datosNormalizados);
       setTotalCargados(datosNormalizados.length);
       
-      // ✅ 4. VERIFICAR DISCREPANCIA
+      // ✅ 4. VERIFICAR DISCREPANCIA RLS
       const discrepancia = (count || 0) > datosNormalizados.length;
       setHayDiscrepancia(discrepancia);
+      setRlsVerificado(true);
       
       if (discrepancia) {
         mostrarMensaje(
           "warning",
-          `⚠️ Hay ${count} registros en BD pero solo se cargaron ${datosNormalizados.length}. 
-           Verifica las políticas RLS en Supabase.`
+          `⚠️ Hay ${count} registros en BD pero solo ${datosNormalizados.length} visibles. 
+           Verifica políticas RLS en Supabase.`
         );
       }
     } catch (err) {
@@ -211,7 +213,7 @@ export default function FormadorAsistencia({ user, onLogout }) {
   // ✅ CARGAR FILTROS - SIN EXCLUIR NULLS
   const cargarFiltrosDinamicos = async () => {
     try {
-      // ✅ CAMPAÑAS - SIN .not() PARA INCLUIR TODOS
+      // ✅ CAMPAÑAS
       const { data: campanas } = await supabase
         .from("formacion_seguimiento")
         .select("campaña");
@@ -225,7 +227,7 @@ export default function FormadorAsistencia({ user, onLogout }) {
         setCampanasUnicas(unicas);
       }
 
-      // ✅ GRUPOS - SIN .not() PARA INCLUIR TODOS
+      // ✅ GRUPOS
       const { data: gruposData } = await supabase
         .from("formacion_seguimiento")
         .select("campaña, grupo_nombre");
@@ -591,19 +593,35 @@ export default function FormadorAsistencia({ user, onLogout }) {
         </div>
       )}
 
-      {/* ✅ ALERTA DE DISCREPANCIA */}
-      {hayDiscrepancia && (
+      {/* ✅ ALERTA DE DISCREPANCIA RLS */}
+      {hayDiscrepancia && rlsVerificado && (
         <div className="max-w-[95vw] mx-auto px-4 md:px-8 pt-4">
           <div className="p-4 rounded-lg bg-red-50 border-2 border-red-300 text-red-800">
-            <h3 className="font-bold text-sm mb-2">🚨 DISCREPANCIA DETECTADA</h3>
-            <p className="text-xs mb-2">
-              <strong>En Base de Datos:</strong> {totalEnBD} registros<br/>
-              <strong>Cargados en Front:</strong> {totalCargados} registros<br/>
-              <strong>Faltantes:</strong> {totalEnBD - totalCargados} registros
-            </p>
-            <p className="text-xs font-medium">
-              Esto se debe a Políticas RLS en Supabase. Contacta al administrador para verificar permisos.
-            </p>
+            <h3 className="font-bold text-sm mb-2">🚨 DISCREPANCIA RLS DETECTADA</h3>
+            <div className="grid grid-cols-3 gap-4 text-xs mb-3">
+              <div className="bg-white p-2 rounded">
+                <strong>En BD:</strong> {totalEnBD}
+              </div>
+              <div className="bg-white p-2 rounded">
+                <strong>Cargados:</strong> {totalCargados}
+              </div>
+              <div className="bg-white p-2 rounded text-red-600">
+                <strong>Faltantes:</strong> {totalEnBD - totalCargados}
+              </div>
+            </div>
+            <div className="bg-white p-3 rounded text-xs space-y-2">
+              <p><strong>✅ Solución:</strong></p>
+              <ol className="list-decimal list-inside space-y-1 text-gray-700">
+                <li>Ve a Supabase → SQL Editor</li>
+                <li>Ejecuta el script de políticas RLS</li>
+                <li>Recarga esta página</li>
+              </ol>
+              <div className="mt-2 p-2 bg-gray-100 rounded font-mono text-[10px] overflow-x-auto">
+                CREATE POLICY "Acceso total formadores"<br/>
+                ON formacion_seguimiento FOR ALL TO authenticated<br/>
+                USING (true) WITH CHECK (true);
+              </div>
+            </div>
           </div>
         </div>
       )}
