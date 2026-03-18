@@ -87,11 +87,10 @@ export default function FormadorAsistencia({ user, onLogout }) {
   const [loading, setLoading] = useState(false);
   const [mensaje, setMensaje] = useState({ tipo: "", texto: "" });
   
-  // ✅ CONTADORES PARA DIAGNÓSTICO RLS
+  // ✅ CONTADORES PARA DIAGNÓSTICO
   const [totalEnBD, setTotalEnBD] = useState(0);
   const [totalCargados, setTotalCargados] = useState(0);
   const [hayDiscrepancia, setHayDiscrepancia] = useState(false);
-  const [rlsVerificado, setRlsVerificado] = useState(false);
   
   // Filtros
   const [filtroCampana, setFiltroCampana] = useState("");
@@ -100,7 +99,7 @@ export default function FormadorAsistencia({ user, onLogout }) {
   const [filtroSegmento, setFiltroSegmento] = useState("todos");
   const [busqueda, setBusqueda] = useState("");
   
-  // Paginación
+  // Paginación frontend
   const [paginaActual, setPaginaActual] = useState(1);
   const REGISTROS_POR_PAGINA = 15;
   
@@ -146,11 +145,11 @@ export default function FormadorAsistencia({ user, onLogout }) {
     setTimeout(() => setMensaje({ tipo: "", texto: "" }), 4000);
   };
 
-  // ✅ CARGAR REGISTROS - CON VERIFICACIÓN RLS
+  // ✅ CARGAR REGISTROS - CON LÍMITE EXPLÍCITO PARA TRAER TODOS
   const cargarRegistros = async () => {
     setLoading(true);
     try {
-      // ✅ 1. OBTENER COUNT TOTAL REAL EN BD (sin RLS afecta count)
+      // ✅ 1. OBTENER COUNT TOTAL REAL EN BD
       const { count, error: countError } = await supabase
         .from("formacion_seguimiento")
         .select("*", { count: "exact", head: true });
@@ -161,7 +160,8 @@ export default function FormadorAsistencia({ user, onLogout }) {
         setTotalEnBD(count || 0);
       }
 
-      // ✅ 2. OBTENER TODOS LOS REGISTROS
+      // ✅ 2. OBTENER TODOS LOS REGISTROS CON LÍMITE EXPLÍCITO
+      // Supabase por defecto limita a 1000, debemos especificar más
       const { data, error } = await supabase
         .from("formacion_seguimiento")
         .select(`
@@ -169,7 +169,8 @@ export default function FormadorAsistencia({ user, onLogout }) {
           segmento_prefiltro, dia_1, dia_2, dia_3, dia_4, dia_5, dia_6, dia_7,
           certifica, segmento_certificado, fecha_baja, motivo_baja, telefono,
           created_at, updated_at
-        `)
+        `, { count: "exact" })
+        .limit(10000) // ✅ LÍMITE EXPLÍCITO PARA TRAER MÁS DE 1000
         .order("nombre", { ascending: true });
       
       if (error) throw error;
@@ -190,17 +191,18 @@ export default function FormadorAsistencia({ user, onLogout }) {
       setRegistros(datosNormalizados);
       setTotalCargados(datosNormalizados.length);
       
-      // ✅ 4. VERIFICAR DISCREPANCIA RLS
+      // ✅ 4. VERIFICAR DISCREPANCIA
       const discrepancia = (count || 0) > datosNormalizados.length;
       setHayDiscrepancia(discrepancia);
-      setRlsVerificado(true);
       
       if (discrepancia) {
         mostrarMensaje(
           "warning",
-          `⚠️ Hay ${count} registros en BD pero solo ${datosNormalizados.length} visibles. 
-           Verifica políticas RLS en Supabase.`
+          `⚠️ Hay ${count} registros en BD pero solo ${datosNormalizados.length} cargados. 
+           Verifica límites de consulta o políticas RLS.`
         );
+      } else {
+        mostrarMensaje("success", `✅ ${datosNormalizados.length} registros cargados correctamente`);
       }
     } catch (err) {
       console.error("Error al cargar registros:", err);
@@ -214,9 +216,10 @@ export default function FormadorAsistencia({ user, onLogout }) {
   const cargarFiltrosDinamicos = async () => {
     try {
       // ✅ CAMPAÑAS
-      const { data: campanas } = await supabase
+      const {  campanas } = await supabase
         .from("formacion_seguimiento")
-        .select("campaña");
+        .select("campaña")
+        .limit(10000);
       
       if (campanas) {
         const unicas = [...new Set(
@@ -228,9 +231,10 @@ export default function FormadorAsistencia({ user, onLogout }) {
       }
 
       // ✅ GRUPOS
-      const { data: gruposData } = await supabase
+      const {  gruposData } = await supabase
         .from("formacion_seguimiento")
-        .select("campaña, grupo_nombre");
+        .select("campaña, grupo_nombre")
+        .limit(10000);
       
       if (gruposData) {
         const gruposPorCamp = {};
@@ -593,11 +597,11 @@ export default function FormadorAsistencia({ user, onLogout }) {
         </div>
       )}
 
-      {/* ✅ ALERTA DE DISCREPANCIA RLS */}
-      {hayDiscrepancia && rlsVerificado && (
+      {/* ✅ ALERTA DE DISCREPANCIA */}
+      {hayDiscrepancia && (
         <div className="max-w-[95vw] mx-auto px-4 md:px-8 pt-4">
           <div className="p-4 rounded-lg bg-red-50 border-2 border-red-300 text-red-800">
-            <h3 className="font-bold text-sm mb-2">🚨 DISCREPANCIA RLS DETECTADA</h3>
+            <h3 className="font-bold text-sm mb-2">🚨 DISCREPANCIA DETECTADA</h3>
             <div className="grid grid-cols-3 gap-4 text-xs mb-3">
               <div className="bg-white p-2 rounded">
                 <strong>En BD:</strong> {totalEnBD}
@@ -609,19 +613,10 @@ export default function FormadorAsistencia({ user, onLogout }) {
                 <strong>Faltantes:</strong> {totalEnBD - totalCargados}
               </div>
             </div>
-            <div className="bg-white p-3 rounded text-xs space-y-2">
-              <p><strong>✅ Solución:</strong></p>
-              <ol className="list-decimal list-inside space-y-1 text-gray-700">
-                <li>Ve a Supabase → SQL Editor</li>
-                <li>Ejecuta el script de políticas RLS</li>
-                <li>Recarga esta página</li>
-              </ol>
-              <div className="mt-2 p-2 bg-gray-100 rounded font-mono text-[10px] overflow-x-auto">
-                CREATE POLICY "Acceso total formadores"<br/>
-                ON formacion_seguimiento FOR ALL TO authenticated<br/>
-                USING (true) WITH CHECK (true);
-              </div>
-            </div>
+            <p className="text-xs">
+              Esto puede deberse al límite de 1000 registros de Supabase. 
+              Se ha aplicado un límite de 10000 en la consulta.
+            </p>
           </div>
         </div>
       )}
