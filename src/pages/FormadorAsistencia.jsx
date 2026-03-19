@@ -143,56 +143,53 @@ export default function FormadorAsistencia({ user, onLogout }) {
   // 🔑 CARGAR FILTROS DINÁMICOS - SOLO GRUPOS (NO CAMPAÑAS)
   // ✅ MEJORADO: Se puede llamar manualmente para refrescar
   // ───────────────────────────────────────────────────────────────────────────
-  const cargarFiltrosDinamicos = useCallback(async () => {
-    try {
-      setLoadingFiltros(true);
+// ✅ CARGAR FILTROS DINÁMICOS - SOLO GRUPOS (NO CAMPAÑAS)
+const cargarFiltrosDinamicos = useCallback(async () => {
+  try {
+    // ✅ GRUPOS - Se cargan desde la BD para filtrar dinámicamente
+    // ✅ SIN LIMIT para traer todos los grupos únicos
+    const { data: gruposData, error } = await supabase
+      .from("formacion_seguimiento")
+      .select("campaña, grupo_nombre")
+      .not("grupo_nombre", "is", null)
+      .not("campaña", "is", null);
+    
+    if (error) throw error;
+    
+    if (gruposData) {
+      const gruposPorCamp = {};
       
-      // ✅ GRUPOS - Se cargan desde la BD para filtrar dinámicamente
-      // ✅ SIN LIMIT para traer todos los grupos únicos
-      const { data: gruposData, error } = await supabase
-        .from("formacion_seguimiento")
-        .select("campaña, grupo_nombre")
-        .not("grupo_nombre", "is", null)
-        .not("campaña", "is", null);
-      
-      if (error) throw error;
-      
-      if (gruposData) {
-        const gruposPorCamp = {};
+      gruposData.forEach(item => {
+        // ✅ Normalizar nombres (trim para evitar espacios extra)
+        const campana = item.campaña?.trim();
+        const grupo = item.grupo_nombre?.trim();
         
-        gruposData.forEach(item => {
-          // ✅ Normalizar nombres (trim para evitar espacios extra)
-          const campana = item.campaña?.trim();
-          const grupo = item.grupo_nombre?.trim();
-          
-          if (campana && grupo) {
-            if (!gruposPorCamp[campana]) gruposPorCamp[campana] = [];
-            if (!gruposPorCamp[campana].includes(grupo)) {
-              gruposPorCamp[campana].push(grupo);
-            }
+        if (campana && grupo) {
+          if (!gruposPorCamp[campana]) gruposPorCamp[campana] = [];
+          if (!gruposPorCamp[campana].includes(grupo)) {
+            gruposPorCamp[campana].push(grupo);
           }
-        });
-        
-        // ✅ Ordenar grupos dentro de cada campaña
-        Object.keys(gruposPorCamp).forEach(campana => {
-          gruposPorCamp[campana].sort();
-        });
-        
-        setGruposPorCampana(gruposPorCamp);
-        
-        // ✅ Todos los grupos únicos (para cuando no hay campaña seleccionada)
-        const todosLosGrupos = [...new Set(gruposData.map(g => g.grupo_nombre?.trim()).filter(Boolean))].sort();
-        setGruposUnicos(todosLosGrupos);
-        
-        console.log(`✅ Filtros cargados: ${Object.keys(gruposPorCamp).length} campañas, ${todosLosGrupos.length} grupos únicos`);
-      }
-    } catch (err) {
-      console.error("Error al cargar filtros:", err);
-      mostrarMensaje("error", `❌ Error al cargar filtros: ${err.message}`);
-    } finally {
-      setLoadingFiltros(false);
+        }
+      });
+      
+      // ✅ Ordenar grupos dentro de cada campaña
+      Object.keys(gruposPorCamp).forEach(campana => {
+        gruposPorCamp[campana].sort();
+      });
+      
+      setGruposPorCampana(gruposPorCamp);
+      
+      // ✅ Todos los grupos únicos (para cuando no hay campaña seleccionada)
+      const todosLosGrupos = [...new Set(gruposData.map(g => g.grupo_nombre?.trim()).filter(Boolean))].sort();
+      setGruposUnicos(todosLosGrupos);
+      
+      console.log(`✅ Filtros cargados: ${Object.keys(gruposPorCamp).length} campañas, ${todosLosGrupos.length} grupos únicos`);
     }
-  }, []);
+  } catch (err) {
+    console.error("Error al cargar filtros:", err);
+    mostrarMensaje("error", `❌ Error al cargar filtros: ${err.message}`);
+  }
+}, []);
   
   // Cargar filtros dinámicos al montar
   useEffect(() => {
