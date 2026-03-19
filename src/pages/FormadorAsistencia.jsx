@@ -1,1045 +1,1179 @@
-// src/pages/FormadorAsistencia.jsx
-import { useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
-import { supabase } from "../services/supabaseClient";
+// src/components/quality/DotacionTable.jsx
+import { useState, useEffect, useRef } from 'react';
+import { supabase } from '../../lib/supabaseClient';
+import { logUpdate } from '../../utils/logger';
 
-// ... (OPCIONES_ASISTENCIA, OPCIONES_SEGMENTO, etc. se mantienen igual)
+// ──────────────────────────────────────────────────────────────────────────────
+// 📋 LISTA MAESTRA DE CAMPAÑAS (INDEPENDIENTE DE LA BD)
+// ✅ Editable: Agrega o quita campañas aquí
+// ──────────────────────────────────────────────────────────────────────────────
+const CAMPANAS_DISPONIBLES = [
+  'Portabilidad',
+  'Blindaje',
+  'Caribu_phx',
+  'Caeq_phx',
+  'Caribu',
+  'Capl',
+  'MT',
+  'SBK_TC',
+  'Senati',
+  'SBK_PLD',
+  'Migraciones Tigo'
+].sort();
 
-const OPCIONES_ASISTENCIA = [
-  "ASISTIÓ", "FALTA", "DESERTÓ", "TARDANZA", "NO SE PRESENTÓ", 
-  "RETIRADO", "NO APROBO ROLE PLAY", "INYECTADO"
-];
-
-const OPCIONES_SEGMENTO = ["A", "B", "C"];
-const OPCIONES_CERTIFICA = ["SI", "NO"];
-
-const OPCIONES_MOTIVO_BAJA = {
-  "← DESERCIÓN →": [
-    "DISTANCIA AL SITE", "ENFERMEDAD FAMILIAR", "ENFERMEDAD PROPIA", "HORARIOS",
-    "MEJOR OFERTA LABORAL", "MOTIVOS PERSONALES - NO ESPECIFICA",
-    "NO LE GUSTA EL PRODUCTO", "NO ES LO QUE DESEA", "SIN RESPUESTA"
-  ],
-  "← RETIRO →": [
-    "USUARIOS BLOQUEADOS", "NO TIENE HABILIDAD COMERCIAL",
-    "PROBLEMAS DE ACTITUD", "BLACK LIST SALESLAND"
-  ]
+// ──────────────────────────────────────────────────────────────────────────────
+// 🔧 HELPER: Formatear fecha desde string YYYY-MM-DD o timestamp a DD/MM/YYYY
+// ──────────────────────────────────────────────────────────────────────────────
+const formatDate = (dateString) => {
+  if (!dateString) return '—';
+  if (typeof dateString === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(dateString)) {
+    const [year, month, day] = dateString.split('-');
+    return `${day}/${month}/${year}`;
+  }
+  if (dateString.includes('/')) {
+    return dateString;
+  }
+  if (typeof dateString === 'string' && dateString.includes('T')) {
+    const fecha = dateString.split('T')[0];
+    const [year, month, day] = fecha.split('-');
+    return `${day}/${month}/${year}`;
+  }
+  return dateString;
 };
 
-const BULK_FIELDS = [
-  { key: 'estado', label: 'Estado', type: 'select', options: ['Activo', 'Inactivo'] },
-  { key: 'segmento_prefiltro', label: 'Segmento Prefiltro', type: 'select', options: OPCIONES_SEGMENTO },
-  { key: 'certifica', label: 'Certifica', type: 'select', options: OPCIONES_CERTIFICA },
-  { key: 'segmento_certificado', label: 'Segmento Certificado', type: 'select', options: OPCIONES_SEGMENTO },
-  { key: 'fecha_baja', label: 'Fecha Baja', type: 'date' },
-  { key: 'motivo_baja', label: 'Motivo Baja', type: 'motivo_baja' },
-  { key: 'telefono', label: 'Teléfono', type: 'text', placeholder: 'Ej: 987654321' },
-  ...[1, 2, 3, 4, 5, 6, 7].map(d => ({
-    key: `dia_${d}`,
-    label: `Día ${d}`,
-    type: 'select',
-    options: OPCIONES_ASISTENCIA
-  }))
-];
-
-const formatearFecha = (fechaString) => {
-  if (!fechaString) return "—";
-  if (fechaString instanceof Date) {
-    return fechaString.toLocaleDateString('es-PE', { day: '2-digit', month: '2-digit', year: 'numeric' });
-  }
-  let fecha;
-  if (fechaString.includes('-')) {
-    const [year, month, day] = fechaString.split('-');
-    fecha = new Date(year, month - 1, day);
-  } else if (fechaString.includes('/')) {
-    const [day, month, year] = fechaString.split('/');
-    fecha = new Date(year, month - 1, day);
+// ──────────────────────────────────────────────────────────────────────────────
+// 🔧 HELPER: Calcular antigüedad desde string YYYY-MM-DD (USANDO UTC)
+// ──────────────────────────────────────────────────────────────────────────────
+const calculateSeniority = (dateString) => {
+  if (!dateString) return '—';
+  let year, month, day;
+  if (typeof dateString === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(dateString)) {
+    [year, month, day] = dateString.split('-').map(Number);
+  } else if (dateString.includes('/')) {
+    [day, month, year] = dateString.split('/').map(Number);
+  } else if (dateString.includes('T')) {
+    const fecha = dateString.split('T')[0];
+    [year, month, day] = fecha.split('-').map(Number);
   } else {
-    fecha = new Date(fechaString);
+    return 'FECHA INVÁLIDA';
   }
-  if (isNaN(fecha.getTime())) return "—";
-  return fecha.toLocaleDateString('es-PE', { day: '2-digit', month: '2-digit', year: 'numeric' });
+  const ingresoDate = new Date(Date.UTC(year, month - 1, day));
+  const today = new Date();
+  let years = today.getUTCFullYear() - ingresoDate.getUTCFullYear();
+  let months = today.getUTCMonth() - ingresoDate.getUTCMonth();
+  if (months < 0) { years--; months += 12; }
+  if (years < 0) return 'FECHA FUTURA';
+  if (years === 0 && months === 0) return 'MENOS DE 1 MES';
+  const yearText = years === 1 ? 'AÑO' : 'AÑOS';
+  const monthText = months === 1 ? 'MES' : 'MESES';
+  return `${years} ${yearText} ${months} ${monthText}`;
 };
 
-const formatearTelefono = (telefono) => {
-  if (!telefono) return "—";
-  const limpio = String(telefono).replace(/\D/g, '');
-  if (limpio.length === 9) {
-    return `${limpio.slice(0, 3)} ${limpio.slice(3, 6)} ${limpio.slice(6)}`;
-  }
-  return telefono;
+// ──────────────────────────────────────────────────────────────────────────────
+/** Normalizar strings para búsqueda */
+const normalizeStr = (s) => (s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+
+// ──────────────────────────────────────────────────────────────────────────────
+/** Collator español */
+const esCollator = new Intl.Collator('es', { sensitivity: 'base' });
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Orden cliente
+// ──────────────────────────────────────────────────────────────────────────────
+const sortItemsClient = (items, sortConfig) => {
+  if (!sortConfig?.key) return items;
+  const { key, direction } = sortConfig;
+  const asc = direction === 'asc';
+  return [...items].sort((a, b) => {
+    const va = a?.[key], vb = b?.[key];
+    const dateFields = new Set(['FECHA_ING', 'FECHA_BAJ', 'created_at', 'updated_at']);
+    if (dateFields.has(key)) {
+      if (typeof va === 'string' && typeof vb === 'string') {
+        return asc ? va.localeCompare(vb) : vb.localeCompare(va);
+      }
+      return 0;
+    }
+    const na = typeof va === 'number' || (!isNaN(Number(va)) && va !== null && va !== '');
+    const nb = typeof vb === 'number' || (!isNaN(Number(vb)) && vb !== null && vb !== '');
+    if (na && nb) return asc ? Number(va) - Number(vb) : Number(vb) - Number(va);
+    const sa = String(va ?? ''), sb = String(vb ?? '');
+    const cmp = esCollator.compare(sa, sb);
+    return asc ? cmp : -cmp;
+  });
 };
 
-export default function FormadorAsistencia({ user, onLogout }) {
-  const navigate = useNavigate();
-  
-  // Estados principales
-  const [registros, setRegistros] = useState([]);
-  const [loading, setLoading] = useState(false);
-  const [mensaje, setMensaje] = useState({ tipo: "", texto: "" });
-  
-  // ✅ NUEVO: Estado para saber si ya se cargaron datos
-  const [datosCargados, setDatosCargados] = useState(false);
-  
-  // Filtros
-  const [filtroCampana, setFiltroCampana] = useState("");
-  const [filtroGrupo, setFiltroGrupo] = useState("todos");
-  const [filtroEstado, setFiltroEstado] = useState("todos");
-  const [filtroSegmento, setFiltroSegmento] = useState("todos");
-  const [busqueda, setBusqueda] = useState("");
-  
-  // Paginación
-  const [paginaActual, setPaginaActual] = useState(1);
-  const REGISTROS_POR_PAGINA = 15;
-  
-  // Edición por fila
-  const [filaEditando, setFilaEditando] = useState(null);
-  const [valoresEditables, setValoresEditables] = useState({});
-  
-  // Listas para filtros dinámicos
-  const [campanasUnicas, setCampanasUnicas] = useState([]);
-  const [gruposUnicos, setGruposUnicos] = useState([]);
-  const [gruposPorCampana, setGruposPorCampana] = useState({});
-  
-  // Estados para edición masiva
+// ──────────────────────────────────────────────────────────────────────────────
+// CAMPOS EDITABLES EN EL MODAL
+// ──────────────────────────────────────────────────────────────────────────────
+const BULK_FIELDS = [
+  { key: 'ESTADO', label: 'Estado', type: 'select', options: ['ACTIVO', 'ACTIVO_R', 'BAJA', 'PENDIENTE'] },
+  { key: 'MODALIDAD', label: 'Modalidad', type: 'select', options: ['FULL TIME', 'MINI FULL', 'MINI FULL_40', 'PART TIME'], auto: true },
+  { key: 'HORAS', label: 'Horas', type: 'select', options: ['24 HORAS', '36 HORAS', '40 HORAS', '48 HORAS'], auto: true },
+  { key: 'INGRESO', label: 'Ingreso', type: 'select', options: ['08:00', '09:00', '10:00', '11:00', '11:30', '12:00', '12:30', '13:00', '13:30', '14:00', '14:30', '15:30', '16:00'], auto: true },
+  { key: 'HORARIO', label: 'Horario', type: 'select', options: ['08:00-12:30','08:00-14:30','08:00-15:30','08:00-17:00','09:00-12:50','09:00-15:30','09:00-16:30','09:00-17:00','09:00-18:00','10:00-16:30','10:00-17:30','11:00-17:30','11:00-18:30','11:00-20:00','11:30-18:00','12:00-18:30','12:00-19:30','12:30-19:00','13:00-19:00','13:30-20:00','14:00-20:00','14:30-21:00','15:30-19:00','16:00-19:50','16:00-20:00'] },
+  { key: 'TURNO', label: 'Turno', type: 'select', options: ['TURNO MAÑANA', 'TURNO TARDE'], auto: true },
+  { key: 'FECHA_BAJ', label: 'Fecha Baja', type: 'date' },
+  { key: 'TIPO_PLANIL', label: 'Tipo Planilla', type: 'select', options: ['PLANILLA', 'RXH'] },
+  { key: 'DNI_SUP', label: 'DNI Líder', type: 'leader' },
+  { key: 'SUPERVISOR', label: 'Supervisor', type: 'text', placeholder: 'Se autocompleta' },
+  { key: 'COORDINADOR', label: 'Coordinador', type: 'select', options: [
+    'Alvarez Maza Miguel Angel',
+    'Anaya Rojas Sofia Vanessa',
+    'Cardenas Acaro Aldo Junior',
+    'Fernandez Aguilar Juan Armando',
+    'Fernandez Arroyo Andy Williams',
+    'Gonzalez Yaro Cesar Eduardo',
+    'Pamela Ortega Corrales',
+    'Talavera Manrique Angel Eduardo',
+    'Vargaz Zapatel Miguel Alexander'
+  ]},
+  { key: 'CAMPANA', label: 'Campaña', type: 'select-dynamic' },
+  { key: 'SUBMOTIVO1', label: 'Submotivo 1', type: 'text' },
+  { key: 'SUBMOTIVO2', label: 'Submotivo 2', type: 'text' },
+];
+
+// ✨ NUEVO: Campos exclusivos de BAJA
+const BAJA_ONLY_FIELDS = new Set(['FECHA_BAJ', 'SUBMOTIVO1', 'SUBMOTIVO2']);
+
+export default function DotacionTable() {
+  // ─── ESTADOS ───────────────────────────────────────────────────────────────
+  const [data, setData] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage] = useState(30);
+  const [totalItems, setTotalItems] = useState(0);
+  const [sortConfig, setSortConfig] = useState({ key: 'NOMBRE', direction: 'asc' });
+
+  // ─── FILTROS DEPENDIENTES ──────────────────────────────────────────────────
+  const [campanaFilter, setCampanaFilter] = useState('');
+  const [coordinadorFilter, setCoordinadorFilter] = useState('');
+  const [supervisorFilter, setSupervisorFilter] = useState('');
+  const [estadoFilter, setEstadoFilter] = useState('Todos');
+
+  // ─── OPCIONES PARA FILTROS ─────────────────────────────────────────────────
+  // ✅ CAMPAÑAS: Ahora usa la lista fija en lugar de cargar desde BD
+  const [distinctCampanas] = useState(CAMPANAS_DISPONIBLES);
+  const [distinctCoordinadores, setDistinctCoordinadores] = useState([]);
+  const [distinctSupervisores, setDistinctSupervisores] = useState([]);
+  const [distinctEstados] = useState(['Todos', 'ACTIVO', 'ACTIVO_R', 'BAJA', 'PENDIENTE']);
+  const [filteredCoordinadores, setFilteredCoordinadores] = useState([]);
+  const [filteredSupervisores, setFilteredSupervisores] = useState([]);
+  const [filteredEstados, setFilteredEstados] = useState(['Todos', 'ACTIVO', 'ACTIVO_R', 'BAJA', 'PENDIENTE']);
+
+  // ─── SELECCIÓN Y MODAL ─────────────────────────────────────────────────────
   const [selectedItems, setSelectedItems] = useState([]);
+  const selectAllRef = useRef(null);
+  const [estructuraData, setEstructuraData] = useState([]);
+  const [loadingEstructura, setLoadingEstructura] = useState(true);
+  const [errorEstructura, setErrorEstructura] = useState(null);
   const [isBulkModalOpen, setIsBulkModalOpen] = useState(false);
   const [bulkForm, setBulkForm] = useState(() =>
-    Object.fromEntries(BULK_FIELDS.map(f => [f.key, '']))
+    Object.fromEntries(BULK_FIELDS.map((f) => [f.key, '']))
   );
   const [bulkApply, setBulkApply] = useState(() =>
-    Object.fromEntries(BULK_FIELDS.map(f => [f.key, false]))
+    Object.fromEntries(BULK_FIELDS.map((f) => [f.key, false]))
   );
-  const [isSavingBulk, setIsSavingBulk] = useState(false);
-  
-  const fechaHoyFormateada = new Date().toLocaleDateString('es-PE', {
-    weekday: 'long', year: 'numeric', month: 'long', day: 'numeric'
-  });
+  const [isSaving, setIsSaving] = useState(false);
 
-  // Cargar filtros dinámicos al montar (solo campañas y grupos)
+  // ───────────────────────────────────────────────────────────────────────────
+  // 🔑 ESTADOS para caché de horarios
+  // ───────────────────────────────────────────────────────────────────────────
+  const [horariosMap, setHorariosMap] = useState({});
+  const [loadingHorarios, setLoadingHorarios] = useState(true);
+
+  // ✨ NUEVO: Modo BAJA
+  const isBajaMode = (bulkForm.ESTADO || '').toString().trim().toUpperCase() === 'BAJA';
+
+  // ✨ NUEVO: ¿Mostrar campo en el modal?
+  const shouldShowField = (key) => {
+    if (key === 'ESTADO') return true;
+    return isBajaMode ? BAJA_ONLY_FIELDS.has(key) : !BAJA_ONLY_FIELDS.has(key);
+  };
+
+  // ✨ NUEVO: Al entrar/salir de BAJA, desmarcar "Aplicar" de campos ocultos
   useEffect(() => {
-    cargarFiltrosDinamicos();
+    setBulkApply(prev => {
+      const next = { ...prev };
+      BULK_FIELDS.forEach(f => {
+        if (!shouldShowField(f.key)) next[f.key] = false;
+      });
+      return next;
+    });
+    if (!isBajaMode) {
+      setBulkForm(prev => ({ ...prev, FECHA_BAJ: '', SUBMOTIVO1: '', SUBMOTIVO2: '' }));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isBajaMode]);
+
+  const MAX_ROWS_FOR_CLIENT_SEARCH = 5000;
+
+  // ───────────────────────────────────────────────────────────────────────────
+  // 🔑 Cargar tabla horarios al montar
+  // ───────────────────────────────────────────────────────────────────────────
+  useEffect(() => {
+    const fetchHorarios = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('horarios')
+          .select('id, horario, ingreso, turno, horas, modalidad');
+        if (error) throw error;
+        const map = {};
+        (data || []).forEach(h => {
+          const key = (h.horario || '').toString().trim().normalize('NFC');
+          map[key] = {
+            ingreso: h.ingreso,
+            turno: h.turno,
+            horas: h.horas,
+            modalidad: h.modalidad
+          };
+        });
+        setHorariosMap(map);
+      } catch (err) {
+        console.warn('⚠️ No se pudo cargar la tabla horarios.', err);
+      } finally {
+        setLoadingHorarios(false);
+      }
+    };
+    fetchHorarios();
   }, []);
 
-  // Cuando cambia la campaña, resetear filtro de grupo
-  useEffect(() => {
-    setFiltroGrupo("todos");
-  }, [filtroCampana]);
-
-  // Mostrar mensaje temporal
-  const mostrarMensaje = (tipo, texto) => {
-    setMensaje({ tipo, texto });
-    setTimeout(() => setMensaje({ tipo: "", texto: "" }), 4000);
-  };
-
-  // ✅ CARGAR FILTROS DINÁMICOS (campañas y grupos disponibles)
-  const cargarFiltrosDinamicos = async () => {
-    try {
-      const { data: campanas } = await supabase
-        .from("formacion_seguimiento")
-        .select("campaña")
-        .not("campaña", "is", null)
-        .limit(1000);
-      
-      if (campanas) {
-        const unicas = [...new Set(campanas.map(c => c.campaña).filter(Boolean))].sort();
-        setCampanasUnicas(unicas);
-      }
-
-      const { data: gruposData } = await supabase
-        .from("formacion_seguimiento")
-        .select("campaña, grupo_nombre")
-        .not("grupo_nombre", "is", null)
-        .not("campaña", "is", null)
-        .limit(1000);
-      
-      if (gruposData) {
-        const gruposPorCamp = {};
-        gruposData.forEach(item => {
-          const campana = item.campaña?.trim();
-          const grupo = item.grupo_nombre?.trim();
-          if (campana && grupo) {
-            if (!gruposPorCamp[campana]) gruposPorCamp[campana] = [];
-            if (!gruposPorCamp[campana].includes(grupo)) gruposPorCamp[campana].push(grupo);
-          }
-        });
-        
-        Object.keys(gruposPorCamp).forEach(campana => gruposPorCamp[campana].sort());
-        setGruposPorCampana(gruposPorCamp);
-        
-        const todosLosGrupos = [...new Set(gruposData.map(g => g.grupo_nombre).filter(Boolean))].sort();
-        setGruposUnicos(todosLosGrupos);
-      }
-    } catch (err) {
-      console.error("Error al cargar filtros:", err);
-    }
-  };
-
-  // ✅ NUEVA FUNCIÓN: Cargar datos con filtros aplicados
-  const aplicarFiltrosYCargar = async () => {
-    setLoading(true);
-    setDatosCargados(true);
-    setPaginaActual(1); // Resetear a página 1
-    
-    try {
-      // Construir query con filtros
-      let query = supabase
-        .from("formacion_seguimiento")
-        .select(`
-          id, dni, nombre, campaña, grupo_nombre, estado, fecha_inicio, fecha_termino,
-          segmento_prefiltro, dia_1, dia_2, dia_3, dia_4, dia_5, dia_6, dia_7,
-          certifica, segmento_certificado, fecha_baja, motivo_baja, telefono,
-          created_at, updated_at
-        `, { count: "exact" });
-
-      // ✅ Aplicar filtros server-side
-      if (filtroCampana) {
-        query = query.eq("campaña", filtroCampana);
-      }
-      
-      if (filtroGrupo !== "todos") {
-        query = query.eq("grupo_nombre", filtroGrupo);
-      }
-      
-      if (filtroEstado !== "todos") {
-        query = query.eq("estado", filtroEstado);
-      }
-      
-      if (filtroSegmento !== "todos") {
-        query = query.eq("segmento_prefiltro", filtroSegmento);
-      }
-      
-      // Búsqueda por nombre o DNI (ilike es case-insensitive)
-      if (busqueda.trim() !== "") {
-        const termino = `%${busqueda.trim()}%`;
-        query = query.or(`nombre.ilike.${termino},dni.ilike.${termino}`);
-      }
-
-      // Ordenar y limitar
-      const { data, error, count } = await query
-        .order("nombre", { ascending: true })
-        .limit(1000); // Límite máximo por seguridad
-      
-      if (error) throw error;
-      
-      setRegistros(data || []);
-      
-      if (count > 1000) {
-        mostrarMensaje(
-          "warning",
-          `⚠️ Se encontraron ${count} registros pero se muestran solo los primeros 1000. 
-           Refina tus filtros para ver más resultados específicos.`
-        );
-      } else if (data.length === 0) {
-        mostrarMensaje("info", "ℹ️ No se encontraron registros con esos filtros");
-      } else {
-        mostrarMensaje("success", `✅ Se cargaron ${data.length} registros`);
-      }
-    } catch (err) {
-      console.error("Error al cargar registros:", err);
-      mostrarMensaje("error", `❌ Error al cargar datos: ${err.message}`);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // ✅ Obtener grupos disponibles según la campaña seleccionada
-  const getGruposDisponibles = () => {
-    if (filtroCampana && gruposPorCampana[filtroCampana]) {
-      return gruposPorCampana[filtroCampana];
-    }
-    return gruposUnicos;
-  };
-
-  // ... (resto de funciones: openBulkModal, closeBulkModal, etc. se mantienen igual)
-  
-  const openBulkModal = () => {
-    if (selectedItems.length === 0) {
-      mostrarMensaje("warning", "⚠️ Selecciona al menos un registro para editar");
-      return;
-    }
-    setBulkForm(Object.fromEntries(BULK_FIELDS.map(f => [f.key, ''])));
-    setBulkApply(Object.fromEntries(BULK_FIELDS.map(f => [f.key, false])));
-    setIsBulkModalOpen(true);
-  };
-
-  const closeBulkModal = () => {
-    setIsBulkModalOpen(false);
-    setSelectedItems([]);
-  };
-
-  const setBulkField = (key, value) => {
-    setBulkForm(prev => ({ ...prev, [key]: value }));
-  };
-
-  const toggleBulkApply = (key, checked) => {
-    setBulkApply(prev => ({ ...prev, [key]: checked }));
-  };
-
-  const saveBulkModal = async () => {
-    const camposParaAplicar = Object.entries(bulkApply).filter(([_, v]) => v);
-    if (camposParaAplicar.length === 0) {
-      mostrarMensaje("warning", "⚠️ Marca 'Aplicar' en al menos un campo para guardar");
-      return;
-    }
-    
-    setIsSavingBulk(true);
-    try {
-      const payload = {};
-      BULK_FIELDS.forEach(field => {
-        if (bulkApply[field.key]) {
-          let value = bulkForm[field.key];
-          if (value === '' && [
-            'segmento_prefiltro', 'certifica', 'segmento_certificado', 
-            'fecha_baja', 'motivo_baja', 'telefono', 
-            ...[1, 2, 3, 4, 5, 6, 7].map(d => `dia_${d}`)
-          ].includes(field.key)) {
-            value = null;
-          }
-          payload[field.key] = value;
-        }
-      });
-
-      const { error: updateError } = await supabase
-        .from("formacion_seguimiento")
-        .update(payload)
-        .in("id", selectedItems);
-      
-      if (updateError) throw updateError;
-      
-      setRegistros(prev =>
-        prev.map(r => selectedItems.includes(r.id) ? { ...r, ...payload } : r)
-      );
-      
-      mostrarMensaje("success", `✅ Cambios aplicados a ${selectedItems.length} registro(s)`);
-      closeBulkModal();
-    } catch (err) {
-      console.error("Error en edición masiva:", err);
-      mostrarMensaje("error", `❌ Error al guardar: ${err.message}`);
-    } finally {
-      setIsSavingBulk(false);
-    }
-  };
-
-  const iniciarEdicion = (registro) => {
-    const campos = {};
-    for (let i = 1; i <= 7; i++) campos[`dia_${i}`] = registro[`dia_${i}`] || "";
-    campos.segmento_prefiltro = registro.segmento_prefiltro || "";
-    campos.certifica = registro.certifica || "";
-    campos.segmento_certificado = registro.segmento_certificado || "";
-    campos.fecha_baja = registro.fecha_baja || "";
-    campos.motivo_baja = registro.motivo_baja || "";
-    campos.telefono = registro.telefono || "";
-    setValoresEditables(campos);
-    setFilaEditando(registro.id);
-  };
-
-  const cancelarEdicion = () => {
-    setFilaEditando(null);
-    setValoresEditables({});
-  };
-
-  const handleInputChange = (campo, valor) => {
-    setValoresEditables(prev => ({ ...prev, [campo]: valor }));
-  };
-
-  const guardarCambiosFila = async (registroId) => {
-    setLoading(true);
-    try {
-      const cambios = {};
-      for (let i = 1; i <= 7; i++) {
-        const key = `dia_${i}`;
-        if (valoresEditables[key] !== undefined) {
-          cambios[key] = valoresEditables[key] === "" ? null : valoresEditables[key];
-        }
-      }
-      ['segmento_prefiltro', 'certifica', 'segmento_certificado', 'fecha_baja', 'motivo_baja', 'telefono']
-        .forEach(campo => {
-          if (valoresEditables[campo] !== undefined) {
-            cambios[campo] = valoresEditables[campo] === "" ? null : valoresEditables[campo];
-          }
-        });
-
-      const { error } = await supabase
-        .from("formacion_seguimiento")
-        .update(cambios)
-        .eq("id", registroId);
-      
-      if (error) throw error;
-      
-      setRegistros(prev => prev.map(r => r.id === registroId ? { ...r, ...cambios } : r));
-      setFilaEditando(null);
-      setValoresEditables({});
-      mostrarMensaje("success", "✅ Cambios guardados");
-    } catch (err) {
-      console.error("Error al guardar cambios:", err);
-      mostrarMensaje("error", "❌ Error al guardar");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const renderBadgeAsistencia = (estado) => {
-    if (!estado) return <span className="text-gray-400 text-xs">—</span>;
-    const config = {
-      "ASISTIÓ": { icon: "✔️", color: "bg-green-50 text-green-700 border border-green-200" },
-      "FALTA": { icon: "✖️", color: "bg-red-50 text-red-700 border border-red-200" },
-      "TARDANZA": { icon: "⏱️", color: "bg-yellow-50 text-yellow-700 border border-yellow-200" },
-      "DESERTÓ": { icon: "🚪", color: "bg-gray-50 text-gray-700 border border-gray-200" },
-      "NO SE PRESENTÓ": { icon: "🕳️", color: "bg-gray-50 text-gray-700 border border-gray-200" },
-      "RETIRADO": { icon: "🚶‍♂️", color: "bg-orange-50 text-orange-700 border border-orange-200" },
-      "NO APROBO ROLE PLAY": { icon: "📉", color: "bg-blue-50 text-blue-700 border border-blue-200" },
-      "INYECTADO": { icon: "💉", color: "bg-purple-50 text-purple-700 border border-purple-200" },
+  // ───────────────────────────────────────────────────────────────────────────
+  // 🔑 HELPER - Auto-completar campos de horario
+  // ───────────────────────────────────────────────────────────────────────────
+  const autoFillHorarioFields = (horarioValue) => {
+    if (!horarioValue) return {};
+    const key = (horarioValue || '').toString().trim().normalize('NFC');
+    const match = horariosMap[key];
+    if (!match) return {};
+    return {
+      INGRESO: match.ingreso,
+      TURNO: match.turno,
+      HORAS: match.horas,
+      MODALIDAD: match.modalidad
     };
-    const { icon, color } = config[estado] || { icon: "?", color: "bg-gray-50 text-gray-700 border border-gray-200" };
-    return <span className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[10px] font-medium ${color}`}>{icon}</span>;
   };
 
-  const renderBadgeEstado = (estado) => {
-    const isActive = estado === 'Activo';
-    return (
-      <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium border ${
-        isActive ? 'bg-green-50 text-green-700 border-green-200' : 'bg-red-50 text-red-700 border-red-200'
-      }`}>
-        {estado || 'Inactivo'}
-      </span>
-    );
-  };
-
-  // Filtrar y paginar registros (client-side para paginación)
-  const { registrosPaginados, totalPaginas, totalFiltrados } = useMemo(() => {
-    const total = registros.length;
-    const desde = (paginaActual - 1) * REGISTROS_POR_PAGINA;
-    const hasta = desde + REGISTROS_POR_PAGINA;
-    const pagina = registros.slice(desde, hasta);
-    const totalPag = Math.ceil(total / REGISTROS_POR_PAGINA) || 1;
-    
-    return { registrosPaginados: pagina, totalPaginas: totalPag, totalFiltrados: total };
-  }, [registros, paginaActual]);
-
-  // Exportar CSV
-  const descargarCSV = () => {
-    if (registros.length === 0) {
-      mostrarMensaje("warning", "⚠️ No hay datos para descargar");
-      return;
-    }
-    const headers = [
-      "DNI", "Nombre", "Campaña", "Grupo", "Estado", "Teléfono", "Fecha Inicio", "Fecha Término",
-      "Segmento Prefiltro", "Día 1", "Día 2", "Día 3", "Día 4", "Día 5", "Día 6", "Día 7",
-      "Certifica", "Segmento Certificado", "Fecha Baja", "Motivo Baja"
-    ];
-    const csvRows = [headers.join(",")];
-    registros.forEach(r => {
-      const row = [
-        `"${r.dni || ''}"`, `"${r.nombre || ''}"`, r.campaña || '', r.grupo_nombre || '', r.estado || '',
-        `"${r.telefono || ''}"`, r.fecha_inicio || '', r.fecha_termino || '', r.segmento_prefiltro || '',
-        r.dia_1 || '', r.dia_2 || '', r.dia_3 || '', r.dia_4 || '', r.dia_5 || '', r.dia_6 || '', r.dia_7 || '',
-        r.certifica || '', r.segmento_certificado || '', r.fecha_baja || '', `"${r.motivo_baja || ''}"`
-      ];
-      csvRows.push(row.join(","));
-    });
-    const csvContent = csvRows.join("\n");
-    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.setAttribute("href", url);
-    link.setAttribute("download", `formacion_seguimiento_${new Date().toISOString().split('T')[0]}.csv`);
-    link.style.visibility = "hidden";
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
-    mostrarMensaje("success", `✅ Descargado ${registros.length} registros`);
-  };
-
-  const toggleEstadoRegistro = async (registroId, estadoActual) => {
-    const nuevoEstado = estadoActual === 'Activo' ? 'Inactivo' : 'Activo';
-    setLoading(true);
+  // ───────────────────────────────────────────────────────────────────────────
+  // OBTENER DATOS DE dotacion_movistar
+  // ───────────────────────────────────────────────────────────────────────────
+  const fetchData = async () => {
     try {
-      const { error } = await supabase
-        .from("formacion_seguimiento")
-        .update({ estado: nuevoEstado })
-        .eq("id", registroId);
+      setLoading(true);
+      setError(null);
+      let baseQuery = supabase
+        .from('dotacion_movistar')
+        .select(
+          [
+            'id','DNI','NOMBRE','APELLIDO','ESTADO','MODALIDAD','HORAS','INGRESO',
+            'HORARIO','TURNO','FECHA_ING','FECHA_BAJ','TIPO_PLANIL',
+            'DNI_SUP','SUPERVISOR','COORDINADOR','CELULAR','CORREO',
+            'CAMPANA','SUBMOTIVO1','SUBMOTIVO2','PERIODO','created_at','updated_at',
+          ].join(','),
+          { count: 'exact' }
+        );
+      if (campanaFilter) baseQuery = baseQuery.eq('CAMPANA', campanaFilter);
+      if (coordinadorFilter) baseQuery = baseQuery.eq('COORDINADOR', coordinadorFilter);
+      if (supervisorFilter) baseQuery = baseQuery.eq('SUPERVISOR', supervisorFilter);
+      if (estadoFilter && estadoFilter !== 'Todos') baseQuery = baseQuery.eq('ESTADO', estadoFilter);
+      if (!searchQuery.trim()) {
+        const { data: result, error, count } = await baseQuery
+          .order(sortConfig.key, { ascending: sortConfig.direction === 'asc' })
+          .range((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage - 1);
+        if (error) throw error;
+        setData(result || []);
+        setTotalItems(count || 0);
+        return;
+      }
+      const { data: allResult, error } = await baseQuery
+        .order(sortConfig.key, { ascending: sortConfig.direction === 'asc' })
+        .limit(MAX_ROWS_FOR_CLIENT_SEARCH);
       if (error) throw error;
-      setRegistros(prev => prev.map(r => r.id === registroId ? { ...r, estado: nuevoEstado } : r));
-      mostrarMensaje("success", `✅ Estado cambiado a ${nuevoEstado}`);
+      const q = normalizeStr(searchQuery);
+      const filtered = (allResult || []).filter((r) => {
+        const nom = normalizeStr(r.NOMBRE || '');
+        const ape = normalizeStr(r.APELLIDO || '');
+        const doc = normalizeStr(r.DNI || '');
+        return nom.includes(q) || ape.includes(q) || doc.includes(q);
+      });
+      const sorted = sortItemsClient(filtered, sortConfig);
+      const start = (currentPage - 1) * itemsPerPage;
+      setData(sorted.slice(start, start + itemsPerPage));
+      setTotalItems(sorted.length);
     } catch (err) {
-      console.error("Error al cambiar estado:", err);
-      mostrarMensaje("error", "❌ Error al cambiar estado");
+      console.error('Error al cargar datos:', err);
+      setError('No se pudieron cargar los datos de dotación. Verifica tu conexión.');
+      setData([]);
+      setTotalItems(0);
     } finally {
       setLoading(false);
     }
   };
 
-  const toggleSelectAll = (checked) => {
-    if (checked) {
-      const allIds = registrosPaginados.map(item => item.id);
-      setSelectedItems(allIds);
-    } else {
-      setSelectedItems([]);
+  // ───────────────────────────────────────────────────────────────────────────
+  // ✅ OBTENER VALORES ÚNICOS MAESTROS - COORDINADORES Y SUPERVISORES DESDE BD
+  // ✅ CAMPAÑAS: Ahora usa lista fija (no necesita query)
+  // ───────────────────────────────────────────────────────────────────────────
+  const fetchDistinctValues = async () => {
+    try {
+      // ✅ COORDINADORES - AGREGAR .limit(10000)
+      const { data: coordData } = await supabase
+        .from('dotacion_movistar')
+        .select('COORDINADOR')
+        .not('COORDINADOR', 'is', null)
+        .order('COORDINADOR')
+        .limit(10000);
+      
+      if (coordData) {
+        const unique = [...new Set(coordData.map(x => `${x.COORDINADOR}`.trim()).filter(Boolean))].sort();
+        setDistinctCoordinadores(unique);
+      }
+
+      // ✅ SUPERVISORES - AGREGAR .limit(10000)
+      const { data: supData } = await supabase
+        .from('dotacion_movistar')
+        .select('SUPERVISOR')
+        .not('SUPERVISOR', 'is', null)
+        .order('SUPERVISOR')
+        .limit(10000);
+      
+      if (supData) {
+        const unique = [...new Set(supData.map(x => `${x.SUPERVISOR}`.trim()).filter(Boolean))].sort();
+        setDistinctSupervisores(unique);
+      }
+    } catch (err) {
+      console.error('Error al cargar valores únicos:', err);
     }
+  };
+
+  // ───────────────────────────────────────────────────────────────────────────
+  // 🔑 FILTRAR COORDINADORES POR CAMPAÑA
+  // ───────────────────────────────────────────────────────────────────────────
+  const fetchCoordinadoresByCampana = async (campana) => {
+    if (!campana) {
+      setFilteredCoordinadores(distinctCoordinadores);
+      return;
+    }
+    try {
+      const { data } = await supabase
+        .from('dotacion_movistar')
+        .select('COORDINADOR')
+        .eq('CAMPANA', campana)
+        .not('COORDINADOR', 'is', null)
+        .order('COORDINADOR')
+        .limit(10000);
+      
+      if (data) {
+        const unique = [...new Set(data.map(x => `${x.COORDINADOR}`.trim()).filter(Boolean))].sort();
+        setFilteredCoordinadores(unique);
+      }
+    } catch (err) {
+      console.error('Error filtrando coordinadores:', err);
+      setFilteredCoordinadores(distinctCoordinadores);
+    }
+  };
+
+  // ───────────────────────────────────────────────────────────────────────────
+  // 🔑 FILTRAR SUPERVISORES POR COORDINADOR + CAMPAÑA
+  // ───────────────────────────────────────────────────────────────────────────
+  const fetchSupervisoresByCoordinador = async (coordinador, campana) => {
+    if (!coordinador) {
+      if (campana) {
+        try {
+          const { data } = await supabase
+            .from('dotacion_movistar')
+            .select('SUPERVISOR')
+            .eq('CAMPANA', campana)
+            .not('SUPERVISOR', 'is', null)
+            .order('SUPERVISOR')
+            .limit(10000);
+          
+          if (data) {
+            const unique = [...new Set(data.map(x => `${x.SUPERVISOR}`.trim()).filter(Boolean))].sort();
+            setFilteredSupervisores(unique);
+          }
+        } catch (err) {
+          console.error('Error filtrando supervisores:', err);
+          setFilteredSupervisores(distinctSupervisores);
+        }
+      } else {
+        setFilteredSupervisores(distinctSupervisores);
+      }
+      return;
+    }
+    try {
+      let query = supabase
+        .from('dotacion_movistar')
+        .select('SUPERVISOR')
+        .not('SUPERVISOR', 'is', null);
+      if (campana) query = query.eq('CAMPANA', campana);
+      query = query.eq('COORDINADOR', coordinador).order('SUPERVISOR').limit(10000);
+      const { data } = await query;
+      if (data) {
+        const unique = [...new Set(data.map(x => `${x.SUPERVISOR}`.trim()).filter(Boolean))].sort();
+        setFilteredSupervisores(unique);
+      }
+    } catch (err) {
+      console.error('Error filtrando supervisores:', err);
+      setFilteredSupervisores(distinctSupervisores);
+    }
+  };
+
+  // ───────────────────────────────────────────────────────────────────────────
+  // 🔑 FILTRAR ESTADOS POR SUPERVISOR + COORDINADOR + CAMPAÑA
+  // ───────────────────────────────────────────────────────────────────────────
+  const fetchEstadosBySupervisor = async (supervisor, coordinador, campana) => {
+    try {
+      let query = supabase.from('dotacion_movistar').select('ESTADO');
+      if (campana) query = query.eq('CAMPANA', campana);
+      if (coordinador) query = query.eq('COORDINADOR', coordinador);
+      if (supervisor) query = query.eq('SUPERVISOR', supervisor);
+      const { data } = await query.not('ESTADO', 'is', null).limit(10000);
+      if (data) {
+        const unique = [...new Set(data.map(x => `${x.ESTADO}`.trim()).filter(Boolean))].sort();
+        setFilteredEstados(['Todos', ...unique]);
+      }
+    } catch (err) {
+      console.error('Error filtrando estados:', err);
+      setFilteredEstados(['Todos', 'ACTIVO', 'ACTIVO_R', 'BAJA', 'PENDIENTE']);
+    }
+  };
+
+  // ───────────────────────────────────────────────────────────────────────────
+  // 🔑 CARGAR ESTRUCTURA
+  // ───────────────────────────────────────────────────────────────────────────
+  const fetchEstructura = async () => {
+    try {
+      setLoadingEstructura(true);
+      setErrorEstructura(null);
+      const { data, error } = await supabase
+        .from('estructura')
+        .select('supervisor, dni, coordinador, jefatura')
+        .order('supervisor');
+      if (error) throw error;
+      setEstructuraData(data || []);
+    } catch (err) {
+      console.error('Error al cargar estructura:', err);
+      setErrorEstructura('No se pudo cargar la tabla estructura. Verifica tu conexión.');
+    } finally {
+      setLoadingEstructura(false);
+    }
+  };
+
+  // ───────────────────────────────────────────────────────────────────────────
+  // EFECTOS PARA FILTROS DEPENDIENTES
+  // ───────────────────────────────────────────────────────────────────────────
+  useEffect(() => {
+    fetchDistinctValues();
+    fetchEstructura();
+  }, []);
+
+  useEffect(() => {
+    setCoordinadorFilter('');
+    setSupervisorFilter('');
+    setEstadoFilter('Todos');
+    setCurrentPage(1);
+    fetchCoordinadoresByCampana(campanaFilter);
+  }, [campanaFilter]);
+
+  useEffect(() => {
+    setSupervisorFilter('');
+    setEstadoFilter('Todos');
+    setCurrentPage(1);
+    fetchSupervisoresByCoordinador(coordinadorFilter, campanaFilter);
+  }, [coordinadorFilter, campanaFilter]);
+
+  useEffect(() => {
+    setEstadoFilter('Todos');
+    setCurrentPage(1);
+    fetchEstadosBySupervisor(supervisorFilter, coordinadorFilter, campanaFilter);
+  }, [supervisorFilter, coordinadorFilter, campanaFilter]);
+
+  useEffect(() => {
+    fetchData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentPage, searchQuery, sortConfig, campanaFilter, coordinadorFilter, supervisorFilter, estadoFilter]);
+
+  // ───────────────────────────────────────────────────────────────────────────
+  // UTILS: Buscar líder por DNI
+  // ───────────────────────────────────────────────────────────────────────────
+  const getEstructuraByDni = (dni) =>
+    (estructuraData || []).find((e) => (e.dni || '').toString().trim() === (dni || '').toString().trim());
+
+  // ───────────────────────────────────────────────────────────────────────────
+  // HANDLERS GENERALES
+  // ───────────────────────────────────────────────────────────────────────────
+  const handleSearch = (e) => { setSearchQuery(e.target.value); setCurrentPage(1); };
+  
+  const clearFilters = () => {
+    setCampanaFilter('');
+    setCoordinadorFilter('');
+    setSupervisorFilter('');
+    setEstadoFilter('Todos');
+    setSearchQuery('');
+    setCurrentPage(1);
+  };
+
+  const requestSort = (key) => {
+    let direction = 'asc';
+    if (sortConfig.key === key && sortConfig.direction === 'asc') direction = 'desc';
+    setSortConfig({ key, direction });
+  };
+
+  // ───────────────────────────────────────────────────────────────────────────
+  // SELECCIÓN DE FILAS
+  // ───────────────────────────────────────────────────────────────────────────
+  const toggleSelectAll = (checked) => {
+    if (checked) { setSelectedItems(data.map(item => item.id)); }
+    else { setSelectedItems([]); }
   };
 
   const handleSelectItem = (id) => {
     setSelectedItems(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
   };
 
+  // ✅ NUEVO: Limpiar selección
+  const clearSelection = () => {
+    setSelectedItems([]);
+    if (selectAllRef.current) {
+      selectAllRef.current.checked = false;
+    }
+  };
+
+  // ───────────────────────────────────────────────────────────────────────────
+  // MODAL: ABRIR/CERRAR
+  // ───────────────────────────────────────────────────────────────────────────
+  const openBulkModal = () => {
+    if (selectedItems.length === 0) { alert('⚠️ Selecciona al menos 1 registro.'); return; }
+    const initialForm = {};
+    const initialApply = {};
+    BULK_FIELDS.forEach((field) => {
+      initialForm[field.key] = '';
+      initialApply[field.key] = false;
+    });
+    setBulkForm(initialForm);
+    setBulkApply(initialApply);
+    setIsBulkModalOpen(true);
+  };
+
+  const closeBulkModal = () => setIsBulkModalOpen(false);
+  const setBulkField = (key, value) => setBulkForm(prev => ({ ...prev, [key]: value }));
+  const toggleBulkApply = (key, checked) => setBulkApply(prev => ({ ...prev, [key]: checked }));
+
+  // ───────────────────────────────────────────────────────────────────────────
+  // 🔑 HANDLER: DNI_SUP → AUTOCOMPLETA (SOLO SUPERVISOR Y COORDINADOR)
+  // ───────────────────────────────────────────────────────────────────────────
+  const handleBulkLeaderSelect = (dniLeader) => {
+    if (!dniLeader) return;
+    const estructura = getEstructuraByDni(dniLeader);
+    setBulkApply(prev => ({ ...prev, DNI_SUP: true, SUPERVISOR: true }));
+    if (estructura) {
+      setBulkForm(prev => ({
+        ...prev,
+        DNI_SUP: estructura.dni,
+        SUPERVISOR: estructura.supervisor,
+        COORDINADOR: estructura.coordinador,
+      }));
+    } else {
+      setBulkForm(prev => ({ ...prev, DNI_SUP: dniLeader, SUPERVISOR: '', COORDINADOR: '' }));
+    }
+  };
+
+  // ───────────────────────────────────────────────────────────────────────────
+  // 🔑 HANDLER: SUBMOTIVO1
+  // ───────────────────────────────────────────────────────────────────────────
+  const handleBulkSubmotivo1Change = (tipo) => {
+    setBulkField('SUBMOTIVO1', tipo);
+    setBulkApply(prev => ({ ...prev, SUBMOTIVO1: true }));
+    setBulkField('SUBMOTIVO2', '');
+    setBulkApply(prev => ({ ...prev, SUBMOTIVO2: false }));
+  };
+
+  // ───────────────────────────────────────────────────────────────────────────
+  // 🔑 HANDLER: SUBMOTIVO2
+  // ───────────────────────────────────────────────────────────────────────────
+  const handleBulkSubmotivo2Change = (motivo) => {
+    setBulkField('SUBMOTIVO2', motivo);
+    setBulkApply(prev => ({ ...prev, SUBMOTIVO2: true }));
+  };
+
+  // ───────────────────────────────────────────────────────────────────────────
+  // GUARDAR EDICIÓN MASIVA
+  // ───────────────────────────────────────────────────────────────────────────
+  const saveBulkModal = async () => {
+    try {
+      if (selectedItems.length === 0) { alert('No hay registros seleccionados.'); return; }
+      const payload = {};
+      for (const f of BULK_FIELDS) {
+        if (!bulkApply[f.key]) continue;
+        let v = bulkForm[f.key];
+        if (v === '') v = null;
+        payload[f.key] = v;
+      }
+      if (Object.keys(payload).length === 0) {
+        alert('Marca "Aplicar" en al menos un campo para guardar.');
+        return;
+      }
+      setIsSaving(true);
+      const { data: currentRecords, error: fetchError } = await supabase
+        .from('dotacion_movistar').select('*').in('id', selectedItems);
+      if (fetchError) throw fetchError;
+      const { error: updateError } = await supabase
+        .from('dotacion_movistar').update(payload).in('id', selectedItems);
+      if (updateError) throw updateError;
+      const diffs = (currentRecords || [])
+        .map((rec) => {
+          const changes = {};
+          for (const k of Object.keys(payload)) {
+            const oldValue = rec[k];
+            const newValue = payload[k];
+            if (oldValue !== newValue) changes[k] = { from: oldValue, to: newValue };
+          }
+          return { record_id: rec.id?.substring(0, 8), dni: rec.DNI, changes };
+        })
+        .filter((d) => Object.keys(d.changes).length > 0) || [];
+      const currentUser = JSON.parse(localStorage.getItem('currentUser') || '{}');
+      if (currentUser.dni) {
+        await logUpdate(currentUser.dni, {
+          action: 'bulk_update_modal',
+          records_updated: selectedItems.length,
+          changes: diffs,
+          filters_applied: { campana: campanaFilter, coordinador: coordinadorFilter, supervisor: supervisorFilter, estado: estadoFilter },
+          applied_fields: Object.keys(payload),
+          timestamp: new Date().toISOString(),
+        });
+      }
+      closeBulkModal();
+      setSelectedItems([]);
+      await fetchData();
+      alert(`✅ Cambios aplicados a ${selectedItems.length} registro(s).`);
+    } catch (err) {
+      console.error('Error en edición masiva (modal):', err);
+      alert(`❌ Error al guardar: ${err.message}`);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  // ───────────────────────────────────────────────────────────────────────────
+  // COLUMNAS DE LA TABLA
+  // ───────────────────────────────────────────────────────────────────────────
+  const columns = [
+    { key: 'seleccion', label: 'Sel.', sortable: false },
+    { key: 'id', label: 'ID', sortable: false },
+    { key: 'PERIODO', label: 'Período', sortable: true },
+    { key: 'DNI', label: 'DNI', sortable: true },
+    { key: 'NOMBRE', label: 'Nombres', sortable: true },
+    { key: 'APELLIDO', label: 'Apellidos', sortable: true },
+    { key: 'ESTADO', label: 'Estado', sortable: true },
+    { key: 'MODALIDAD', label: 'Modalidad', sortable: true },
+    { key: 'HORARIO', label: 'Horario', sortable: true },
+    { key: 'TURNO', label: 'Turno', sortable: true },
+    { key: 'FECHA_ING', label: 'Fecha Ingreso', sortable: true },
+    { key: 'FECHA_BAJ', label: 'Fecha Baja', sortable: true },
+    { key: 'TIPO_PLANIL', label: 'Tipo Planilla', sortable: true },
+    { key: 'DNI_SUP', label: 'DNI Líder', sortable: true },
+    { key: 'SUPERVISOR', label: 'Líder', sortable: true },
+    { key: 'COORDINADOR', label: 'Coordinador', sortable: true },
+    { key: 'CELULAR', label: 'Celular', sortable: true },
+    { key: 'CORREO', label: 'Correo', sortable: true },
+    { key: 'CAMPANA', label: 'Campaña', sortable: true },
+    { key: 'SUBMOTIVO1', label: 'Submotivo 1', sortable: true },
+    { key: 'SUBMOTIVO2', label: 'Submotivo 2', sortable: true },
+    { key: 'created_at', label: 'Creado En', sortable: true },
+    { key: 'updated_at', label: 'Actualizado En', sortable: true },
+  ];
+
+  // ───────────────────────────────────────────────────────────────────────────
+  // OPCIONES PARA SUBMOTIVO1/SUBMOTIVO2
+  // ───────────────────────────────────────────────────────────────────────────
+  const MOTIVOS_VOLUNTARIO = [
+    'Mejor oferta laboral', 'Ambiente laboral', 'Estudios', 'Viaje', 'Salud',
+    'Sobrecarga laboral', 'Motivos personales o familiares', 'Cambio de campaña',
+    'Falta de oportunidades de crecimiento', 'Abandono laboral'
+  ];
+  const MOTIVOS_INVOLUNTARIO = [
+    'No superación de prueba', 'Por faltas injustificadas', 'Por exceso de tardanzas',
+    'Cierre de campaña', 'Robo o fraude comprobado', 'Violación de normas internas',
+    'Reducción de personal', 'Incumplimiento de metas', 'No renovación de contrato',
+    'Faltas disciplinarias graves'
+  ];
+
+  // ───────────────────────────────────────────────────────────────────────────
+  // RENDER
+  // ───────────────────────────────────────────────────────────────────────────
   return (
-    <div className="min-h-screen bg-[#F7F8FA] overflow-hidden">
-      {/* Header */}
-      <header className="bg-white border-b border-gray-200 shadow-sm sticky top-0 z-50">
-        <div className="max-w-[95vw] mx-auto px-4 md:px-8 py-4 flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <button
-              onClick={() => navigate("/formador")}
-              className="px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium transition-colors flex items-center gap-2"
-            >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
-              </svg>
-              <span className="hidden sm:inline">Volver</span>
-            </button>
-            <div>
-              <h1 className="text-xl font-semibold text-gray-900">Seguimiento de Formación</h1>
-              <p className="text-xs text-gray-500">📅 {fechaHoyFormateada}</p>
-            </div>
+    <div className="bg-white rounded-2xl shadow-xl border border-gray-200 overflow-hidden">
+      {/* ✅ CONTADOR DE SELECCIÓN GLOBAL - NUEVO */}
+      {selectedItems.length > 0 && (
+        <div className="px-4 py-2 bg-gradient-to-r from-cyan-50 to-teal-50 border-b border-cyan-200 flex items-center justify-between">
+          <span className="text-[10px] text-cyan-800 font-medium flex items-center gap-2">
+            <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+            </svg>
+            <strong>{selectedItems.length}</strong> registro(s) seleccionado(s) para edición masiva
+            <span className="text-cyan-600">(pueden estar en diferentes búsquedas/páginas)</span>
+          </span>
+          <button
+            onClick={clearSelection}
+            className="text-[10px] text-cyan-600 hover:text-cyan-800 underline font-medium px-2 py-1 rounded hover:bg-cyan-100 transition"
+          >
+            Limpiar selección
+          </button>
+        </div>
+      )}
+
+      {/* Header: búsqueda y filtros */}
+      <div className="p-4 border-b border-gray-200 bg-gradient-to-r from-cyan-50 to-teal-50">
+        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-4">
+          <div className="relative w-full md:w-140">
+            <input
+              type="text"
+              placeholder="Buscar por DNI o Nombre"
+              value={searchQuery}
+              onChange={handleSearch}
+              className="w-full pl-10 pr-4 py-2.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 transition-all shadow-sm text-sm"
+            />
+            <svg className="absolute left-3 top-2.5 h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+            </svg>
           </div>
-          <div className="flex items-center gap-4">
-            <div className="flex items-center gap-2 text-xs text-gray-600">
-              <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>
-              <span>{user?.name || "Formador"}</span>
+          <div className="flex flex-col sm:flex-row sm:items-center sm:gap-4 gap-2">
+            <div className="flex items-center gap-2 text-sm text-gray-600">
+              <svg className="h-4 w-4 text-cyan-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
+              </svg>
+              <span>Total: <span className="font-bold text-cyan-700">{totalItems}</span> agentes</span>
             </div>
             <button
-              onClick={onLogout}
-              className="px-3 py-1.5 text-xs font-semibold border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition"
+              onClick={clearFilters}
+              className="px-3 py-1.5 text-xs border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-100 transition-colors flex items-center gap-1 w-fit"
             >
-              Cerrar sesión
+              <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              </svg>
+              Limpiar filtros
             </button>
           </div>
         </div>
-      </header>
 
-      {/* Mensajes */}
-      {mensaje.texto && (
-        <div className="max-w-[95vw] mx-auto px-4 md:px-8 pt-4">
-          <div className={`p-3 rounded-md shadow-sm border-l-4 ${
-            mensaje.tipo === "success" ? "bg-green-50 border-l-green-500 text-green-800" :
-            mensaje.tipo === "error" ? "bg-red-50 border-l-red-500 text-red-800" :
-            mensaje.tipo === "warning" ? "bg-yellow-50 border-l-yellow-500 text-yellow-800" :
-            "bg-blue-50 border-l-blue-500 text-blue-800"
-          }`}>
-            <p className="text-sm">{mensaje.texto}</p>
+        {/* FILTROS */}
+        <div className="flex flex-wrap items-end gap-3">
+          <div>
+            <label className="block text-[10px] font-medium text-gray-700 mb-1">1. Campaña</label>
+            <select
+              value={campanaFilter}
+              onChange={(e) => setCampanaFilter(e.target.value)}
+              className="px-3 py-1.5 text-xs border border-gray-300 rounded-lg text-gray-700 bg-white hover:bg-gray-50 transition-colors focus:ring-1 focus:ring-cyan-500"
+            >
+              <option value="">Todas</option>
+              {distinctCampanas.map((c) => (<option key={c} value={c}>{c}</option>))}
+            </select>
+          </div>
+          <div>
+            <label className="block text-[10px] font-medium text-gray-700 mb-1">2. Coordinador</label>
+            <select
+              value={coordinadorFilter}
+              onChange={(e) => setCoordinadorFilter(e.target.value)}
+              disabled={!campanaFilter}
+              className={`px-3 py-1.5 text-xs border rounded-lg text-gray-700 transition-colors focus:ring-1 focus:ring-cyan-500 ${
+                !campanaFilter ? 'border-gray-200 bg-gray-100 text-gray-400 cursor-not-allowed' : 'border-gray-300 bg-white hover:bg-gray-50'
+              }`}
+            >
+              <option value="">Todos</option>
+              {filteredCoordinadores.map((coord) => (<option key={coord} value={coord}>{coord}</option>))}
+            </select>
+          </div>
+          <div>
+            <label className="block text-[10px] font-medium text-gray-700 mb-1">3. Supervisor</label>
+            <select
+              value={supervisorFilter}
+              onChange={(e) => setSupervisorFilter(e.target.value)}
+              disabled={!coordinadorFilter}
+              className={`px-3 py-1.5 text-xs border rounded-lg text-gray-700 transition-colors focus:ring-1 focus:ring-cyan-500 ${
+                !coordinadorFilter ? 'border-gray-200 bg-gray-100 text-gray-400 cursor-not-allowed' : 'border-gray-300 bg-white hover:bg-gray-50'
+              }`}
+            >
+              <option value="">Todos</option>
+              {filteredSupervisores.map((sup) => (<option key={sup} value={sup}>{sup}</option>))}
+            </select>
+          </div>
+          <div>
+            <label className="block text-[10px] font-medium text-gray-700 mb-1">4. Estado</label>
+            <select
+              value={estadoFilter}
+              onChange={(e) => setEstadoFilter(e.target.value)}
+              disabled={!supervisorFilter}
+              className={`px-3 py-1.5 text-xs border rounded-lg text-gray-700 transition-colors focus:ring-1 focus:ring-cyan-500 ${
+                !supervisorFilter ? 'border-gray-200 bg-gray-100 text-gray-400 cursor-not-allowed' : 'border-gray-300 bg-white hover:bg-gray-50'
+              }`}
+            >
+              {filteredEstados.map((est) => (<option key={est} value={est}>{est}</option>))}
+            </select>
+          </div>
+        </div>
+      </div>
+
+      {/* ✨ TABLA CON SCROLL INTERNO - Altura fija con overflow */}
+      <div className="overflow-hidden">
+        <div className="max-h-[500px] overflow-y-auto">
+          <table className="min-w-full divide-y divide-gray-200 text-xs">
+            <thead className="bg-gradient-to-r from-cyan-600 to-teal-700 text-white sticky top-0 z-10">
+              <tr>
+                {columns.map((column) => (
+                  <th
+                    key={column.key}
+                    scope="col"
+                    className={`px-2 py-2 text-left uppercase tracking-wider text-[10px] ${column.sortable ? 'cursor-pointer hover:bg-cyan-700/20 transition-colors' : ''}`}
+                    onClick={() => { if (column.key !== 'seleccion' && column.sortable) requestSort(column.key); }}
+                  >
+                    <div className={`flex items-center gap-1 ${column.key === 'seleccion' ? 'justify-center' : ''}`}>
+                      {column.key === 'seleccion' ? (
+                        <input
+                          type="checkbox"
+                          checked={selectedItems.length === data.length && data.length > 0}
+                          ref={selectAllRef}
+                          onClick={(e) => e.stopPropagation()}
+                          onChange={(e) => toggleSelectAll(e.target.checked)}
+                          className="h-3 w-3 cursor-pointer text-cyan-600 rounded border-gray-300 focus:ring-cyan-500"
+                        />
+                      ) : (
+                        <>
+                          {column.label}
+                          {column.sortable && (
+                            <svg
+                              className={`h-2 w-2 transition-transform ${sortConfig.key === column.key ? (sortConfig.direction === 'asc' ? 'rotate-180' : '') : 'text-cyan-200'}`}
+                              fill="currentColor"
+                              viewBox="0 0 24 24"
+                            >
+                              <path d="M12 16l-6-6h12l-6 6zm0-10l-6 6h12l-6-6z" />
+                            </svg>
+                          )}
+                        </>
+                      )}
+                    </div>
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody className="bg-white divide-y divide-gray-200">
+              {loading ? (
+                <tr>
+                  <td colSpan={columns.length} className="px-6 py-8 text-center">
+                    <div className="flex flex-col items-center justify-center">
+                      <svg className="animate-spin h-5 w-5 text-cyan-500 mb-2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                      </svg>
+                      <p className="text-[10px] text-gray-600 font-medium">Cargando...</p>
+                    </div>
+                  </td>
+                </tr>
+              ) : error ? (
+                <tr>
+                  <td colSpan={columns.length} className="px-6 py-8 text-center">
+                    <div className="text-red-500 bg-red-50 p-3 rounded-lg max-w-md mx-auto">
+                      <p className="text-[10px] font-medium">{error}</p>
+                      <button onClick={fetchData} className="mt-2 px-3 py-1 bg-red-600 text-white rounded text-[10px] hover:bg-red-700">Reintentar</button>
+                    </div>
+                  </td>
+                </tr>
+              ) : data.length === 0 ? (
+                <tr>
+                  <td colSpan={columns.length} className="px-6 py-8 text-center">
+                    <div className="text-gray-500">
+                      <p className="mt-2 text-[10px] font-medium">No hay agentes en la dotación</p>
+                    </div>
+                  </td>
+                </tr>
+              ) : (
+                data.map((item) => (
+                  <tr key={item.id} className="hover:bg-cyan-50/50 transition-colors duration-150">
+                    <td className="px-2 py-1.5 whitespace-nowrap text-center">
+                      <input
+                        type="checkbox"
+                        checked={selectedItems.includes(item.id)}
+                        onChange={() => handleSelectItem(item.id)}
+                        className="h-3 w-3 cursor-pointer text-cyan-600 rounded border-gray-300 focus:ring-cyan-500"
+                      />
+                    </td>
+                    <td className="px-2 py-1.5 whitespace-nowrap text-gray-700 font-mono text-[10px]">{item.id?.substring(0, 8) || 'N/A'}</td>
+                    <td className="px-2 py-1.5 whitespace-nowrap text-gray-700 text-[10px]">{item.PERIODO || 'N/A'}</td>
+                    <td className="px-2 py-1.5 whitespace-nowrap font-mono font-medium text-gray-900 text-[10px]">{item.DNI}</td>
+                    <td className="px-2 py-1.5 whitespace-nowrap font-medium text-gray-900 text-[10px]">{item.NOMBRE}</td>
+                    <td className="px-2 py-1.5 whitespace-nowrap text-gray-700 text-[10px]">{item.APELLIDO}</td>
+                    <td className="px-2 py-1.5 whitespace-nowrap text-gray-700 text-[10px]">
+                      <span className={`px-1.5 py-0.5 rounded-full text-[9px] ${
+                        item.ESTADO === 'ACTIVO' || item.ESTADO === 'ACTIVO_R' ? 'bg-green-100 text-green-700' :
+                        item.ESTADO === 'BAJA' ? 'bg-red-100 text-red-700' :
+                        'bg-gray-100 text-gray-700'
+                      }`}>
+                        {item.ESTADO || 'PENDIENTE'}
+                      </span>
+                    </td>
+                    <td className="px-2 py-1.5 whitespace-nowrap text-gray-700 text-[10px]">{item.MODALIDAD || 'N/A'}</td>
+                    <td className="px-2 py-1.5 whitespace-nowrap text-gray-700 text-[10px]">{item.HORARIO || 'N/A'}</td>
+                    <td className="px-2 py-1.5 whitespace-nowrap text-gray-700 text-[10px]">{item.TURNO || 'N/A'}</td>
+                    <td className="px-2 py-1.5 whitespace-nowrap text-gray-700 text-[10px]">
+                      {formatDate(item.FECHA_ING)}
+                      <div className="text-[9px] text-gray-500">{calculateSeniority(item.FECHA_ING)}</div>
+                    </td>
+                    <td className="px-2 py-1.5 whitespace-nowrap text-gray-700 text-[10px]">{formatDate(item.FECHA_BAJ)}</td>
+                    <td className="px-2 py-1.5 whitespace-nowrap text-gray-700 text-[10px]">{item.TIPO_PLANIL || 'N/A'}</td>
+                    <td className="px-2 py-1.5 whitespace-nowrap text-gray-700 font-mono bg-gray-50 text-[10px]">{item.DNI_SUP || 'N/A'}</td>
+                    <td className="px-2 py-1.5 whitespace-nowrap text-gray-700 text-[10px]">{item.SUPERVISOR || 'N/A'}</td>
+                    <td className="px-2 py-1.5 whitespace-nowrap text-gray-700 text-[10px]">{item.COORDINADOR || 'N/A'}</td>
+                    <td className="px-2 py-1.5 whitespace-nowrap text-gray-700 text-[10px]">{item.CELULAR || 'N/A'}</td>
+                    <td className="px-2 py-1.5 whitespace-nowrap text-gray-700 text-[10px]">{item.CORREO || 'N/A'}</td>
+                    <td className="px-2 py-1.5 whitespace-nowrap text-gray-700 text-[10px]">{item.CAMPANA || 'N/A'}</td>
+                    <td className="px-2 py-1.5 whitespace-nowrap text-gray-700 text-[10px]">{item.SUBMOTIVO1 || 'N/A'}</td>
+                    <td className="px-2 py-1.5 whitespace-nowrap text-gray-700 text-[10px]">{item.SUBMOTIVO2 || 'N/A'}</td>
+                    <td className="px-2 py-1.5 whitespace-nowrap text-gray-700 text-[10px]">{formatDate(item.created_at)}</td>
+                    <td className="px-2 py-1.5 whitespace-nowrap text-gray-700 text-[10px]">{formatDate(item.updated_at)}</td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* Paginación */}
+      {totalItems > 0 && !loading && (
+        <div className="p-2 border-t border-gray-200 bg-gray-50 flex flex-col md:flex-row md:items-center md:justify-between gap-2 text-[10px]">
+          <div className="text-gray-700">
+            Mostrando <span className="font-medium">{(currentPage - 1) * itemsPerPage + 1}</span> a{' '}
+            <span className="font-medium">{Math.min(currentPage * itemsPerPage, totalItems)}</span> de{' '}
+            <span className="font-medium">{totalItems}</span> agentes
+          </div>
+          <div className="flex flex-wrap items-center justify-center gap-0.5">
+            <button
+              onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+              disabled={currentPage === 1}
+              className="px-1.5 py-1 border border-gray-300 rounded text-[10px] font-medium text-gray-700 hover:bg-gray-100 disabled:opacity-50"
+            >
+              Anterior
+            </button>
+            {[...Array(Math.min(5, Math.ceil(totalItems / itemsPerPage)))].map((_, index) => {
+              const totalPages = Math.ceil(totalItems / itemsPerPage);
+              const page = Math.max(1, currentPage - 2) + index;
+              if (page > totalPages) return null;
+              return (
+                <button
+                  key={page}
+                  onClick={() => setCurrentPage(page)}
+                  className={`px-1.5 py-1 rounded text-[10px] font-medium transition-colors ${
+                    currentPage === page ? 'bg-cyan-600 text-white' : 'text-gray-700 hover:bg-gray-100'
+                  }`}
+                >
+                  {page}
+                </button>
+              );
+            })}
+            <button
+              onClick={() => setCurrentPage((p) => Math.min(Math.ceil(totalItems / itemsPerPage), p + 1))}
+              disabled={currentPage === Math.ceil(totalItems / itemsPerPage)}
+              className="px-1.5 py-1 border border-gray-300 rounded text-[10px] font-medium text-gray-700 hover:bg-gray-100 disabled:opacity-50"
+            >
+              Siguiente
+            </button>
           </div>
         </div>
       )}
 
-      {/* Contenido principal */}
-      <div className="max-w-[95vw] mx-auto px-4 md:px-8 py-6">
-        {/* Barra de filtros */}
-        <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6 mb-6">
-          <div className="flex flex-wrap items-center justify-between gap-4 mb-4">
-            <h2 className="font-semibold text-lg text-gray-900 flex items-center gap-2">
-              <span className="text-blue-600">🔍</span>
-              Filtros de Búsqueda
-            </h2>
-            {!datosCargados && (
-              <div className="text-xs text-gray-500 bg-gray-100 px-3 py-1.5 rounded-lg">
-                💡 Aplica filtros y haz clic en "Cargar Datos"
-              </div>
-            )}
+      {/* Acciones (selección) */}
+      {selectedItems.length > 0 && (
+        <div className="p-2 bg-gradient-to-r from-cyan-50 to-teal-50 border-t border-gray-200 flex items-center justify-between">
+          <div className="text-[10px] text-gray-700">
+            Seleccionados: <span className="font-semibold text-cyan-700">{selectedItems.length}</span>
           </div>
-
-          {/* Filtros */}
-          <div className="flex flex-wrap items-end gap-4">
-            <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">Campaña</label>
-              <select
-                value={filtroCampana}
-                onChange={(e) => setFiltroCampana(e.target.value)}
-                className="bg-white border border-gray-300 text-gray-700 rounded-lg px-2 py-1.5 text-xs focus:ring-2 focus:ring-blue-600 focus:border-blue-600"
-              >
-                <option value="">Todas</option>
-                {campanasUnicas.map(c => <option key={c} value={c}>{c}</option>)}
-              </select>
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">Grupo</label>
-              <select
-                value={filtroGrupo}
-                onChange={(e) => setFiltroGrupo(e.target.value)}
-                className="bg-white border border-gray-300 text-gray-700 rounded-lg px-2 py-1.5 text-xs focus:ring-2 focus:ring-blue-600 focus:border-blue-600 disabled:opacity-60"
-                disabled={!!filtroCampana && getGruposDisponibles().length === 0}
-              >
-                <option value="todos">Todos</option>
-                {getGruposDisponibles().map(g => <option key={g} value={g}>{g}</option>)}
-              </select>
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">Estado</label>
-              <select
-                value={filtroEstado}
-                onChange={(e) => setFiltroEstado(e.target.value)}
-                className="bg-white border border-gray-300 text-gray-700 rounded-lg px-2 py-1.5 text-xs focus:ring-2 focus:ring-blue-600 focus:border-blue-600"
-              >
-                <option value="todos">Todos</option>
-                <option value="Activo">Activo</option>
-                <option value="Inactivo">Inactivo</option>
-              </select>
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">Segmento</label>
-              <select
-                value={filtroSegmento}
-                onChange={(e) => setFiltroSegmento(e.target.value)}
-                className="bg-white border border-gray-300 text-gray-700 rounded-lg px-2 py-1.5 text-xs focus:ring-2 focus:ring-blue-600 focus:border-blue-600"
-              >
-                <option value="todos">Todos</option>
-                {OPCIONES_SEGMENTO.map(s => <option key={s} value={s}>{s}</option>)}
-              </select>
-            </div>
-            <div className="flex-1 min-w-[250px]">
-              <label className="block text-xs font-medium text-gray-700 mb-1">Buscar por nombre o DNI</label>
-              <input
-                type="text"
-                value={busqueda}
-                onChange={(e) => setBusqueda(e.target.value)}
-                placeholder="Ej: Juan Pérez o 75834921"
-                className="w-full bg-white border border-gray-300 text-gray-700 rounded-lg px-2 py-1.5 text-xs focus:ring-2 focus:ring-blue-600 focus:border-blue-600 placeholder-gray-400"
-              />
-            </div>
-            
-            {/* ✅ BOTONES DE ACCIÓN */}
-            <div className="flex gap-2">
-              <button
-                onClick={aplicarFiltrosYCargar}
-                disabled={loading}
-                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50 flex items-center gap-2"
-              >
-                {loading ? (
-                  <>
-                    <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                    </svg>
-                    Cargando...
-                  </>
-                ) : (
-                  <>
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                    </svg>
-                    Cargar Datos
-                  </>
-                )}
-              </button>
-              
-              <button
-                onClick={() => {
-                  setFiltroCampana("");
-                  setFiltroGrupo("todos");
-                  setFiltroEstado("todos");
-                  setFiltroSegmento("todos");
-                  setBusqueda("");
-                  setRegistros([]);
-                  setDatosCargados(false);
-                  setPaginaActual(1);
-                }}
-                className="px-3 py-2 text-xs border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition"
-              >
-                Limpiar
-              </button>
-            </div>
-          </div>
+          <button
+            onClick={openBulkModal}
+            className="px-2 py-1 bg-cyan-600 text-white rounded text-[10px] font-medium flex items-center gap-1 hover:bg-cyan-700"
+          >
+            <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5M16 3l5 5" />
+            </svg>
+            Editar en bloque
+          </button>
         </div>
+      )}
 
-        {/* Tabla de Registros */}
-        {datosCargados && (
-          <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6">
-            {loading && !registros.length ? (
-              <div className="text-center py-12">
-                <div className="animate-spin w-6 h-6 border-2 border-blue-400 border-t-transparent rounded-full mx-auto mb-3"></div>
-                <p className="text-gray-600 text-xs">Cargando registros...</p>
-              </div>
-            ) : (
-              <>
-                {/* Header de tabla con acciones */}
-                <div className="flex items-center justify-between mb-4">
-                  <h3 className="font-semibold text-gray-900">
-                    📋 Resultados ({totalFiltrados} registros)
-                  </h3>
-                  {totalFiltrados > 0 && (
-                    <button
-                      onClick={descargarCSV}
-                      disabled={loading}
-                      className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50 flex items-center gap-2"
-                    >
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-                      </svg>
-                      Descargar CSV ({totalFiltrados})
-                    </button>
-                  )}
-                </div>
-
-                {registros.length > 0 ? (
-                  <>
-                    <div className="overflow-x-auto">
-                      <table className="min-w-full divide-y divide-gray-200 text-xs">
-                        <thead className="bg-gray-50">
-                          <tr>
-                            <th className="px-2 py-2 text-center text-[10px] font-medium text-gray-600 uppercase tracking-wider">
-                              <input
-                                type="checkbox"
-                                checked={selectedItems.length === registrosPaginados.length && registrosPaginados.length > 0}
-                                onChange={(e) => toggleSelectAll(e.target.checked)}
-                                className="h-3.5 w-3.5 cursor-pointer text-blue-600 rounded border-gray-300 focus:ring-blue-600"
-                              />
-                            </th>
-                            <th className="px-2 py-2 text-left text-[10px] font-medium text-gray-600 uppercase tracking-wider">DNI</th>
-                            <th className="px-2 py-2 text-left text-[10px] font-medium text-gray-600 uppercase tracking-wider">Nombre</th>
-                            <th className="px-2 py-2 text-left text-[10px] font-medium text-gray-600 uppercase tracking-wider">Campaña</th>
-                            <th className="px-2 py-2 text-left text-[10px] font-medium text-gray-600 uppercase tracking-wider">Grupo</th>
-                            <th className="px-2 py-2 text-left text-[10px] font-medium text-gray-600 uppercase tracking-wider">Estado</th>
-                            <th className="px-2 py-2 text-center text-[10px] font-medium text-gray-600 uppercase tracking-wider">Seg. Prefiltro</th>
-                            {[1, 2, 3, 4, 5, 6, 7].map(d => (
-                              <th key={d} className="px-2 py-2 text-center text-[10px] font-medium text-gray-600 uppercase tracking-wider">Día {d}</th>
-                            ))}
-                            <th className="px-2 py-2 text-center text-[10px] font-medium text-gray-600 uppercase tracking-wider">Certifica</th>
-                            <th className="px-2 py-2 text-center text-[10px] font-medium text-gray-600 uppercase tracking-wider">Seg. Certificado</th>
-                            <th className="px-2 py-2 text-center text-[10px] font-medium text-gray-600 uppercase tracking-wider">Fecha Baja</th>
-                            <th className="px-2 py-2 text-center text-[10px] font-medium text-gray-600 uppercase tracking-wider">Motivo Baja</th>
-                            <th className="px-2 py-2 text-center text-[10px] font-medium text-gray-600 uppercase tracking-wider">Teléfono</th>
-                            <th className="px-2 py-2 text-left text-[10px] font-medium text-gray-600 uppercase tracking-wider">Acción</th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-gray-200">
-                          {registrosPaginados.map((r) => (
-                            <tr key={r.id} className="hover:bg-gray-50 transition-colors">
-                              <td className="px-2 py-2 whitespace-nowrap text-center">
-                                <input
-                                  type="checkbox"
-                                  checked={selectedItems.includes(r.id)}
-                                  onChange={() => handleSelectItem(r.id)}
-                                  className="h-3.5 w-3.5 cursor-pointer text-blue-600 rounded border-gray-300 focus:ring-blue-600"
-                                />
-                              </td>
-                              <td className="px-2 py-2 whitespace-nowrap text-xs text-gray-900 font-mono">{r.dni}</td>
-                              <td className="px-2 py-2 whitespace-nowrap text-xs text-gray-900">{r.nombre}</td>
-                              <td className="px-2 py-2 whitespace-nowrap text-xs text-gray-700">{r.campaña || '-'}</td>
-                              <td className="px-2 py-2 whitespace-nowrap text-xs text-gray-700">{r.grupo_nombre || '-'}</td>
-                              <td className="px-2 py-2 whitespace-nowrap">{renderBadgeEstado(r.estado)}</td>
-                              <td className="px-2 py-2 whitespace-nowrap text-center">
-                                {filaEditando === r.id ? (
-                                  <select
-                                    value={valoresEditables.segmento_prefiltro || ""}
-                                    onChange={(e) => handleInputChange("segmento_prefiltro", e.target.value)}
-                                    className="w-full bg-white border border-gray-300 text-gray-700 text-[10px] rounded px-1 py-0.5 focus:ring-1 focus:ring-blue-600 focus:border-blue-600"
-                                  >
-                                    <option value="">—</option>
-                                    {OPCIONES_SEGMENTO.map(op => <option key={op} value={op}>{op}</option>)}
-                                  </select>
-                                ) : <span className="text-gray-700 text-xs">{r.segmento_prefiltro || "—"}</span>}
-                              </td>
-                              {[1, 2, 3, 4, 5, 6, 7].map(d => {
-                                const key = `dia_${d}`;
-                                const esEditable = filaEditando === r.id;
-                                return (
-                                  <td key={key} className="px-2 py-2 whitespace-nowrap text-center">
-                                    {esEditable ? (
-                                      <select
-                                        value={valoresEditables[key] || ""}
-                                        onChange={(e) => handleInputChange(key, e.target.value)}
-                                        className="w-full bg-white border border-gray-300 text-gray-700 text-[10px] rounded px-1 py-0.5 focus:ring-1 focus:ring-blue-600 focus:border-blue-600"
-                                      >
-                                        <option value="">—</option>
-                                        {OPCIONES_ASISTENCIA.map(op => <option key={op} value={op}>{op}</option>)}
-                                      </select>
-                                    ) : <div className="flex justify-center">{renderBadgeAsistencia(r[key])}</div>}
-                                  </td>
-                                );
-                              })}
-                              <td className="px-2 py-2 whitespace-nowrap text-center">
-                                {filaEditando === r.id ? (
-                                  <select
-                                    value={valoresEditables.certifica || ""}
-                                    onChange={(e) => handleInputChange("certifica", e.target.value)}
-                                    className="w-full bg-white border border-gray-300 text-gray-700 text-[10px] rounded px-1 py-0.5 focus:ring-1 focus:ring-blue-600 focus:border-blue-600"
-                                  >
-                                    <option value="">—</option>
-                                    {OPCIONES_CERTIFICA.map(op => <option key={op} value={op}>{op}</option>)}
-                                  </select>
-                                ) : (
-                                  <span className={`text-xs font-medium ${
-                                    r.certifica === 'SI' ? 'text-green-700' : r.certifica === 'NO' ? 'text-red-700' : 'text-gray-500'
-                                  }`}>
-                                    {r.certifica || "—"}
-                                  </span>
-                                )}
-                              </td>
-                              <td className="px-2 py-2 whitespace-nowrap text-center">
-                                {filaEditando === r.id ? (
-                                  <select
-                                    value={valoresEditables.segmento_certificado || ""}
-                                    onChange={(e) => handleInputChange("segmento_certificado", e.target.value)}
-                                    className="w-full bg-white border border-gray-300 text-gray-700 text-[10px] rounded px-1 py-0.5 focus:ring-1 focus:ring-blue-600 focus:border-blue-600"
-                                  >
-                                    <option value="">—</option>
-                                    {OPCIONES_SEGMENTO.map(op => <option key={op} value={op}>{op}</option>)}
-                                  </select>
-                                ) : <span className="text-gray-700 text-xs">{r.segmento_certificado || "—"}</span>}
-                              </td>
-                              <td className="px-2 py-2 whitespace-nowrap text-center">
-                                {filaEditando === r.id ? (
-                                  <input
-                                    type="date"
-                                    value={valoresEditables.fecha_baja ? valoresEditables.fecha_baja.slice(0, 10) : ""}
-                                    onChange={(e) => handleInputChange("fecha_baja", e.target.value)}
-                                    className="w-full bg-white border border-gray-300 text-gray-700 text-[10px] rounded px-1 py-0.5 focus:ring-1 focus:ring-blue-600 focus:border-blue-600"
-                                  />
-                                ) : <span className="text-gray-700 text-xs">{formatearFecha(r.fecha_baja)}</span>}
-                              </td>
-                              <td className="px-2 py-2 whitespace-nowrap text-center max-w-[150px]">
-                                {filaEditando === r.id ? (
-                                  <select
-                                    value={valoresEditables.motivo_baja || ""}
-                                    onChange={(e) => handleInputChange("motivo_baja", e.target.value)}
-                                    className="w-full bg-white border border-gray-300 text-gray-900 text-[10px] rounded px-1 py-0.5 focus:ring-1 focus:ring-blue-600 focus:border-blue-600"
-                                  >
-                                    <option value="">— Seleccionar —</option>
-                                    {Object.entries(OPCIONES_MOTIVO_BAJA).map(([grupo, motivos]) => (
-                                      <optgroup key={grupo} label={grupo}>
-                                        {motivos.map(motivo => <option key={motivo} value={motivo}>{motivo}</option>)}
-                                      </optgroup>
-                                    ))}
-                                  </select>
-                                ) : <span className="text-gray-700 text-xs truncate block" title={r.motivo_baja}>{r.motivo_baja || "—"}</span>}
-                              </td>
-                              <td className="px-2 py-2 whitespace-nowrap text-center">
-                                {filaEditando === r.id ? (
-                                  <input
-                                    type="tel"
-                                    value={valoresEditables.telefono || ""}
-                                    onChange={(e) => handleInputChange("telefono", e.target.value)}
-                                    placeholder="987654321"
-                                    className="w-full bg-white border border-gray-300 text-gray-700 text-[10px] rounded px-1 py-0.5 focus:ring-1 focus:ring-blue-600 focus:border-blue-600"
-                                  />
-                                ) : <span className="text-gray-700 text-xs">{formatearTelefono(r.telefono)}</span>}
-                              </td>
-                              <td className="px-2 py-2 whitespace-nowrap">
-                                {filaEditando === r.id ? (
-                                  <div className="flex gap-1">
-                                    <button
-                                      onClick={() => guardarCambiosFila(r.id)}
-                                      disabled={loading}
-                                      className="px-2 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded text-[10px] disabled:opacity-50"
-                                    >
-                                      Guardar
-                                    </button>
-                                    <button
-                                      onClick={cancelarEdicion}
-                                      className="px-2 py-1 border border-gray-300 text-gray-700 rounded text-[10px] hover:bg-gray-50"
-                                    >
-                                      Cancelar
-                                    </button>
-                                  </div>
-                                ) : (
-                                  <div className="flex gap-1">
-                                    <button
-                                      onClick={() => iniciarEdicion(r)}
-                                      className="px-2 py-1 border border-gray-300 text-gray-700 rounded text-[10px] hover:bg-gray-50"
-                                    >
-                                      Editar
-                                    </button>
-                                    <button
-                                      onClick={() => toggleEstadoRegistro(r.id, r.estado)}
-                                      disabled={loading}
-                                      className={`px-2 py-1 rounded text-[10px] font-medium transition-colors border ${
-                                        r.estado === 'Activo'
-                                          ? 'border-red-300 text-red-700 hover:bg-red-50'
-                                          : 'border-green-300 text-green-700 hover:bg-green-50'
-                                      } disabled:opacity-50`}
-                                    >
-                                      {r.estado === 'Activo' ? 'Inact.' : 'Activo'}
-                                    </button>
-                                  </div>
-                                )}
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-
-                    {/* Paginación */}
-                    {totalPaginas > 1 && (
-                      <div className="flex items-center justify-between mt-4">
-                        <button
-                          onClick={() => setPaginaActual(p => Math.max(1, p - 1))}
-                          disabled={paginaActual === 1 || loading}
-                          className="px-3 py-1.5 border border-gray-300 text-gray-700 rounded text-xs disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50 transition"
-                        >
-                          ← Anterior
-                        </button>
-                        <span className="text-gray-700 text-xs">Página {paginaActual} de {totalPaginas}</span>
-                        <button
-                          onClick={() => setPaginaActual(p => Math.min(totalPaginas, p + 1))}
-                          disabled={paginaActual === totalPaginas || loading}
-                          className="px-3 py-1.5 border border-gray-300 text-gray-700 rounded text-xs disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50 transition"
-                        >
-                          Siguiente →
-                        </button>
-                      </div>
-                    )}
-                  </>
-                ) : (
-                  <div className="text-center py-12">
-                    <p className="text-gray-600 text-sm">No se encontraron registros con esos filtros.</p>
-                    <p className="text-gray-500 text-xs mt-1">Intenta ajustar los filtros y haz clic en "Cargar Datos" nuevamente.</p>
-                  </div>
-                )}
-              </>
-            )}
-          </div>
-        )}
-      </div>
-
-      {/* MODAL DE EDICIÓN MASIVA */}
+      {/* ─── MODAL EDICIÓN MASIVA ─────────────────────────────────────────── */}
       {isBulkModalOpen && (
         <div className="fixed inset-0 z-50 flex items-end md:items-center md:justify-center">
           <div className="absolute inset-0 bg-black/50" onClick={closeBulkModal} />
           <div className="relative w-full md:max-w-4xl bg-white rounded-t-2xl md:rounded-2xl shadow-2xl border border-gray-200 overflow-hidden max-h-[90vh] flex flex-col">
-            <div className="px-4 py-3 bg-white border-b border-gray-200 text-gray-900 flex items-center justify-between flex-shrink-0">
+            {/* Header */}
+            <div className="px-4 py-3 bg-gradient-to-r from-cyan-600 to-teal-700 text-white flex items-center justify-between flex-shrink-0">
               <div className="flex items-center gap-2">
-                <svg className="h-5 w-5 text-gray-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5M16 3l5 5M4 13l6 6M14 3l7 7" />
+                <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5M16 3l5 5" />
                 </svg>
-                <h3 className="font-semibold">Edición Masiva • {selectedItems.length} registro(s)</h3>
+                <h3 className="font-semibold">Edición masiva • {selectedItems.length} seleccionado(s)</h3>
               </div>
-              <button onClick={closeBulkModal} className="text-gray-500 hover:text-gray-700">✕</button>
+              <button onClick={closeBulkModal} className="text-white/80 hover:text-white">✕</button>
             </div>
-            <div className="px-4 py-2 bg-gray-50 border-b border-gray-200">
-              <p className="text-[11px] text-gray-600">
-                💡 Marca <strong>"Aplicar"</strong> en cada campo que deseas actualizar.
-              </p>
-            </div>
+            {/* Body */}
             <div className="p-4 grid grid-cols-1 md:grid-cols-2 gap-3 overflow-y-auto flex-1">
+              <div className="md:col-span-2 text-[10px] text-gray-600 bg-blue-50 border border-blue-200 rounded-lg px-3 py-2 flex-shrink-0">
+                <p className="font-semibold text-blue-800 mb-1">💡 Instrucciones:</p>
+                <ul className="list-disc list-inside space-y-0.5 text-blue-700">
+                  <li>Marca <b>"Aplicar"</b> en cada campo que deseas actualizar</li>
+                  <li>Los campos no marcados NO serán modificados</li>
+                  <li>Al seleccionar <b>DNI Líder</b>, se autocompletan: <b>Supervisor</b> y <b>Coordinador</b></li>
+                  <li>✅ <b>Coordinador editable:</b> Puedes cambiar el coordinador manualmente sin afectar otros campos</li>
+                  <li>🕐 <b>Horario inteligente:</b> Al seleccionar <b>Horario</b>, se completan automáticamente <b>Ingreso, Turno, Horas y Modalidad</b></li>
+                  <li><b>Visibilidad dinámica:</b> Si <b>Estado = BAJA</b>, solo verás campos de baja</li>
+                </ul>
+              </div>
               {BULK_FIELDS.map((field) => (
-                <div key={field.key} className="flex items-start gap-2 p-2 border border-gray-200 rounded-lg">
-                  <input
-                    type="checkbox"
-                    checked={!!bulkApply[field.key]}
-                    onChange={(e) => toggleBulkApply(field.key, e.target.checked)}
-                    className="mt-1 h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-600"
-                  />
-                  <div className="flex-1 min-w-0">
-                    <label className="block text-[11px] font-medium text-gray-700 mb-1">{field.label}</label>
-                    {field.type === 'select' && (
-                      <select
-                        value={bulkForm[field.key] ?? ''}
-                        onChange={(e) => setBulkField(field.key, e.target.value)}
-                        className="w-full px-2 py-1.5 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-blue-600 focus:border-blue-600 bg-white text-gray-700"
-                      >
-                        <option value="">--Seleccionar--</option>
-                        {field.options.map(opt => <option key={opt} value={opt}>{opt}</option>)}
-                      </select>
-                    )}
-                    {field.type === 'text' && (
-                      <input
-                        type="text"
-                        value={bulkForm[field.key] ?? ''}
-                        onChange={(e) => setBulkField(field.key, e.target.value)}
-                        placeholder={field.placeholder || ''}
-                        className="w-full px-2 py-1.5 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-blue-600 focus:border-blue-600 text-gray-700"
-                      />
-                    )}
-                    {field.type === 'date' && (
-                      <input
-                        type="date"
-                        value={(bulkForm[field.key] ?? '')?.slice(0, 10)}
-                        onChange={(e) => setBulkField(field.key, e.target.value)}
-                        className="w-full px-2 py-1.5 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-blue-600 focus:border-blue-600 text-gray-700"
-                      />
-                    )}
-                    {field.type === 'motivo_baja' && (
-                      <select
-                        value={bulkForm.motivo_baja ?? ''}
-                        onChange={(e) => setBulkField('motivo_baja', e.target.value)}
-                        className="w-full px-2 py-1.5 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-blue-600 focus:border-blue-600 bg-white text-gray-700"
-                      >
-                        <option value="">— Seleccionar —</option>
-                        {Object.entries(OPCIONES_MOTIVO_BAJA).map(([grupo, motivos]) => (
-                          <optgroup key={grupo} label={grupo}>
-                            {motivos.map(motivo => <option key={motivo} value={motivo}>{motivo}</option>)}
-                          </optgroup>
-                        ))}
-                      </select>
-                    )}
+                shouldShowField(field.key) && (
+                  <div key={field.key} className="flex items-start gap-2 p-2 border border-gray-200 rounded-lg flex-shrink-0">
+                    <input
+                      type="checkbox"
+                      checked={!!bulkApply[field.key]}
+                      onChange={(e) => toggleBulkApply(field.key, e.target.checked)}
+                      className="mt-1 h-3.5 w-3.5 text-cyan-600 border-gray-300 rounded focus:ring-cyan-500"
+                      disabled={field.auto}
+                    />
+                    <div className="flex-1 min-w-0">
+                      <label className="block text-[10px] font-medium text-gray-700 mb-1">
+                        {field.label}
+                        {field.auto && <span className="ml-1 text-[9px] text-emerald-600">(Auto)</span>}
+                        {field.key === 'COORDINADOR' && <span className="ml-1 text-[9px] text-blue-600">(Editable)</span>}
+                      </label>
+                      {field.type === 'select' && field.key === 'HORARIO' && (
+                        <select
+                          value={bulkForm[field.key] ?? ''}
+                          onChange={(e) => {
+                            const v = e.target.value;
+                            setBulkField(field.key, v);
+                            setBulkApply(prev => ({ ...prev, [field.key]: true }));
+                            const auto = autoFillHorarioFields(v);
+                            if (Object.keys(auto).length > 0) {
+                              setBulkForm(prev => ({ ...prev, ...auto }));
+                              setBulkApply(prev => ({ ...prev, INGRESO: true, TURNO: true, HORAS: true, MODALIDAD: true }));
+                            } else {
+                              setBulkForm(prev => ({ ...prev, INGRESO: '', TURNO: '', HORAS: '', MODALIDAD: '' }));
+                              setBulkApply(prev => ({ ...prev, INGRESO: false, TURNO: false, HORAS: false, MODALIDAD: false }));
+                            }
+                          }}
+                          className="w-full px-2 py-1 text-[10px] border border-gray-300 rounded focus:ring-1 focus:ring-cyan-500 bg-white"
+                        >
+                          <option value="">--Seleccionar--</option>
+                          {field.options.map((opt) => (<option key={opt} value={opt}>{opt}</option>))}
+                        </select>
+                      )}
+                      {field.type === 'select' && field.key !== 'HORARIO' && field.auto && (
+                        <select disabled value={bulkForm[field.key] ?? ''} className="w-full px-2 py-1 text-[10px] border border-gray-300 rounded bg-gray-100 text-gray-500 cursor-not-allowed">
+                          <option value="">--Auto-completado--</option>
+                          {field.options.map((opt) => (<option key={opt} value={opt}>{opt}</option>))}
+                        </select>
+                      )}
+                      {field.type === 'select' && field.key !== 'HORARIO' && !field.auto && (
+                        <select
+                          value={bulkForm[field.key] ?? ''}
+                          onChange={(e) => setBulkField(field.key, e.target.value)}
+                          className="w-full px-2 py-1 text-[10px] border border-gray-300 rounded focus:ring-1 focus:ring-cyan-500 bg-white"
+                        >
+                          <option value="">--Seleccionar--</option>
+                          {field.options.map((opt) => (<option key={opt} value={opt}>{opt}</option>))}
+                        </select>
+                      )}
+                      {field.type === 'text' && (
+                        <input
+                          type="text"
+                          value={bulkForm[field.key] ?? ''}
+                          onChange={(e) => {
+                            setBulkField(field.key, e.target.value);
+                            if (field.key === 'COORDINADOR') {
+                              setBulkApply(prev => ({ ...prev, COORDINADOR: true }));
+                            }
+                          }}
+                          placeholder={field.placeholder || ''}
+                          className="w-full px-2 py-1 text-[10px] border border-gray-300 rounded focus:ring-1 focus:ring-cyan-500"
+                        />
+                      )}
+                      {field.type === 'date' && (
+                        <input
+                          type="date"
+                          value={(bulkForm[field.key] ?? '')?.slice(0, 10)}
+                          onChange={(e) => setBulkField(field.key, e.target.value)}
+                          className="w-full px-2 py-1 text-[10px] border border-gray-300 rounded focus:ring-1 focus:ring-cyan-500"
+                        />
+                      )}
+                      {field.type === 'select-dynamic' && (
+                        <select
+                          value={bulkForm[field.key] ?? ''}
+                          onChange={(e) => setBulkField(field.key, e.target.value)}
+                          className="w-full px-2 py-1 text-[10px] border border-gray-300 rounded focus:ring-1 focus:ring-cyan-500 bg-white"
+                        >
+                          <option value="">--Seleccionar--</option>
+                          {distinctCampanas.map((c) => (<option key={c} value={c}>{c}</option>))}
+                        </select>
+                      )}
+                      {field.type === 'leader' && (
+                        <select
+                          value={bulkForm.DNI_SUP ?? ''}
+                          onChange={(e) => handleBulkLeaderSelect(e.target.value)}
+                          className="w-full px-2 py-1 text-[10px] border border-cyan-400 rounded focus:ring-1 focus:ring-cyan-500 bg-white"
+                        >
+                          <option value="">-- Seleccionar Líder --</option>
+                          {(estructuraData || []).map((e) => (
+                            <option key={e.dni} value={e.dni}>{e.supervisor} • {e.dni}</option>
+                          ))}
+                        </select>
+                      )}
+                      {field.key === 'SUBMOTIVO1' && (
+                        <select
+                          value={bulkForm.SUBMOTIVO1 ?? ''}
+                          onChange={(e) => handleBulkSubmotivo1Change(e.target.value)}
+                          className="w-full px-2 py-1 text-[10px] border border-gray-300 rounded focus:ring-1 focus:ring-cyan-500 bg-white"
+                        >
+                          <option value="">--Seleccionar--</option>
+                          <option value="Voluntario">Voluntario</option>
+                          <option value="Involuntario">Involuntario</option>
+                          <option value="Otros">Otros</option>
+                        </select>
+                      )}
+                      {field.key === 'SUBMOTIVO2' && (
+                        <select
+                          value={bulkForm.SUBMOTIVO2 ?? ''}
+                          onChange={(e) => handleBulkSubmotivo2Change(e.target.value)}
+                          disabled={!bulkForm.SUBMOTIVO1}
+                          className={`w-full px-2 py-1 text-[10px] border rounded focus:ring-1 focus:ring-cyan-500 bg-white ${
+                            !bulkForm.SUBMOTIVO1 ? 'border-gray-200 bg-gray-100 text-gray-400 cursor-not-allowed' : 'border-gray-300'
+                          }`}
+                        >
+                          <option value="" disabled>--Seleccionar--</option>
+                          {bulkForm.SUBMOTIVO1 === 'Voluntario' && MOTIVOS_VOLUNTARIO.map((m) => (<option key={m} value={m}>{m}</option>))}
+                          {bulkForm.SUBMOTIVO1 === 'Involuntario' && MOTIVOS_INVOLUNTARIO.map((m) => (<option key={m} value={m}>{m}</option>))}
+                          {bulkForm.SUBMOTIVO1 === 'Otros' && <option value="Otros">Otros</option>}
+                        </select>
+                      )}
+                    </div>
                   </div>
-                </div>
+                )
               ))}
             </div>
+            {/* Footer */}
             <div className="px-4 py-3 bg-gray-50 border-t border-gray-200 flex items-center justify-between flex-shrink-0">
-              <div className="text-[11px] text-gray-600">
-                Se actualizarán <strong>{selectedItems.length}</strong> registro(s)
+              <div className="text-[10px] text-gray-600">
+                Campos marcados serán actualizados en <b>{selectedItems.length}</b> registro(s)
               </div>
               <div className="flex gap-2">
-                <button
-                  onClick={closeBulkModal}
-                  disabled={isSavingBulk}
-                  className="px-3 py-1.5 text-xs border border-gray-300 rounded-lg text-gray-700 hover:bg-white transition-colors disabled:opacity-50"
-                >
-                  Cancelar
-                </button>
+                <button onClick={closeBulkModal} className="px-3 py-1.5 text-[10px] border border-gray-300 rounded-lg text-gray-700 hover:bg-white">Cancelar</button>
                 <button
                   onClick={saveBulkModal}
-                  disabled={isSavingBulk}
-                  className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors text-xs font-medium disabled:opacity-50 flex items-center gap-2"
+                  disabled={isSaving}
+                  className="px-3 py-1.5 bg-gradient-to-r from-cyan-600 to-teal-700 text-white rounded-lg hover:opacity-90 text-[10px] font-medium disabled:opacity-50"
                 >
-                  {isSavingBulk ? (
-                    <>
-                      <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                      </svg>
-                      Guardando...
-                    </>
-                  ) : (
-                    <>
-                      <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                      </svg>
-                      Guardar Cambios
-                    </>
-                  )}
+                  {isSaving ? 'Guardando...' : 'Guardar cambios'}
                 </button>
               </div>
             </div>
-          </div>
-        </div>
-      )}
-
-      {/* Barra de acciones de selección */}
-      {selectedItems.length > 0 && !isBulkModalOpen && (
-        <div className="fixed bottom-4 right-4 z-40">
-          <div className="bg-white rounded-lg shadow-lg border border-gray-200 p-3 flex items-center gap-3">
-            <span className="text-sm text-gray-700">
-              <strong>{selectedItems.length}</strong> seleccionado(s)
-            </span>
-            <button
-              onClick={openBulkModal}
-              disabled={loading}
-              className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50 flex items-center gap-2"
-            >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-              </svg>
-              Editar Seleccionados
-            </button>
-            <button
-              onClick={() => setSelectedItems([])}
-              className="px-3 py-2 text-xs text-gray-500 hover:text-gray-700"
-            >
-              ✕
-            </button>
           </div>
         </div>
       )}
