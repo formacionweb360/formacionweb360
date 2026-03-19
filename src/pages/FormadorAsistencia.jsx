@@ -1,5 +1,5 @@
 // src/pages/FormadorAsistencia.jsx
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "../services/supabaseClient";
 
@@ -23,7 +23,7 @@ const CAMPANAS_DISPONIBLES = [
 
 // Opciones para los campos de asistencia (día 1-7)
 const OPCIONES_ASISTENCIA = [
-  "ASISTIÓ", "FALTA", "DESERTÓ", "TARDANZA", "NO SE PRESENTÓ", 
+  "ASISTIÓ", "FALTA", "DESERTÓ", "TARDANZA", "NO SE PRESENTÓ",
   "RETIRADO", "NO APROBO ROLE PLAY", "INYECTADO"
 ];
 
@@ -121,6 +121,9 @@ export default function FormadorAsistencia({ user, onLogout }) {
   const [gruposUnicos, setGruposUnicos] = useState([]);
   const [gruposPorCampana, setGruposPorCampana] = useState({});
   
+  // ✅ NUEVO: Estado para controlar carga de filtros
+  const [loadingFiltros, setLoadingFiltros] = useState(false);
+  
   // Estados para edición masiva
   const [selectedItems, setSelectedItems] = useState([]);
   const [isBulkModalOpen, setIsBulkModalOpen] = useState(false);
@@ -135,25 +138,83 @@ export default function FormadorAsistencia({ user, onLogout }) {
   const fechaHoyFormateada = new Date().toLocaleDateString('es-PE', {
     weekday: 'long', year: 'numeric', month: 'long', day: 'numeric'
   });
-
-  // Cargar filtros dinámicos al montar (solo grupos, NO campañas)
+  
+  // ───────────────────────────────────────────────────────────────────────────
+  // 🔑 CARGAR FILTROS DINÁMICOS - SOLO GRUPOS (NO CAMPAÑAS)
+  // ✅ MEJORADO: Se puede llamar manualmente para refrescar
+  // ───────────────────────────────────────────────────────────────────────────
+  const cargarFiltrosDinamicos = useCallback(async () => {
+    try {
+      setLoadingFiltros(true);
+      
+      // ✅ GRUPOS - Se cargan desde la BD para filtrar dinámicamente
+      // ✅ AUMENTADO: Sin límite para traer todos los grupos únicos
+      const { data: gruposData, error } = await supabase
+        .from("formacion_seguimiento")
+        .select("campaña, grupo_nombre")
+        .not("grupo_nombre", "is", null)
+        .not("campaña", "is", null);
+      
+      if (error) throw error;
+      
+      if (gruposData) {
+        const gruposPorCamp = {};
+        
+        gruposData.forEach(item => {
+          // ✅ Normalizar nombres (trim para evitar espacios extra)
+          const campana = item.campaña?.trim();
+          const grupo = item.grupo_nombre?.trim();
+          
+          if (campana && grupo) {
+            if (!gruposPorCamp[campana]) gruposPorCamp[campana] = [];
+            if (!gruposPorCamp[campana].includes(grupo)) {
+              gruposPorCamp[campana].push(grupo);
+            }
+          }
+        });
+        
+        // ✅ Ordenar grupos dentro de cada campaña
+        Object.keys(gruposPorCamp).forEach(campana => {
+          gruposPorCamp[campana].sort();
+        });
+        
+        setGruposPorCampana(gruposPorCamp);
+        
+        // ✅ Todos los grupos únicos (para cuando no hay campaña seleccionada)
+        const todosLosGrupos = [...new Set(gruposData.map(g => g.grupo_nombre?.trim()).filter(Boolean))].sort();
+        setGruposUnicos(todosLosGrupos);
+        
+        console.log(`✅ Filtros cargados: ${Object.keys(gruposPorCamp).length} campañas, ${todosLosGrupos.length} grupos únicos`);
+      }
+    } catch (err) {
+      console.error("Error al cargar filtros:", err);
+      mostrarMensaje("error", `❌ Error al cargar filtros: ${err.message}`);
+    } finally {
+      setLoadingFiltros(false);
+    }
+  }, []);
+  
+  // Cargar filtros dinámicos al montar
   useEffect(() => {
     cargarFiltrosDinamicos();
-  }, []);
-
+  }, [cargarFiltrosDinamicos]);
+  
   // ✅ Cuando cambia la campaña, resetear filtro de grupo
   useEffect(() => {
     setFiltroGrupo("todos");
     setPaginaActual(1);
   }, [filtroCampana]);
-
+  
   // Mostrar mensaje temporal
   const mostrarMensaje = (tipo, texto) => {
     setMensaje({ tipo, texto });
     setTimeout(() => setMensaje({ tipo: "", texto: "" }), 4000);
   };
-
-  // Cargar registros de formacion_seguimiento
+  
+  // ───────────────────────────────────────────────────────────────────────────
+  // 🔑 CARGAR REGISTROS DE formacion_seguimiento
+  // ✅ MEJORADO: Recarga filtros después de cargar para detectar nuevos grupos
+  // ───────────────────────────────────────────────────────────────────────────
   const cargarRegistros = async () => {
     setLoading(true);
     try {
@@ -165,34 +226,40 @@ export default function FormadorAsistencia({ user, onLogout }) {
           certifica, segmento_certificado, fecha_baja, motivo_baja, telefono,
           created_at, updated_at
         `, { count: 'exact' });
-
+      
       // ✅ Aplicar filtro de campaña si está seleccionado
       if (filtroCampana) {
         baseQuery = baseQuery.eq("campaña", filtroCampana);
       }
+      
       if (filtroGrupo !== "todos") {
         baseQuery = baseQuery.eq("grupo_nombre", filtroGrupo);
       }
+      
       if (filtroEstado !== "todos") {
         baseQuery = baseQuery.eq("estado", filtroEstado);
       }
+      
       if (filtroSegmento !== "todos") {
         baseQuery = baseQuery.eq("segmento_prefiltro", filtroSegmento);
       }
-
+      
       // Búsqueda por nombre o DNI
       if (busqueda.trim() !== "") {
         const termino = `%${busqueda.trim()}%`;
         baseQuery = baseQuery.or(`nombre.ilike.${termino},dni.ilike.${termino}`);
       }
-
+      
       const { data, error, count } = await baseQuery
         .order("nombre", { ascending: true })
-        .limit(10000); // ✅ Límite aumentado para traer todos los registros
+        .limit(10000);
       
       if (error) throw error;
       
       setRegistros(data || []);
+      
+      // ✅ NUEVO: Recargar filtros después de cargar registros para detectar nuevos grupos
+      await cargarFiltrosDinamicos();
       
       if (data.length === 0) {
         mostrarMensaje("info", "ℹ️ No se encontraron registros con esos filtros");
@@ -206,42 +273,7 @@ export default function FormadorAsistencia({ user, onLogout }) {
       setLoading(false);
     }
   };
-
-  // ✅ CARGAR FILTROS DINÁMICOS - SOLO GRUPOS (NO CAMPAÑAS)
-  const cargarFiltrosDinamicos = async () => {
-    try {
-      // ✅ CAMPAÑAS: Ya no se cargan desde la BD, usan la lista fija
-      
-      // ✅ GRUPOS - Se cargan desde la BD para filtrar dinámicamente
-      const { data: gruposData } = await supabase
-        .from("formacion_seguimiento")
-        .select("campaña, grupo_nombre")
-        .not("grupo_nombre", "is", null)
-        .not("campaña", "is", null)
-        .limit(10000);
-      
-      if (gruposData) {
-        const gruposPorCamp = {};
-        gruposData.forEach(item => {
-          const campana = item.campaña?.trim();
-          const grupo = item.grupo_nombre?.trim();
-          if (campana && grupo) {
-            if (!gruposPorCamp[campana]) gruposPorCamp[campana] = [];
-            if (!gruposPorCamp[campana].includes(grupo)) gruposPorCamp[campana].push(grupo);
-          }
-        });
-        
-        Object.keys(gruposPorCamp).forEach(campana => gruposPorCamp[campana].sort());
-        setGruposPorCampana(gruposPorCamp);
-        
-        const todosLosGrupos = [...new Set(gruposData.map(g => g.grupo_nombre).filter(Boolean))].sort();
-        setGruposUnicos(todosLosGrupos);
-      }
-    } catch (err) {
-      console.error("Error al cargar filtros:", err);
-    }
-  };
-
+  
   // ✅ Obtener grupos disponibles según la campaña seleccionada
   const getGruposDisponibles = () => {
     if (filtroCampana && gruposPorCampana[filtroCampana]) {
@@ -249,10 +281,10 @@ export default function FormadorAsistencia({ user, onLogout }) {
     }
     return gruposUnicos;
   };
-
-  // ──────────────────────────────────────────────────────────────────────────────
+  
+  // ───────────────────────────────────────────────────────────────────────────
   // FUNCIONES DE EDICIÓN MASIVA CON MODAL
-  // ──────────────────────────────────────────────────────────────────────────────
+  // ───────────────────────────────────────────────────────────────────────────
   const openBulkModal = () => {
     if (selectedItems.length === 0) {
       mostrarMensaje("warning", "⚠️ Selecciona al menos un registro para editar");
@@ -262,20 +294,20 @@ export default function FormadorAsistencia({ user, onLogout }) {
     setBulkApply(Object.fromEntries(BULK_FIELDS.map(f => [f.key, false])));
     setIsBulkModalOpen(true);
   };
-
+  
   const closeBulkModal = () => {
     setIsBulkModalOpen(false);
     setSelectedItems([]);
   };
-
+  
   const setBulkField = (key, value) => {
     setBulkForm(prev => ({ ...prev, [key]: value }));
   };
-
+  
   const toggleBulkApply = (key, checked) => {
     setBulkApply(prev => ({ ...prev, [key]: checked }));
   };
-
+  
   // Guardar cambios masivos
   const saveBulkModal = async () => {
     const camposParaAplicar = Object.entries(bulkApply).filter(([_, v]) => v);
@@ -291,8 +323,8 @@ export default function FormadorAsistencia({ user, onLogout }) {
         if (bulkApply[field.key]) {
           let value = bulkForm[field.key];
           if (value === '' && [
-            'segmento_prefiltro', 'certifica', 'segmento_certificado', 
-            'fecha_baja', 'motivo_baja', 'telefono', 
+            'segmento_prefiltro', 'certifica', 'segmento_certificado',
+            'fecha_baja', 'motivo_baja', 'telefono',
             ...[1, 2, 3, 4, 5, 6, 7].map(d => `dia_${d}`)
           ].includes(field.key)) {
             value = null;
@@ -300,7 +332,7 @@ export default function FormadorAsistencia({ user, onLogout }) {
           payload[field.key] = value;
         }
       });
-
+      
       const { error: updateError } = await supabase
         .from("formacion_seguimiento")
         .update(payload)
@@ -314,6 +346,8 @@ export default function FormadorAsistencia({ user, onLogout }) {
       
       mostrarMensaje("success", `✅ Cambios aplicados a ${selectedItems.length} registro(s)`);
       closeBulkModal();
+      
+      // ✅ Recargar registros y filtros después de guardar
       await cargarRegistros();
     } catch (err) {
       console.error("Error en edición masiva:", err);
@@ -322,10 +356,10 @@ export default function FormadorAsistencia({ user, onLogout }) {
       setIsSavingBulk(false);
     }
   };
-
-  // ──────────────────────────────────────────────────────────────────────────────
+  
+  // ───────────────────────────────────────────────────────────────────────────
   // FUNCIONES DE EDICIÓN INDIVIDUAL POR FILA
-  // ──────────────────────────────────────────────────────────────────────────────
+  // ───────────────────────────────────────────────────────────────────────────
   const iniciarEdicion = (registro) => {
     const campos = {};
     for (let i = 1; i <= 7; i++) campos[`dia_${i}`] = registro[`dia_${i}`] || "";
@@ -338,16 +372,16 @@ export default function FormadorAsistencia({ user, onLogout }) {
     setValoresEditables(campos);
     setFilaEditando(registro.id);
   };
-
+  
   const cancelarEdicion = () => {
     setFilaEditando(null);
     setValoresEditables({});
   };
-
+  
   const handleInputChange = (campo, valor) => {
     setValoresEditables(prev => ({ ...prev, [campo]: valor }));
   };
-
+  
   const guardarCambiosFila = async (registroId) => {
     setLoading(true);
     try {
@@ -364,7 +398,7 @@ export default function FormadorAsistencia({ user, onLogout }) {
             cambios[campo] = valoresEditables[campo] === "" ? null : valoresEditables[campo];
           }
         });
-
+      
       const { error } = await supabase
         .from("formacion_seguimiento")
         .update(cambios)
@@ -375,7 +409,11 @@ export default function FormadorAsistencia({ user, onLogout }) {
       setRegistros(prev => prev.map(r => r.id === registroId ? { ...r, ...cambios } : r));
       setFilaEditando(null);
       setValoresEditables({});
+      
       mostrarMensaje("success", "✅ Cambios guardados");
+      
+      // ✅ Recargar filtros después de guardar cambios
+      await cargarFiltrosDinamicos();
     } catch (err) {
       console.error("Error al guardar cambios:", err);
       mostrarMensaje("error", "❌ Error al guardar");
@@ -383,7 +421,7 @@ export default function FormadorAsistencia({ user, onLogout }) {
       setLoading(false);
     }
   };
-
+  
   // Badges
   const renderBadgeAsistencia = (estado) => {
     if (!estado) return <span className="text-gray-400 text-xs">—</span>;
@@ -400,7 +438,7 @@ export default function FormadorAsistencia({ user, onLogout }) {
     const { icon, color } = config[estado] || { icon: "?", color: "bg-gray-50 text-gray-700 border border-gray-200" };
     return <span className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[10px] font-medium ${color}`}>{icon}</span>;
   };
-
+  
   const renderBadgeEstado = (estado) => {
     const isActive = estado === 'Activo';
     return (
@@ -411,16 +449,14 @@ export default function FormadorAsistencia({ user, onLogout }) {
       </span>
     );
   };
-
+  
   // Filtrar y paginar registros
   const { registrosPaginados, totalPaginas, totalFiltrados } = useMemo(() => {
     let filtrados = [...registros];
-    
     if (filtroCampana) filtrados = filtrados.filter(r => r.campaña === filtroCampana);
     if (filtroGrupo !== "todos") filtrados = filtrados.filter(r => r.grupo_nombre === filtroGrupo);
     if (filtroEstado !== "todos") filtrados = filtrados.filter(r => r.estado === filtroEstado);
     if (filtroSegmento !== "todos") filtrados = filtrados.filter(r => r.segmento_prefiltro === filtroSegmento);
-    
     if (busqueda.trim() !== "") {
       const termino = busqueda.toLowerCase().trim();
       filtrados = filtrados.filter(r =>
@@ -428,16 +464,14 @@ export default function FormadorAsistencia({ user, onLogout }) {
         (r.dni && r.dni.toLowerCase().includes(termino))
       );
     }
-    
     const total = filtrados.length;
     const desde = (paginaActual - 1) * REGISTROS_POR_PAGINA;
     const hasta = desde + REGISTROS_POR_PAGINA;
     const pagina = filtrados.slice(desde, hasta);
     const totalPag = Math.ceil(total / REGISTROS_POR_PAGINA) || 1;
-    
     return { registrosPaginados: pagina, totalPaginas: totalPag, totalFiltrados: total };
   }, [registros, filtroCampana, filtroGrupo, filtroEstado, filtroSegmento, busqueda, paginaActual]);
-
+  
   // Exportar CSV
   const descargarCSV = () => {
     if (registrosPaginados.length === 0) {
@@ -472,7 +506,7 @@ export default function FormadorAsistencia({ user, onLogout }) {
     URL.revokeObjectURL(url);
     mostrarMensaje("success", `✅ Descargado ${registrosPaginados.length} registros`);
   };
-
+  
   // Actualizar estado del registro
   const toggleEstadoRegistro = async (registroId, estadoActual) => {
     const nuevoEstado = estadoActual === 'Activo' ? 'Inactivo' : 'Activo';
@@ -482,7 +516,9 @@ export default function FormadorAsistencia({ user, onLogout }) {
         .from("formacion_seguimiento")
         .update({ estado: nuevoEstado })
         .eq("id", registroId);
+      
       if (error) throw error;
+      
       setRegistros(prev => prev.map(r => r.id === registroId ? { ...r, estado: nuevoEstado } : r));
       mostrarMensaje("success", `✅ Estado cambiado a ${nuevoEstado}`);
     } catch (err) {
@@ -492,10 +528,10 @@ export default function FormadorAsistencia({ user, onLogout }) {
       setLoading(false);
     }
   };
-
-  // ──────────────────────────────────────────────────────────────────────────────
+  
+  // ───────────────────────────────────────────────────────────────────────────
   // SELECCIÓN DE FILAS PARA EDICIÓN MASIVA
-  // ──────────────────────────────────────────────────────────────────────────────
+  // ───────────────────────────────────────────────────────────────────────────
   const toggleSelectAll = (checked) => {
     if (checked) {
       const allIds = registrosPaginados.map(item => item.id);
@@ -504,11 +540,11 @@ export default function FormadorAsistencia({ user, onLogout }) {
       setSelectedItems([]);
     }
   };
-
+  
   const handleSelectItem = (id) => {
     setSelectedItems(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
   };
-
+  
   return (
     <div className="min-h-screen bg-[#F7F8FA] overflow-hidden">
       {/* Header */}
@@ -544,7 +580,7 @@ export default function FormadorAsistencia({ user, onLogout }) {
           </div>
         </div>
       </header>
-
+      
       {/* Mensajes */}
       {mensaje.texto && (
         <div className="max-w-[95vw] mx-auto px-4 md:px-8 pt-4">
@@ -558,7 +594,7 @@ export default function FormadorAsistencia({ user, onLogout }) {
           </div>
         </div>
       )}
-
+      
       {/* Contenido principal */}
       <div className="max-w-[95vw] mx-auto px-4 md:px-8 py-6">
         {/* Barra de acciones y filtros */}
@@ -584,7 +620,7 @@ export default function FormadorAsistencia({ user, onLogout }) {
               </button>
             </div>
           </div>
-
+          
           {/* Filtros */}
           <div className="flex flex-wrap items-end gap-4">
             <div>
@@ -598,6 +634,7 @@ export default function FormadorAsistencia({ user, onLogout }) {
                 {campanasUnicas.map(c => <option key={c} value={c}>{c}</option>)}
               </select>
             </div>
+            
             <div>
               <label className="block text-xs font-medium text-gray-700 mb-1">Grupo</label>
               <select
@@ -613,6 +650,7 @@ export default function FormadorAsistencia({ user, onLogout }) {
                 <p className="text-[10px] text-gray-500 mt-1">No hay grupos para esta campaña</p>
               )}
             </div>
+            
             <div>
               <label className="block text-xs font-medium text-gray-700 mb-1">Estado</label>
               <select
@@ -625,6 +663,7 @@ export default function FormadorAsistencia({ user, onLogout }) {
                 <option value="Inactivo">Inactivo</option>
               </select>
             </div>
+            
             <div>
               <label className="block text-xs font-medium text-gray-700 mb-1">Segmento</label>
               <select
@@ -636,6 +675,7 @@ export default function FormadorAsistencia({ user, onLogout }) {
                 {OPCIONES_SEGMENTO.map(s => <option key={s} value={s}>{s}</option>)}
               </select>
             </div>
+            
             <div className="flex-1 min-w-[250px]">
               <label className="block text-xs font-medium text-gray-700 mb-1">Buscar por nombre o DNI</label>
               <input
@@ -646,6 +686,7 @@ export default function FormadorAsistencia({ user, onLogout }) {
                 className="w-full bg-white border border-gray-300 text-gray-700 rounded-lg px-2 py-1.5 text-xs focus:ring-2 focus:ring-blue-600 focus:border-blue-600 placeholder-gray-400"
               />
             </div>
+            
             <button
               onClick={cargarRegistros}
               disabled={loading}
@@ -668,6 +709,20 @@ export default function FormadorAsistencia({ user, onLogout }) {
                 </>
               )}
             </button>
+            
+            {/* ✅ NUEVO: Botón para refrescar filtros manualmente */}
+            <button
+              onClick={cargarFiltrosDinamicos}
+              disabled={loadingFiltros}
+              className="px-3 py-1.5 text-xs border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition flex items-center gap-1"
+              title="Refrescar lista de grupos"
+            >
+              <svg className={`w-3.5 h-3.5 ${loadingFiltros ? 'animate-spin' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              </svg>
+              {loadingFiltros ? '...' : 'Grupos'}
+            </button>
+            
             <button
               onClick={() => {
                 setFiltroCampana(""); setFiltroGrupo("todos"); setFiltroEstado("todos");
@@ -680,7 +735,7 @@ export default function FormadorAsistencia({ user, onLogout }) {
             </button>
           </div>
         </div>
-
+        
         {/* Tabla de Registros */}
         <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6">
           {loading && !registros.length ? (
@@ -885,7 +940,7 @@ export default function FormadorAsistencia({ user, onLogout }) {
                   </tbody>
                 </table>
               </div>
-
+              
               {/* Paginación */}
               {totalPaginas > 1 && (
                 <div className="flex items-center justify-between mt-4">
@@ -910,7 +965,7 @@ export default function FormadorAsistencia({ user, onLogout }) {
           )}
         </div>
       </div>
-
+      
       {/* ─── MODAL DE EDICIÓN MASIVA ─────────────────────────────────────────── */}
       {isBulkModalOpen && (
         <div className="fixed inset-0 z-50 flex items-end md:items-center md:justify-center">
@@ -926,12 +981,14 @@ export default function FormadorAsistencia({ user, onLogout }) {
               </div>
               <button onClick={closeBulkModal} className="text-gray-500 hover:text-gray-700" title="Cerrar">✕</button>
             </div>
+            
             {/* Instrucciones */}
             <div className="px-4 py-2 bg-gray-50 border-b border-gray-200">
               <p className="text-[11px] text-gray-600">
                 💡 <strong>Instrucciones:</strong> Marca la casilla <strong>"Aplicar"</strong> en cada campo que deseas actualizar. Los campos no marcados NO serán modificados.
               </p>
             </div>
+            
             {/* Body del modal - Campos editables */}
             <div className="p-4 grid grid-cols-1 md:grid-cols-2 gap-3 overflow-y-auto flex-1">
               {BULK_FIELDS.map((field) => (
@@ -990,6 +1047,7 @@ export default function FormadorAsistencia({ user, onLogout }) {
                 </div>
               ))}
             </div>
+            
             {/* Footer del modal */}
             <div className="px-4 py-3 bg-gray-50 border-t border-gray-200 flex items-center justify-between flex-shrink-0">
               <div className="text-[11px] text-gray-600">
@@ -1030,7 +1088,7 @@ export default function FormadorAsistencia({ user, onLogout }) {
           </div>
         </div>
       )}
-
+      
       {/* Barra de acciones de selección */}
       {selectedItems.length > 0 && !isBulkModalOpen && (
         <div className="fixed bottom-4 right-4 z-40">
