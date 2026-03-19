@@ -148,7 +148,7 @@ export default function FormadorAsistencia({ user, onLogout }) {
       setLoadingFiltros(true);
       
       // ✅ GRUPOS - Se cargan desde la BD para filtrar dinámicamente
-      // ✅ AUMENTADO: Sin límite para traer todos los grupos únicos
+      // ✅ SIN LIMIT para traer todos los grupos únicos
       const { data: gruposData, error } = await supabase
         .from("formacion_seguimiento")
         .select("campaña, grupo_nombre")
@@ -431,7 +431,7 @@ export default function FormadorAsistencia({ user, onLogout }) {
       "TARDANZA": { icon: "⏱️", color: "bg-yellow-50 text-yellow-700 border border-yellow-200" },
       "DESERTÓ": { icon: "🚪", color: "bg-gray-50 text-gray-700 border border-gray-200" },
       "NO SE PRESENTÓ": { icon: "🕳️", color: "bg-gray-50 text-gray-700 border border-gray-200" },
-      "RETIRADO": { icon: "🚶‍♂️", color: "bg-orange-50 text-orange-700 border border-orange-200" },
+      "RETIRADO": { icon: "🚶♂️", color: "bg-orange-50 text-orange-700 border border-orange-200" },
       "NO APROBO ROLE PLAY": { icon: "📉", color: "bg-blue-50 text-blue-700 border border-blue-200" },
       "INYECTADO": { icon: "💉", color: "bg-purple-50 text-purple-700 border border-purple-200" },
     };
