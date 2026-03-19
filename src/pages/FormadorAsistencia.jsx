@@ -1,11 +1,10 @@
 // src/pages/FormadorAsistencia.jsx
-import { useEffect, useMemo, useState, useCallback } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "../services/supabaseClient";
 
 // ──────────────────────────────────────────────────────────────────────────────
 // 📋 LISTA MAESTRA DE CAMPAÑAS (INDEPENDIENTE DE LA BD)
-// ✅ Editable: Agrega o quita campañas aquí sin afectar la base de datos
 // ──────────────────────────────────────────────────────────────────────────────
 const CAMPANAS_DISPONIBLES = [
   'Portabilidad',
@@ -61,7 +60,7 @@ const BULK_FIELDS = [
   }))
 ];
 
-// ✅ FUNCIÓN PARA FORMATEAR FECHA SIN PROBLEMAS DE ZONA HORARIA
+// ✅ FUNCIÓN PARA FORMATEAR FECHA
 const formatearFecha = (fechaString) => {
   if (!fechaString) return "—";
   if (fechaString instanceof Date) {
@@ -114,14 +113,15 @@ export default function FormadorAsistencia({ user, onLogout }) {
   const [filaEditando, setFilaEditando] = useState(null);
   const [valoresEditables, setValoresEditables] = useState({});
   
-  // ✅ CAMPAÑAS: Ahora usa la lista fija en lugar de cargar desde BD
+  // ✅ CAMPAÑAS: Lista fija
   const campanasUnicas = CAMPANAS_DISPONIBLES;
   
-  // Listas para filtros dinámicos
-  const [gruposUnicos, setGruposUnicos] = useState([]);
-  const [gruposPorCampana, setGruposPorCampana] = useState({});
+  // ✅ FILTROS DINÁMICOS - Se cargan según selección
+  const [gruposDisponibles, setGruposDisponibles] = useState([]);
+  const [estadosDisponibles, setEstadosDisponibles] = useState([]);
+  const [segmentosDisponibles, setSegmentosDisponibles] = useState([]);
   
-  // ✅ NUEVO: Estado para controlar carga de filtros
+  // Estados para carga de filtros
   const [loadingFiltros, setLoadingFiltros] = useState(false);
   
   // Estados para edición masiva
@@ -139,69 +139,6 @@ export default function FormadorAsistencia({ user, onLogout }) {
     weekday: 'long', year: 'numeric', month: 'long', day: 'numeric'
   });
   
-  // ───────────────────────────────────────────────────────────────────────────
-  // 🔑 CARGAR FILTROS DINÁMICOS - SOLO GRUPOS (NO CAMPAÑAS)
-  // ✅ MEJORADO: Se puede llamar manualmente para refrescar
-  // ───────────────────────────────────────────────────────────────────────────
-// ✅ CARGAR FILTROS DINÁMICOS - SOLO GRUPOS (NO CAMPAÑAS)
-const cargarFiltrosDinamicos = useCallback(async () => {
-  try {
-    // ✅ GRUPOS - Se cargan desde la BD para filtrar dinámicamente
-    // ✅ SIN LIMIT para traer todos los grupos únicos
-    const { data: gruposData, error } = await supabase
-      .from("formacion_seguimiento")
-      .select("campaña, grupo_nombre")
-      .not("grupo_nombre", "is", null)
-      .not("campaña", "is", null);
-    
-    if (error) throw error;
-    
-    if (gruposData) {
-      const gruposPorCamp = {};
-      
-      gruposData.forEach(item => {
-        // ✅ Normalizar nombres (trim para evitar espacios extra)
-        const campana = item.campaña?.trim();
-        const grupo = item.grupo_nombre?.trim();
-        
-        if (campana && grupo) {
-          if (!gruposPorCamp[campana]) gruposPorCamp[campana] = [];
-          if (!gruposPorCamp[campana].includes(grupo)) {
-            gruposPorCamp[campana].push(grupo);
-          }
-        }
-      });
-      
-      // ✅ Ordenar grupos dentro de cada campaña
-      Object.keys(gruposPorCamp).forEach(campana => {
-        gruposPorCamp[campana].sort();
-      });
-      
-      setGruposPorCampana(gruposPorCamp);
-      
-      // ✅ Todos los grupos únicos (para cuando no hay campaña seleccionada)
-      const todosLosGrupos = [...new Set(gruposData.map(g => g.grupo_nombre?.trim()).filter(Boolean))].sort();
-      setGruposUnicos(todosLosGrupos);
-      
-      console.log(`✅ Filtros cargados: ${Object.keys(gruposPorCamp).length} campañas, ${todosLosGrupos.length} grupos únicos`);
-    }
-  } catch (err) {
-    console.error("Error al cargar filtros:", err);
-    mostrarMensaje("error", `❌ Error al cargar filtros: ${err.message}`);
-  }
-}, []);
-  
-  // Cargar filtros dinámicos al montar
-  useEffect(() => {
-    cargarFiltrosDinamicos();
-  }, [cargarFiltrosDinamicos]);
-  
-  // ✅ Cuando cambia la campaña, resetear filtro de grupo
-  useEffect(() => {
-    setFiltroGrupo("todos");
-    setPaginaActual(1);
-  }, [filtroCampana]);
-  
   // Mostrar mensaje temporal
   const mostrarMensaje = (tipo, texto) => {
     setMensaje({ tipo, texto });
@@ -209,9 +146,75 @@ const cargarFiltrosDinamicos = useCallback(async () => {
   };
   
   // ───────────────────────────────────────────────────────────────────────────
-  // 🔑 CARGAR REGISTROS DE formacion_seguimiento
-  // ✅ MEJORADO: Recarga filtros después de cargar para detectar nuevos grupos
+  // 🔑 CARGAR FILTROS DISPONIBLES (Dependiente de selecciones previas)
   // ───────────────────────────────────────────────────────────────────────────
+  const cargarFiltrosDisponibles = async () => {
+    try {
+      setLoadingFiltros(true);
+      
+      // Construir query base
+      let query = supabase
+        .from("formacion_seguimiento")
+        .select("grupo_nombre, estado, segmento_prefiltro");
+      
+      // ✅ Si hay campaña seleccionada, filtrar por ella
+      if (filtroCampana) {
+        query = query.eq("campaña", filtroCampana);
+      }
+      
+      // ✅ Si hay grupo seleccionado, filtrar por él
+      if (filtroGrupo !== "todos") {
+        query = query.eq("grupo_nombre", filtroGrupo);
+      }
+      
+      const { data, error } = await query;
+      
+      if (error) throw error;
+      
+      if (data) {
+        // ✅ Extraer valores únicos
+        const grupos = [...new Set(data.map(d => d.grupo_nombre).filter(Boolean))].sort();
+        const estados = [...new Set(data.map(d => d.estado).filter(Boolean))].sort();
+        const segmentos = [...new Set(data.map(d => d.segmento_prefiltro).filter(Boolean))].sort();
+        
+        setGruposDisponibles(grupos);
+        setEstadosDisponibles(estados);
+        setSegmentosDisponibles(segmentos);
+      }
+    } catch (err) {
+      console.error("Error al cargar filtros:", err);
+    } finally {
+      setLoadingFiltros(false);
+    }
+  };
+  
+  // ✅ Cuando cambia la campaña, resetear filtros dependientes y recargar
+  useEffect(() => {
+    setFiltroGrupo("todos");
+    setFiltroEstado("todos");
+    setFiltroSegmento("todos");
+    setPaginaActual(1);
+    
+    if (filtroCampana) {
+      cargarFiltrosDisponibles();
+    } else {
+      // Si no hay campaña, cargar todos los grupos/estados/segmentos
+      cargarFiltrosDisponibles();
+    }
+  }, [filtroCampana]);
+  
+  // ✅ Cuando cambia el grupo, actualizar estados y segmentos disponibles
+  useEffect(() => {
+    setFiltroEstado("todos");
+    setFiltroSegmento("todos");
+    setPaginaActual(1);
+    
+    if (filtroCampana || filtroGrupo !== "todos") {
+      cargarFiltrosDisponibles();
+    }
+  }, [filtroGrupo]);
+  
+  // Cargar registros de formacion_seguimiento
   const cargarRegistros = async () => {
     setLoading(true);
     try {
@@ -224,7 +227,7 @@ const cargarFiltrosDinamicos = useCallback(async () => {
           created_at, updated_at
         `, { count: 'exact' });
       
-      // ✅ Aplicar filtro de campaña si está seleccionado
+      // ✅ Aplicar filtros
       if (filtroCampana) {
         baseQuery = baseQuery.eq("campaña", filtroCampana);
       }
@@ -255,9 +258,6 @@ const cargarFiltrosDinamicos = useCallback(async () => {
       
       setRegistros(data || []);
       
-      // ✅ NUEVO: Recargar filtros después de cargar registros para detectar nuevos grupos
-      await cargarFiltrosDinamicos();
-      
       if (data.length === 0) {
         mostrarMensaje("info", "ℹ️ No se encontraron registros con esos filtros");
       } else {
@@ -269,14 +269,6 @@ const cargarFiltrosDinamicos = useCallback(async () => {
     } finally {
       setLoading(false);
     }
-  };
-  
-  // ✅ Obtener grupos disponibles según la campaña seleccionada
-  const getGruposDisponibles = () => {
-    if (filtroCampana && gruposPorCampana[filtroCampana]) {
-      return gruposPorCampana[filtroCampana];
-    }
-    return gruposUnicos;
   };
   
   // ───────────────────────────────────────────────────────────────────────────
@@ -343,8 +335,6 @@ const cargarFiltrosDinamicos = useCallback(async () => {
       
       mostrarMensaje("success", `✅ Cambios aplicados a ${selectedItems.length} registro(s)`);
       closeBulkModal();
-      
-      // ✅ Recargar registros y filtros después de guardar
       await cargarRegistros();
     } catch (err) {
       console.error("Error en edición masiva:", err);
@@ -408,9 +398,6 @@ const cargarFiltrosDinamicos = useCallback(async () => {
       setValoresEditables({});
       
       mostrarMensaje("success", "✅ Cambios guardados");
-      
-      // ✅ Recargar filtros después de guardar cambios
-      await cargarFiltrosDinamicos();
     } catch (err) {
       console.error("Error al guardar cambios:", err);
       mostrarMensaje("error", "❌ Error al guardar");
@@ -428,7 +415,7 @@ const cargarFiltrosDinamicos = useCallback(async () => {
       "TARDANZA": { icon: "⏱️", color: "bg-yellow-50 text-yellow-700 border border-yellow-200" },
       "DESERTÓ": { icon: "🚪", color: "bg-gray-50 text-gray-700 border border-gray-200" },
       "NO SE PRESENTÓ": { icon: "🕳️", color: "bg-gray-50 text-gray-700 border border-gray-200" },
-      "RETIRADO": { icon: "🚶♂️", color: "bg-orange-50 text-orange-700 border border-orange-200" },
+      "RETIRADO": { icon: "🚶‍️", color: "bg-orange-50 text-orange-700 border border-orange-200" },
       "NO APROBO ROLE PLAY": { icon: "📉", color: "bg-blue-50 text-blue-700 border border-blue-200" },
       "INYECTADO": { icon: "💉", color: "bg-purple-50 text-purple-700 border border-purple-200" },
     };
@@ -618,7 +605,7 @@ const cargarFiltrosDinamicos = useCallback(async () => {
             </div>
           </div>
           
-          {/* Filtros */}
+          {/* Filtros en Cascada */}
           <div className="flex flex-wrap items-end gap-4">
             <div>
               <label className="block text-xs font-medium text-gray-700 mb-1">Campaña</label>
@@ -633,18 +620,21 @@ const cargarFiltrosDinamicos = useCallback(async () => {
             </div>
             
             <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">Grupo</label>
+              <label className="block text-xs font-medium text-gray-700 mb-1">
+                Grupo
+                {loadingFiltros && <span className="ml-1 text-gray-400"></span>}
+              </label>
               <select
                 value={filtroGrupo}
                 onChange={(e) => { setFiltroGrupo(e.target.value); setPaginaActual(1); }}
                 className="bg-white border border-gray-300 text-gray-700 rounded-lg px-2 py-1.5 text-xs focus:ring-2 focus:ring-blue-600 focus:border-blue-600 disabled:opacity-60"
-                disabled={!!filtroCampana && getGruposDisponibles().length === 0}
+                disabled={!filtroCampana || gruposDisponibles.length === 0}
               >
                 <option value="todos">Todos</option>
-                {getGruposDisponibles().map(g => <option key={g} value={g}>{g}</option>)}
+                {gruposDisponibles.map(g => <option key={g} value={g}>{g}</option>)}
               </select>
-              {filtroCampana && getGruposDisponibles().length === 0 && (
-                <p className="text-[10px] text-gray-500 mt-1">No hay grupos para esta campaña</p>
+              {!filtroCampana && (
+                <p className="text-[10px] text-gray-500 mt-1">Selecciona una campaña primero</p>
               )}
             </div>
             
@@ -653,11 +643,11 @@ const cargarFiltrosDinamicos = useCallback(async () => {
               <select
                 value={filtroEstado}
                 onChange={(e) => { setFiltroEstado(e.target.value); setPaginaActual(1); }}
-                className="bg-white border border-gray-300 text-gray-700 rounded-lg px-2 py-1.5 text-xs focus:ring-2 focus:ring-blue-600 focus:border-blue-600"
+                className="bg-white border border-gray-300 text-gray-700 rounded-lg px-2 py-1.5 text-xs focus:ring-2 focus:ring-blue-600 focus:border-blue-600 disabled:opacity-60"
+                disabled={estadosDisponibles.length === 0}
               >
                 <option value="todos">Todos</option>
-                <option value="Activo">Activo</option>
-                <option value="Inactivo">Inactivo</option>
+                {estadosDisponibles.map(e => <option key={e} value={e}>{e}</option>)}
               </select>
             </div>
             
@@ -666,10 +656,11 @@ const cargarFiltrosDinamicos = useCallback(async () => {
               <select
                 value={filtroSegmento}
                 onChange={(e) => { setFiltroSegmento(e.target.value); setPaginaActual(1); }}
-                className="bg-white border border-gray-300 text-gray-700 rounded-lg px-2 py-1.5 text-xs focus:ring-2 focus:ring-blue-600 focus:border-blue-600"
+                className="bg-white border border-gray-300 text-gray-700 rounded-lg px-2 py-1.5 text-xs focus:ring-2 focus:ring-blue-600 focus:border-blue-600 disabled:opacity-60"
+                disabled={segmentosDisponibles.length === 0}
               >
                 <option value="todos">Todos</option>
-                {OPCIONES_SEGMENTO.map(s => <option key={s} value={s}>{s}</option>)}
+                {segmentosDisponibles.map(s => <option key={s} value={s}>{s}</option>)}
               </select>
             </div>
             
@@ -707,24 +698,14 @@ const cargarFiltrosDinamicos = useCallback(async () => {
               )}
             </button>
             
-            {/* ✅ NUEVO: Botón para refrescar filtros manualmente */}
-            <button
-              onClick={cargarFiltrosDinamicos}
-              disabled={loadingFiltros}
-              className="px-3 py-1.5 text-xs border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition flex items-center gap-1"
-              title="Refrescar lista de grupos"
-            >
-              <svg className={`w-3.5 h-3.5 ${loadingFiltros ? 'animate-spin' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-              </svg>
-              {loadingFiltros ? '...' : 'Grupos'}
-            </button>
-            
             <button
               onClick={() => {
                 setFiltroCampana(""); setFiltroGrupo("todos"); setFiltroEstado("todos");
                 setFiltroSegmento("todos"); setBusqueda(""); setPaginaActual(1);
                 setRegistros([]);
+                setGruposDisponibles([]);
+                setEstadosDisponibles([]);
+                setSegmentosDisponibles([]);
               }}
               className="px-3 py-1.5 text-xs border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition"
             >
