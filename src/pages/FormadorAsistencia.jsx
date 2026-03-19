@@ -81,7 +81,7 @@ export default function FormadorAsistencia({ user, onLogout }) {
   const [datosCargados, setDatosCargados] = useState(false);
   
   // Filtros
-  const [filtroCampana, setFiltroCampana] = useState("");
+  const [filtroCampana, setFiltroCampana] = useState("Migraciones Tigo");
   const [filtroGrupo, setFiltroGrupo] = useState("todos");
   const [filtroEstado, setFiltroEstado] = useState("todos");
   const [filtroSegmento, setFiltroSegmento] = useState("todos");
