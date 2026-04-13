@@ -17,7 +17,7 @@ const CAMPANAS_DISPONIBLES = [
   'SBK_TC',
   'Senati',
   'SBK_PLD',
-  'Migraciones Tigo'
+  'Migraciones Tigo',
   'Interseguro'
 ].sort();
 
