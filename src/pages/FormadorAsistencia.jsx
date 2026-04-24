@@ -24,7 +24,7 @@ const CAMPANAS_DISPONIBLES = [
 // Opciones para los campos de asistencia (día 1-7)
 const OPCIONES_ASISTENCIA = [
   "ASISTIÓ", "FALTA", "DESERTÓ", "TARDANZA", "NO SE PRESENTÓ",
-  "RETIRADO", "NO APROBO ROLE PLAY", "INYECTADO"
+  "RETIRADO", "NO APROBO ROLE PLAY", "INYECTADO", "EXCEPCIÓN"
 ];
 
 // Opciones para segmento y certificación
