@@ -19,7 +19,8 @@ const CAMPANAS_DISPONIBLES = [
   'SBK_PLD',
   'Migraciones Tigo',
   'Interseguro',
-  'Mi_Fibra'
+  'Mi_Fibra',
+  'Wow'
 ].sort();
 
 // Opciones para los campos de asistencia (día 1-7)
