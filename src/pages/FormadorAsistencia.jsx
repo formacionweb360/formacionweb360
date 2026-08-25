@@ -20,7 +20,8 @@ const CAMPANAS_DISPONIBLES = [
   'Migraciones Tigo',
   'Interseguro',
   'Mi_Fibra',
-  'Wow'
+  'Wow',
+  'TIGO UPSELLING'
 ].sort();
 
 // Opciones para los campos de asistencia (día 1-7)
