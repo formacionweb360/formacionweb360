@@ -56,6 +56,7 @@ const BULK_FIELDS = [
   { key: 'segmento_certificado', label: 'Segmento Certificado', type: 'select', options: OPCIONES_SEGMENTO },
   { key: 'fecha_baja', label: 'Fecha Baja', type: 'date' },
   { key: 'motivo_baja', label: 'Motivo Baja', type: 'motivo_baja' },
+  { key: 'observaciones_baja', label: 'Observaciones Baja', type: 'text', placeholder: 'Detalles adicionales de baja...' },
   { key: 'telefono', label: 'Teléfono', type: 'text', placeholder: 'Ej: 987654321' },
   ...[1, 2, 3, 4, 5, 6, 7].map(d => ({
     key: `dia_${d}`,
@@ -228,7 +229,7 @@ export default function FormadorAsistencia({ user, onLogout }) {
         .select(`
           id, dni, nombre, campaña, grupo_nombre, estado, fecha_inicio, fecha_termino,
           segmento_prefiltro, dia_1, dia_2, dia_3, dia_4, dia_5, dia_6, dia_7,
-          certifica, segmento_certificado, fecha_baja, motivo_baja, telefono,
+          certifica, segmento_certificado, fecha_baja, motivo_baja, observaciones_baja, telefono,
           created_at, updated_at
         `, { count: 'exact' });
       
@@ -318,7 +319,7 @@ export default function FormadorAsistencia({ user, onLogout }) {
           let value = bulkForm[field.key];
           if (value === '' && [
             'segmento_prefiltro', 'certifica', 'segmento_certificado',
-            'fecha_baja', 'motivo_baja', 'telefono',
+            'fecha_baja', 'motivo_baja', 'observaciones_baja', 'telefono',
             ...[1, 2, 3, 4, 5, 6, 7].map(d => `dia_${d}`)
           ].includes(field.key)) {
             value = null;
@@ -360,6 +361,7 @@ export default function FormadorAsistencia({ user, onLogout }) {
     campos.segmento_certificado = registro.segmento_certificado || "";
     campos.fecha_baja = registro.fecha_baja || "";
     campos.motivo_baja = registro.motivo_baja || "";
+    campos.observaciones_baja = registro.observaciones_baja || "";
     campos.telefono = registro.telefono || "";
     setValoresEditables(campos);
     setFilaEditando(registro.id);
@@ -384,7 +386,7 @@ export default function FormadorAsistencia({ user, onLogout }) {
           cambios[key] = valoresEditables[key] === "" ? null : valoresEditables[key];
         }
       }
-      ['segmento_prefiltro', 'certifica', 'segmento_certificado', 'fecha_baja', 'motivo_baja', 'telefono']
+      ['segmento_prefiltro', 'certifica', 'segmento_certificado', 'fecha_baja', 'motivo_baja', 'observaciones_baja', 'telefono']
         .forEach(campo => {
           if (valoresEditables[campo] !== undefined) {
             cambios[campo] = valoresEditables[campo] === "" ? null : valoresEditables[campo];
@@ -470,7 +472,7 @@ export default function FormadorAsistencia({ user, onLogout }) {
     const headers = [
       "DNI", "Nombre", "Campaña", "Grupo", "Estado", "Teléfono", "Fecha Inicio", "Fecha Término",
       "Segmento Prefiltro", "Día 1", "Día 2", "Día 3", "Día 4", "Día 5", "Día 6", "Día 7",
-      "Certifica", "Segmento Certificado", "Fecha Baja", "Motivo Baja"
+      "Certifica", "Segmento Certificado", "Fecha Baja", "Motivo Baja", "Observaciones Baja"
     ];
     const csvRows = [headers.join(",")];
     registrosPaginados.forEach(r => {
@@ -478,7 +480,7 @@ export default function FormadorAsistencia({ user, onLogout }) {
         `"${r.dni || ''}"`, `"${r.nombre || ''}"`, r.campaña || '', r.grupo_nombre || '', r.estado || '',
         `"${r.telefono || ''}"`, r.fecha_inicio || '', r.fecha_termino || '', r.segmento_prefiltro || '',
         r.dia_1 || '', r.dia_2 || '', r.dia_3 || '', r.dia_4 || '', r.dia_5 || '', r.dia_6 || '', r.dia_7 || '',
-        r.certifica || '', r.segmento_certificado || '', r.fecha_baja || '', `"${r.motivo_baja || ''}"`
+        r.certifica || '', r.segmento_certificado || '', r.fecha_baja || '', `"${r.motivo_baja || ''}"`, `"${r.observaciones_baja || ''}"`
       ];
       csvRows.push(row.join(","));
     });
@@ -755,6 +757,7 @@ export default function FormadorAsistencia({ user, onLogout }) {
                       <th className="px-2 py-2 text-center text-[10px] font-medium text-gray-600 uppercase tracking-wider">Fecha Baja</th>
                       <th className="px-2 py-2 text-center text-[10px] font-medium text-gray-600 uppercase tracking-wider">Motivo Baja</th>
                       <th className="px-2 py-2 text-center text-[10px] font-medium text-gray-600 uppercase tracking-wider">Teléfono</th>
+                      <th className="px-2 py-2 text-center text-[10px] font-medium text-gray-600 uppercase tracking-wider">Observaciones Baja</th>
                       <th className="px-2 py-2 text-left text-[10px] font-medium text-gray-600 uppercase tracking-wider">Acción</th>
                     </tr>
                   </thead>
@@ -871,6 +874,21 @@ export default function FormadorAsistencia({ user, onLogout }) {
                                 className="w-full bg-white border border-gray-300 text-gray-700 text-[10px] rounded px-1 py-0.5 focus:ring-1 focus:ring-blue-600 focus:border-blue-600"
                               />
                             ) : <span className="text-gray-700 text-xs">{formatearTelefono(r.telefono)}</span>}
+                          </td>
+                          <td className="px-2 py-2 whitespace-nowrap text-center max-w-[200px]">
+                            {filaEditando === r.id ? (
+                              <textarea
+                                value={valoresEditables.observaciones_baja || ""}
+                                onChange={(e) => handleInputChange("observaciones_baja", e.target.value)}
+                                placeholder="Detalles adicionales..."
+                                rows={2}
+                                className="w-full bg-white border border-gray-300 text-gray-700 text-[10px] rounded px-1 py-0.5 focus:ring-1 focus:ring-blue-600 focus:border-blue-600 resize-none"
+                              />
+                            ) : (
+                              <span className="text-gray-700 text-xs truncate block" title={r.observaciones_baja}>
+                                {r.observaciones_baja || "—"}
+                              </span>
+                            )}
                           </td>
                           <td className="px-2 py-2 whitespace-nowrap">
                             {filaEditando === r.id ? (
