@@ -8,6 +8,7 @@ import { supabase } from "../services/supabaseClient";
 // ──────────────────────────────────────────────────────────────────────────────
 const CAMPANAS_DISPONIBLES = [
   'Portabilidad',
+  'Portabilidad_digital',
   'Blindaje',
   'Caribu_phx',
   'Caeq_phx',
